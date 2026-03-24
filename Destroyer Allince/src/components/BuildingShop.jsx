@@ -43,12 +43,23 @@ export default function BuildingShop({
                     : "cursor-not-allowed border-white/5 bg-white/3 opacity-45"
               }`}
             >
-              <div
-                className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl text-sm font-black text-slate-950"
-                style={{ backgroundColor: `#${building.color.toString(16).padStart(6, "0")}` }}
-              >
-                {building.label}
-              </div>
+              {building.shopImage ? (
+                <div className="mb-3 flex h-20 w-full items-center justify-center overflow-hidden rounded-2xl bg-black/15 p-2">
+                  <img
+                    src={building.shopImage}
+                    alt={building.name}
+                    className="h-full w-full object-contain"
+                    draggable="false"
+                  />
+                </div>
+              ) : (
+                <div
+                  className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl text-sm font-black text-slate-950"
+                  style={{ backgroundColor: `#${building.color.toString(16).padStart(6, "0")}` }}
+                >
+                  {building.label}
+                </div>
+              )}
               <p className="font-semibold text-white">{building.name}</p>
               <p className="mt-1 text-sm text-slate-400">{building.cost} gold</p>
             </button>

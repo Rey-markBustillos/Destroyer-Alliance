@@ -12,6 +12,9 @@ const INITIAL_ZOOM = 1.2;
 const MIN_ZOOM = INITIAL_ZOOM;
 const MAX_ZOOM = 1.8;
 const ZOOM_STEP = 0.1;
+const WOOD_MACHINE_TICK_MS = 180000;
+const WOOD_MACHINE_GOLD_PER_TICK = 10;
+const WOOD_MACHINE_MAX_GOLD = 250;
 
 export default class GameScene extends Phaser.Scene {
   constructor() {
@@ -27,6 +30,8 @@ export default class GameScene extends Phaser.Scene {
     };
 
     this.selectedBuildingType = null;
+    this.selectedPlacedBuilding = null;
+    this.movingBuilding = null;
     this.gold = STARTING_GOLD;
     this.placedBuildings = [];
     this.occupiedTiles = new Map();
@@ -47,6 +52,7 @@ export default class GameScene extends Phaser.Scene {
     this.createPlacementIndicator();
     this.createCamera();
     this.bindInput();
+    this.startResourceProduction();
     this.updateHoverAtScreenPoint(
       this.scale.width / 2,
       this.scale.height / 2
@@ -290,6 +296,16 @@ export default class GameScene extends Phaser.Scene {
     camera.roundPixels = true;
   }
 
+  startResourceProduction() {
+    this.resourceTimer = this.time.addEvent({
+      delay: 1000,
+      loop: true,
+      callback: () => {
+        this.updateWoodMachineProduction();
+      },
+    });
+  }
+
   bindInput() {
     this.input.on("pointermove", (pointer) => {
       if (pointer.isDown) {
@@ -377,7 +393,12 @@ export default class GameScene extends Phaser.Scene {
 
     if (this.selectedBuildingType) {
       const blocked = !this.canPlaceFootprint(tile.row, tile.col, this.selectedBuildingType)
-        || this.isTileOccupied(tile.row, tile.col, this.selectedBuildingType);
+        || this.isTileOccupied(
+          tile.row,
+          tile.col,
+          this.selectedBuildingType,
+          this.movingBuilding
+        );
       this.drawTileOverlay(
         this.placementIndicator,
         { ...tile, buildingType: this.selectedBuildingType },
@@ -418,12 +439,16 @@ export default class GameScene extends Phaser.Scene {
     return { row, col };
   }
 
-  isTileOccupied(row, col, buildingType = null) {
+  isTileOccupied(row, col, buildingType = null, ignoredBuilding = null) {
     const footprint = this.getFootprint(buildingType);
 
     for (let rowOffset = 0; rowOffset < footprint.rows; rowOffset += 1) {
       for (let colOffset = 0; colOffset < footprint.cols; colOffset += 1) {
-        if (this.occupiedTiles.has(this.getTileKey(row + rowOffset, col + colOffset))) {
+        const occupiedBuilding = this.occupiedTiles.get(
+          this.getTileKey(row + rowOffset, col + colOffset)
+        );
+
+        if (occupiedBuilding && occupiedBuilding !== ignoredBuilding) {
           return true;
         }
       }
@@ -434,6 +459,7 @@ export default class GameScene extends Phaser.Scene {
 
   handleTileClick(worldX, worldY) {
     if (!this.selectedBuildingType) {
+      this.clearPlacedBuildingSelection();
       return;
     }
 
@@ -441,19 +467,36 @@ export default class GameScene extends Phaser.Scene {
     if (
       !tile ||
       !this.canPlaceFootprint(tile.row, tile.col, this.selectedBuildingType) ||
-      this.isTileOccupied(tile.row, tile.col, this.selectedBuildingType)
+      this.isTileOccupied(
+        tile.row,
+        tile.col,
+        this.selectedBuildingType,
+        this.movingBuilding
+      )
     ) {
       this.updateHoverAtWorldPoint(worldX, worldY);
       return;
     }
 
-    this.placeBuilding(tile.row, tile.col, this.selectedBuildingType);
+    if (this.movingBuilding) {
+      this.moveBuilding(this.movingBuilding, tile.row, tile.col);
+    } else {
+      this.placeBuilding(tile.row, tile.col, this.selectedBuildingType);
+    }
+
     this.selectedBuildingType = null;
+    this.movingBuilding = null;
     this.events.emit("structure-selection-cleared");
     this.updateHoverAtWorldPoint(worldX, worldY);
   }
 
-  placeBuilding(row, col, buildingType, persistedId = null) {
+  placeBuilding(row, col, buildingType, options = {}) {
+    const {
+      persistedId = null,
+      deductCost = true,
+      emitPlacedEvent = true,
+      resourceState = {},
+    } = options;
     const footprint = this.getFootprint(buildingType);
     const { x, y } = this.gridToWorld(
       col + (footprint.cols - 1) / 2,
@@ -464,7 +507,17 @@ export default class GameScene extends Phaser.Scene {
     building.row = row;
     building.col = col;
     building.persistedId = persistedId;
+    building.machineGold = Number(resourceState.machineGold ?? 0);
+    building.lastGeneratedAt = Number(resourceState.lastGeneratedAt ?? Date.now());
+    building.setMachineGoldDisplay(building.machineGold, WOOD_MACHINE_MAX_GOLD);
     building.setDepth(300 + row + col + footprint.rows + footprint.cols);
+    building.on("pointerup", (pointer, _localX, _localY, event) => {
+      event.stopPropagation();
+
+      if (!this.pointerDrag.moved) {
+        this.selectPlacedBuilding(building);
+      }
+    });
     this.structureLayer.add(building);
     this.placedBuildings.push(building);
 
@@ -477,14 +530,21 @@ export default class GameScene extends Phaser.Scene {
       }
     }
 
-    this.gold = Math.max(0, this.gold - (buildingType.cost ?? 0));
-    this.emitGameState();
-    this.events.emit("structure-placed", {
-      structure: building,
-      type: buildingType.id,
-      row,
-      col,
-    });
+    if (deductCost) {
+      this.setGoldState(this.gold - (buildingType.cost ?? 0));
+    } else {
+      this.emitGameState();
+    }
+    if (emitPlacedEvent) {
+      this.events.emit("structure-placed", {
+        structure: building,
+        type: buildingType.id,
+        row,
+        col,
+        machineGold: building.machineGold,
+        lastGeneratedAt: building.lastGeneratedAt,
+      });
+    }
   }
 
   loadPersistedBuildings(buildings = []) {
@@ -507,12 +567,22 @@ export default class GameScene extends Phaser.Scene {
         return;
       }
 
-      this.placeBuilding(row, col, buildingType, entry.id ?? null);
+      this.placeBuilding(row, col, buildingType, {
+        persistedId: entry.id ?? null,
+        deductCost: false,
+        emitPlacedEvent: false,
+        resourceState: {
+          machineGold: entry.machineGold ?? 0,
+          lastGeneratedAt: entry.lastGeneratedAt ?? Date.now(),
+        },
+      });
     });
   }
 
   setSelectedBuilding(buildingType) {
     this.selectedBuildingType = buildingType;
+    this.movingBuilding = null;
+    this.clearPlacedBuildingSelection();
 
     if (!buildingType) {
       this.placementIndicator.clear();
@@ -528,9 +598,277 @@ export default class GameScene extends Phaser.Scene {
   }
 
   emitGameState() {
+    const woodMachines = this.placedBuildings.filter((building) =>
+      this.isWoodMachine(building)
+    );
+    const fullWoodMachines = woodMachines.filter(
+      (building) => (building.machineGold ?? 0) >= WOOD_MACHINE_MAX_GOLD
+    ).length;
+    const totalMachineGold = woodMachines.reduce(
+      (total, building) => total + (building.machineGold ?? 0),
+      0
+    );
+
     this.events.emit("game-state-update", {
       gold: this.gold,
       buildings: this.placedBuildings.length,
+      totalMachineGold,
+      woodMachines: woodMachines.length,
+      fullWoodMachines,
     });
+  }
+
+  setGoldState(nextGold, options = {}) {
+    const { emitChangeEvent = true } = options;
+    this.gold = Math.max(0, Math.floor(nextGold));
+    this.emitGameState();
+
+    if (emitChangeEvent) {
+      this.events.emit("gold-changed", {
+        gold: this.gold,
+      });
+    }
+  }
+
+  setBuildingTiles(building, register = true) {
+    const footprint = this.getFootprint(building.buildingType);
+
+    for (let rowOffset = 0; rowOffset < footprint.rows; rowOffset += 1) {
+      for (let colOffset = 0; colOffset < footprint.cols; colOffset += 1) {
+        const tileKey = this.getTileKey(building.row + rowOffset, building.col + colOffset);
+
+        if (register) {
+          this.occupiedTiles.set(tileKey, building);
+        } else if (this.occupiedTiles.get(tileKey) === building) {
+          this.occupiedTiles.delete(tileKey);
+        }
+      }
+    }
+  }
+
+  selectPlacedBuilding(building) {
+    this.selectedPlacedBuilding = building;
+    this.selectedBuildingType = null;
+    this.movingBuilding = null;
+    this.events.emit("structure-selection-cleared");
+    this.events.emit("placed-building-selected", {
+      id: building.persistedId,
+      type: building.buildingType.id,
+      name: building.buildingType.name,
+      row: building.row,
+      col: building.col,
+      machineGold: building.machineGold ?? 0,
+      maxGold: WOOD_MACHINE_MAX_GOLD,
+    });
+    this.drawTileOverlay(
+      this.placementIndicator,
+      { row: building.row, col: building.col, buildingType: building.buildingType },
+      0xf59e0b,
+      0.28,
+      0xfde68a,
+      2
+    );
+  }
+
+  clearPlacedBuildingSelection() {
+    if (!this.selectedPlacedBuilding && !this.movingBuilding) {
+      return;
+    }
+
+    this.selectedPlacedBuilding = null;
+    this.movingBuilding = null;
+    this.events.emit("placed-building-selected", null);
+
+    if (!this.selectedBuildingType) {
+      this.placementIndicator.clear();
+    }
+  }
+
+  startMovingSelectedBuilding() {
+    if (!this.selectedPlacedBuilding) {
+      return;
+    }
+
+    this.movingBuilding = this.selectedPlacedBuilding;
+    this.selectedBuildingType = this.selectedPlacedBuilding.buildingType;
+    this.events.emit("placed-building-moving", {
+      id: this.selectedPlacedBuilding.persistedId,
+      type: this.selectedPlacedBuilding.buildingType.id,
+      name: this.selectedPlacedBuilding.buildingType.name,
+    });
+
+    if (this.hoverTile) {
+      this.updateHoverAtWorldPoint(
+        this.gridToWorld(this.hoverTile.col, this.hoverTile.row).x,
+        this.gridToWorld(this.hoverTile.col, this.hoverTile.row).y
+      );
+    }
+  }
+
+  moveBuilding(building, row, col) {
+    const previousRow = building.row;
+    const previousCol = building.col;
+    this.setBuildingTiles(building, false);
+
+    const footprint = this.getFootprint(building.buildingType);
+    const { x, y } = this.gridToWorld(
+      col + (footprint.cols - 1) / 2,
+      row + (footprint.rows - 1) / 2
+    );
+
+    building.row = row;
+    building.col = col;
+    building.x = x;
+    building.y = y;
+    building.setDepth(300 + row + col + footprint.rows + footprint.cols);
+    this.setBuildingTiles(building, true);
+    this.selectedPlacedBuilding = building;
+    this.events.emit("structure-moved", {
+      structure: building,
+      type: building.buildingType.id,
+      previousRow,
+      previousCol,
+      row,
+      col,
+      machineGold: building.machineGold ?? 0,
+      lastGeneratedAt: building.lastGeneratedAt ?? Date.now(),
+    });
+    this.events.emit("placed-building-selected", {
+      id: building.persistedId,
+      type: building.buildingType.id,
+      name: building.buildingType.name,
+      row,
+      col,
+      machineGold: building.machineGold ?? 0,
+      maxGold: WOOD_MACHINE_MAX_GOLD,
+    });
+  }
+
+  sellSelectedBuilding() {
+    if (!this.selectedPlacedBuilding) {
+      return;
+    }
+
+    const building = this.selectedPlacedBuilding;
+    this.setBuildingTiles(building, false);
+    this.placedBuildings = this.placedBuildings.filter((entry) => entry !== building);
+    building.destroy();
+    this.setGoldState(this.gold + Math.floor((building.buildingType.cost ?? 0) * 0.5));
+    this.selectedPlacedBuilding = null;
+    this.movingBuilding = null;
+    this.selectedBuildingType = null;
+    this.placementIndicator.clear();
+    this.events.emit("placed-building-selected", null);
+    this.events.emit("structure-sold", {
+      structure: building,
+      id: building.persistedId,
+      type: building.buildingType.id,
+      row: building.row,
+      col: building.col,
+      machineGold: building.machineGold ?? 0,
+    });
+  }
+
+  collectSelectedBuildingGold() {
+    if (!this.selectedPlacedBuilding || !this.isWoodMachine(this.selectedPlacedBuilding)) {
+      return;
+    }
+
+    const building = this.selectedPlacedBuilding;
+    const collectedGold = Number(building.machineGold ?? 0);
+
+    if (collectedGold <= 0) {
+      return;
+    }
+
+    building.machineGold = 0;
+    building.lastGeneratedAt = Date.now();
+    building.setMachineGoldDisplay(0, WOOD_MACHINE_MAX_GOLD);
+    this.setGoldState(this.gold + collectedGold);
+    this.events.emit("structure-resource-updated", {
+      structure: building,
+      id: building.persistedId,
+      type: building.buildingType.id,
+      row: building.row,
+      col: building.col,
+      machineGold: building.machineGold,
+      lastGeneratedAt: building.lastGeneratedAt,
+      isFull: false,
+    });
+    this.events.emit("placed-building-selected", {
+      id: building.persistedId,
+      type: building.buildingType.id,
+      name: building.buildingType.name,
+      row: building.row,
+      col: building.col,
+      machineGold: 0,
+      maxGold: WOOD_MACHINE_MAX_GOLD,
+    });
+  }
+
+  isWoodMachine(buildingOrType) {
+    const typeId = typeof buildingOrType === "string"
+      ? buildingOrType
+      : buildingOrType?.buildingType?.id ?? buildingOrType?.id;
+
+    return typeId === "wood-machine";
+  }
+
+  updateWoodMachineProduction() {
+    const now = Date.now();
+    let hasChanges = false;
+
+    this.placedBuildings.forEach((building) => {
+      if (!this.isWoodMachine(building)) {
+        return;
+      }
+
+      if ((building.machineGold ?? 0) >= WOOD_MACHINE_MAX_GOLD) {
+        return;
+      }
+
+      const lastGeneratedAt = Number(building.lastGeneratedAt ?? now);
+      const elapsed = now - lastGeneratedAt;
+      const earnedTicks = Math.floor(elapsed / WOOD_MACHINE_TICK_MS);
+
+      if (earnedTicks <= 0) {
+        return;
+      }
+
+      building.machineGold = Math.min(
+        WOOD_MACHINE_MAX_GOLD,
+        (building.machineGold ?? 0) + earnedTicks * WOOD_MACHINE_GOLD_PER_TICK
+      );
+      building.lastGeneratedAt = lastGeneratedAt + earnedTicks * WOOD_MACHINE_TICK_MS;
+      building.setMachineGoldDisplay(building.machineGold, WOOD_MACHINE_MAX_GOLD);
+      hasChanges = true;
+
+      this.events.emit("structure-resource-updated", {
+        structure: building,
+        id: building.persistedId,
+        type: building.buildingType.id,
+        row: building.row,
+        col: building.col,
+        machineGold: building.machineGold,
+        lastGeneratedAt: building.lastGeneratedAt,
+        isFull: building.machineGold >= WOOD_MACHINE_MAX_GOLD,
+      });
+
+      if (this.selectedPlacedBuilding === building) {
+        this.events.emit("placed-building-selected", {
+          id: building.persistedId,
+          type: building.buildingType.id,
+          name: building.buildingType.name,
+          row: building.row,
+          col: building.col,
+          machineGold: building.machineGold,
+          maxGold: WOOD_MACHINE_MAX_GOLD,
+        });
+      }
+    });
+
+    if (hasChanges) {
+      this.emitGameState();
+    }
   }
 }

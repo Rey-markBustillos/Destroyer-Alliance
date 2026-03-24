@@ -33,14 +33,13 @@ export default class Building extends Phaser.GameObjects.Container {
 
     this.buildingType = buildingType;
     this.isStructure = true;
+    this.resourceLabel = null;
     this.footprintRows = buildingType.footprintRows ?? 1;
     this.footprintCols = buildingType.footprintCols ?? 1;
     const footprintWidth = scene.iso.tileWidth * this.footprintCols;
     const footprintHeight = scene.iso.tileHeight * this.footprintRows;
     const tileHalfW = scene.iso.tileWidth / 2;
     const tileHalfH = scene.iso.tileHeight / 2;
-    const footprintCenterYOffset =
-      ((this.footprintRows + this.footprintCols - 2) * tileHalfH) / 2;
 
     const baseWidth = scene.iso.tileWidth * (0.84 + (this.footprintCols - 1) * 0.62);
     const baseHeight = scene.iso.tileHeight * (0.62 + (this.footprintRows - 1) * 0.3);
@@ -71,57 +70,97 @@ export default class Building extends Phaser.GameObjects.Container {
 
     this.add(foundation);
 
-    const graphics = scene.add.graphics();
-    const roofPoints = [
-      new Phaser.Geom.Point(0, roofY - roofHeight),
-      new Phaser.Geom.Point(halfW, roofY),
-      new Phaser.Geom.Point(0, roofY + roofHeight),
-      new Phaser.Geom.Point(-halfW, roofY),
-    ];
-    const leftWall = [
-      new Phaser.Geom.Point(-halfW, roofY),
-      new Phaser.Geom.Point(0, roofY + roofHeight),
-      new Phaser.Geom.Point(0, 0),
-      new Phaser.Geom.Point(-halfW, -halfH),
-    ];
-    const rightWall = [
-      new Phaser.Geom.Point(halfW, roofY),
-      new Phaser.Geom.Point(0, roofY + roofHeight),
-      new Phaser.Geom.Point(0, 0),
-      new Phaser.Geom.Point(halfW, -halfH),
-    ];
-    const baseDiamond = [
-      new Phaser.Geom.Point(0, -halfH),
-      new Phaser.Geom.Point(halfW, 0),
-      new Phaser.Geom.Point(0, halfH),
-      new Phaser.Geom.Point(-halfW, 0),
-    ];
+    if (buildingType.id === "town-hall" && scene.textures.exists("town")) {
+      const cropX = 48;
+      const cropY = 22;
+      const cropWidth = 412;
+      const cropHeight = 380;
+      const townWidth = footprintWidth * 1.18;
+      const townHeight = townWidth * (cropHeight / cropWidth);
+      const townSprite = scene.add.image(0, footprintHeight / 2 + 14, "town");
 
-    graphics.fillStyle(darken(buildingType.color, 18), 1);
-    graphics.fillPoints(baseDiamond, true);
-    graphics.fillStyle(darken(buildingType.color, 30), 1);
-    graphics.fillPoints(leftWall, true);
-    graphics.fillStyle(darken(buildingType.color, 14), 1);
-    graphics.fillPoints(rightWall, true);
-    graphics.fillStyle(lighten(buildingType.color, 10), 1);
-    graphics.fillPoints(roofPoints, true);
-    graphics.lineStyle(2, 0xf8fafc, 0.14);
-    graphics.strokePoints([...roofPoints, roofPoints[0]], false, false);
+      townSprite.setOrigin(0.5, 1);
+      townSprite.setCrop(cropX, cropY, cropWidth, cropHeight);
+      townSprite.setDisplaySize(townWidth, townHeight);
+      this.add(townSprite);
+    } else if (buildingType.id === "wood-machine" && scene.textures.exists("machine-wood")) {
+      const cropX = 64;
+      const cropY = 0;
+      const cropWidth = 513;
+      const cropHeight = 364;
+      const machineWidth = footprintWidth * 1.2;
+      const machineHeight = machineWidth * (cropHeight / cropWidth);
+      const machineSprite = scene.add.image(0, footprintHeight / 2 + 6, "machine-wood");
 
-    const accent = scene.add.rectangle(0, roofY - 2, baseWidth * 0.32, roofHeight * 0.9, 0xf8fafc, 0.2);
-    accent.setAngle(45);
+      machineSprite.setOrigin(0.5, 1);
+      machineSprite.setCrop(cropX, cropY, cropWidth, cropHeight);
+      machineSprite.setDisplaySize(machineWidth, machineHeight);
+      this.add(machineSprite);
+      this.resourceLabel = scene.add.text(0, -machineHeight + 18, "0", {
+        fontFamily: "Verdana",
+        fontSize: "13px",
+        fontStyle: "bold",
+        color: "#fde68a",
+        stroke: "#1f2937",
+        strokeThickness: 4,
+        align: "center",
+      });
+      this.resourceLabel.setOrigin(0.5, 0.5);
+      this.add(this.resourceLabel);
+    } else {
+      const graphics = scene.add.graphics();
+      const roofPoints = [
+        new Phaser.Geom.Point(0, roofY - roofHeight),
+        new Phaser.Geom.Point(halfW, roofY),
+        new Phaser.Geom.Point(0, roofY + roofHeight),
+        new Phaser.Geom.Point(-halfW, roofY),
+      ];
+      const leftWall = [
+        new Phaser.Geom.Point(-halfW, roofY),
+        new Phaser.Geom.Point(0, roofY + roofHeight),
+        new Phaser.Geom.Point(0, 0),
+        new Phaser.Geom.Point(-halfW, -halfH),
+      ];
+      const rightWall = [
+        new Phaser.Geom.Point(halfW, roofY),
+        new Phaser.Geom.Point(0, roofY + roofHeight),
+        new Phaser.Geom.Point(0, 0),
+        new Phaser.Geom.Point(halfW, -halfH),
+      ];
+      const baseDiamond = [
+        new Phaser.Geom.Point(0, -halfH),
+        new Phaser.Geom.Point(halfW, 0),
+        new Phaser.Geom.Point(0, halfH),
+        new Phaser.Geom.Point(-halfW, 0),
+      ];
 
-    const label = scene.add.text(0, roofY - roofHeight - 6, labelText, {
-      fontFamily: "Verdana",
-      fontSize: "16px",
-      fontStyle: "bold",
-      color: "#f8fafc",
-      stroke: "#132018",
-      strokeThickness: 4,
-    });
-    label.setOrigin(0.5, 0.5);
+      graphics.fillStyle(darken(buildingType.color, 18), 1);
+      graphics.fillPoints(baseDiamond, true);
+      graphics.fillStyle(darken(buildingType.color, 30), 1);
+      graphics.fillPoints(leftWall, true);
+      graphics.fillStyle(darken(buildingType.color, 14), 1);
+      graphics.fillPoints(rightWall, true);
+      graphics.fillStyle(lighten(buildingType.color, 10), 1);
+      graphics.fillPoints(roofPoints, true);
+      graphics.lineStyle(2, 0xf8fafc, 0.14);
+      graphics.strokePoints([...roofPoints, roofPoints[0]], false, false);
 
-    this.add([graphics, accent, label]);
+      const accent = scene.add.rectangle(0, roofY - 2, baseWidth * 0.32, roofHeight * 0.9, 0xf8fafc, 0.2);
+      accent.setAngle(45);
+
+      const label = scene.add.text(0, roofY - roofHeight - 6, labelText, {
+        fontFamily: "Verdana",
+        fontSize: "16px",
+        fontStyle: "bold",
+        color: "#f8fafc",
+        stroke: "#132018",
+        strokeThickness: 4,
+      });
+      label.setOrigin(0.5, 0.5);
+
+      this.add([graphics, accent, label]);
+    }
+
     this.setSize(baseWidth, bodyHeight + roofHeight + baseHeight);
 
     const interactiveWidth = footprintWidth;
@@ -134,6 +173,16 @@ export default class Building extends Phaser.GameObjects.Container {
         interactiveHeight
       ),
       Phaser.Geom.Rectangle.Contains
+    );
+  }
+
+  setMachineGoldDisplay(machineGold = 0, maxGold = 250) {
+    if (!this.resourceLabel) {
+      return;
+    }
+
+    this.resourceLabel.setText(
+      machineGold >= maxGold ? "Full" : `${machineGold}/${maxGold}`
     );
   }
 }

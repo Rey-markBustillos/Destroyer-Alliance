@@ -1,5 +1,42 @@
 import prisma from "../prismaClient.js";
 
+export const getGameState = async (req, res) => {
+  const user = await prisma.user.findUnique({
+    where: {
+      id: req.user.id,
+    },
+    select: {
+      gold: true,
+    },
+  });
+
+  res.json({
+    gold: user?.gold ?? 1200,
+  });
+};
+
+export const updateGameState = async (req, res) => {
+  const nextGold = Number(req.body.gold);
+
+  if (!Number.isFinite(nextGold) || nextGold < 0) {
+    return res.status(400).json({ message: "Invalid gold value" });
+  }
+
+  const user = await prisma.user.update({
+    where: {
+      id: req.user.id,
+    },
+    data: {
+      gold: Math.floor(nextGold),
+    },
+    select: {
+      gold: true,
+    },
+  });
+
+  res.json(user);
+};
+
 // ADD BUILDING
 export const addBuilding = async (req, res) => {
   const { type, x, y } = req.body;

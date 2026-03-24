@@ -33,6 +33,7 @@ export const registerUser = async (req, res) => {
     res.json({
       id: user.id,
       email: user.email,
+      gold: user.gold,
       token: generateToken(user.id),
     });
   } catch (error) {
@@ -63,6 +64,7 @@ export const loginUser = async (req, res) => {
     res.json({
       id: user.id,
       email: user.email,
+      gold: user.gold,
       token: generateToken(user.id),
     });
   } catch (error) {

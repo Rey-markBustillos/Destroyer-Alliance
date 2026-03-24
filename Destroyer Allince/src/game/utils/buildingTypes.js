@@ -55,6 +55,18 @@ export const BUILDING_TYPES = {
     bodyHeight: 58,
     roofHeight: 18,
   },
+  WOOD_MACHINE: {
+    id: "wood-machine",
+    name: "Wood Machine",
+    label: "WM",
+    cost: 240,
+    color: 0xb45309,
+    shopImage: "/assets/machine-wood.png",
+    bodyHeight: 46,
+    roofHeight: 14,
+    footprintRows: 1,
+    footprintCols: 1,
+  },
 };
 
 export const BUILDING_LIST = Object.values(BUILDING_TYPES);

@@ -16,6 +16,26 @@ export const fetchBuildings = async (token) => {
   return data;
 };
 
+export const fetchGameState = async (token) => {
+  const { data } = await gameApi.get("/state", {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  return data;
+};
+
+export const updateGameState = async (payload, token) => {
+  const { data } = await gameApi.put("/state", payload, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  return data;
+};
+
 export const addBuilding = async (payload, token) => {
   const { data } = await gameApi.post("/build", payload, {
     headers: {

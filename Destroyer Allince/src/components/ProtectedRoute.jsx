@@ -3,7 +3,7 @@ import { getToken } from "../services/session";
 
 export default function ProtectedRoute({ children }) {
   if (!getToken()) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/login" replace />;
   }
 
   return children;

@@ -9,7 +9,7 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to="/game" replace />} />
+        <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route
@@ -21,8 +21,15 @@ function App() {
           )}
         />
         <Route path="/home" element={<Navigate to="/game" replace />} />
-        <Route path="/game" element={<GamePage />} />
-        <Route path="*" element={<Navigate to="/game" replace />} />
+        <Route
+          path="/game"
+          element={(
+            <ProtectedRoute>
+              <GamePage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
   );
