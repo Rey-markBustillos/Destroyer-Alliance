@@ -1,0 +1,8 @@
+{
+  "scripts": {
+    "dev": "cd \"Destroyer Allince\" && npm run dev"
+  },
+  "dependencies": {
+    "react-router-dom": "^7.13.1"
+  }
+}

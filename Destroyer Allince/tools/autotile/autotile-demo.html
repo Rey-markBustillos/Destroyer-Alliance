@@ -1,0 +1,164 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Auto-tiling Demo (8-direction)</title>
+    <style>
+      body { font-family: Arial, sans-serif; background:#111; color:#ddd; display:flex; gap:20px; padding:20px }
+      .panel { background:#0f172a; padding:12px; border-radius:8px; box-shadow:0 6px 18px rgba(0,0,0,.6) }
+      canvas { image-rendering: pixelated; background:#092; }
+      h3 { margin:6px 0 10px 0; font-size:14px }
+      pre { background:#071029; padding:8px; border-radius:6px; overflow:auto }
+    </style>
+  </head>
+  <body>
+    <div class="panel">
+      <h3>Map</h3>
+      <canvas id="mapCanvas" width="320" height="320"></canvas>
+      <p style="font-size:12px">Click a tile to cycle type (Grass / Water / Stone).</p>
+    </div>
+
+    <div class="panel">
+      <h3>Legend & Controls</h3>
+      <div id="legend"></div>
+      <h3>Implementation Notes</h3>
+      <pre>
+Bitmask layout (8 directions):
+  128  1  2
+   64     4
+   32 16  8
+
+Bits: 1=top,2=top-right,4=right,8=bottom-right,16=bottom,32=bottom-left,64=left,128=top-left
+getBitmask checks 8 neighbours and returns 0-255 mask.
+The demo renders a tileset where each index corresponds to the mask.
+You can replace the tileset lookup with your sprite coordinates.
+      </pre>
+    </div>
+
+    <script>
+    // AUTO-TILE DEMO (single-file, no external assets)
+
+    const TILE = { GRASS: 0, WATER: 1, STONE: 2 };
+    const TILE_SIZE = 32;
+
+    // Sample map (10x10)
+    let map = [
+      [0,0,0,0,0,0,0,0,0,0],
+      [0,1,1,1,0,0,0,1,1,0],
+      [0,1,0,1,0,2,2,1,0,0],
+      [0,1,1,1,0,2,2,1,1,0],
+      [0,0,0,0,0,0,0,0,0,0],
+      [0,0,0,0,0,0,1,1,1,0],
+      [0,0,0,0,0,0,1,0,1,0],
+      [0,0,0,2,2,2,1,1,1,0],
+      [0,0,0,2,0,2,0,0,0,0],
+      [0,0,0,0,0,0,0,0,0,0],
+    ];
+
+    const cols = map[0].length;
+    const rows = map.length;
+
+    // Build a simple tileset canvas: each mask value gets a visually distinct tile.
+    // In your real game, map mask -> sprite coords in your tilesheet.
+    const TILESET_COLS = 16;
+    const TILESET_ROWS = Math.ceil(256 / TILESET_COLS);
+    const tilesetCanvas = document.createElement('canvas');
+    tilesetCanvas.width = TILESET_COLS * TILE_SIZE;
+    tilesetCanvas.height = TILESET_ROWS * TILE_SIZE;
+    const tsCtx = tilesetCanvas.getContext('2d');
+
+    function hsvToRgb(h,s,v){
+      let f = (n,k=(n+h/60)%6) => v - v*s*Math.max(Math.min(k,4-k,1),0);
+      return [Math.round(f(5)*255),Math.round(f(3)*255),Math.round(f(1)*255)];
+    }
+
+    // Draw a distinct tile for each mask index (0..255)
+    for(let mask=0; mask<256; mask++){
+      const x = (mask % TILESET_COLS) * TILE_SIZE;
+      const y = Math.floor(mask/TILESET_COLS) * TILE_SIZE;
+      // color from mask value so related masks have related colors
+      const hue = (mask * 137) % 360;
+      const [r,g,b] = hsvToRgb(hue, 0.6, 0.9);
+      tsCtx.fillStyle = `rgb(${r},${g},${b})`;
+      tsCtx.fillRect(x,y, TILE_SIZE, TILE_SIZE);
+      // draw bitmask number
+      tsCtx.fillStyle = 'rgba(0,0,0,0.6)';
+      tsCtx.fillRect(x, y+TILE_SIZE-10, TILE_SIZE, 10);
+      tsCtx.fillStyle = '#fff';
+      tsCtx.font = '10px monospace';
+      tsCtx.fillText(mask.toString(), x+2, y+TILE_SIZE-2);
+    }
+
+    // Compute 8-direction bitmask for water tiles (example: we're auto-tiling WATER)
+    function getBitmask8(map, x, y, targetType){
+      // neighbor offsets in the order: top, top-right, right, bottom-right, bottom, bottom-left, left, top-left
+      const offsets = [ [0,-1],[1,-1],[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1] ];
+      let mask = 0;
+      for(let i=0;i<8;i++){
+        const ox = offsets[i][0];
+        const oy = offsets[i][1];
+        const nx = x + ox, ny = y + oy;
+        const val = (map[ny] && map[ny][nx] !== undefined) ? map[ny][nx] : -1;
+        if(val === targetType) mask |= (1 << i);
+      }
+      return mask;
+    }
+
+    // Draw single tile at map coordinates
+    function drawTile(ctx, map, x, y){
+      const tileType = map[y][x];
+      let spriteIndex = 0;
+      if(tileType === TILE.WATER){
+        // use water auto-tiling: get 8-bit mask and use it as sprite index
+        const mask = getBitmask8(map, x, y, TILE.WATER);
+        spriteIndex = mask; // in real game map this to proper tilesheet coords
+      } else if(tileType === TILE.STONE){
+        // example: stones don't auto-tile here, use fixed sprite index 200
+        spriteIndex = 200;
+      } else {
+        // grass or default: fixed sprite index 0
+        spriteIndex = 0;
+      }
+
+      const sx = (spriteIndex % TILESET_COLS) * TILE_SIZE;
+      const sy = Math.floor(spriteIndex / TILESET_COLS) * TILE_SIZE;
+      ctx.drawImage(tilesetCanvas, sx, sy, TILE_SIZE, TILE_SIZE, x*TILE_SIZE, y*TILE_SIZE, TILE_SIZE, TILE_SIZE);
+    }
+
+    // Render whole map
+    const mapCanvas = document.getElementById('mapCanvas');
+    mapCanvas.width = cols * TILE_SIZE;
+    mapCanvas.height = rows * TILE_SIZE;
+    const ctx = mapCanvas.getContext('2d');
+
+    function render(){
+      for(let y=0;y<rows;y++){
+        for(let x=0;x<cols;x++){
+          drawTile(ctx, map, x, y);
+        }
+      }
+    }
+
+    // Legend
+    const legend = document.getElementById('legend');
+    legend.innerHTML = `
+      <div style="display:flex;gap:8px;align-items:center"><div style="width:20px;height:20px;background:#7fbf7f;border-radius:3px"></div> Grass</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:6px"><div style="width:20px;height:20px;background:#7f9fff;border-radius:3px"></div> Water (auto-tiles)</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:6px"><div style="width:20px;height:20px;background:#b7a07f;border-radius:3px"></div> Stone (blocking)</div>
+    `;
+
+    // Click handler to change tile types
+    mapCanvas.addEventListener('click', (e)=>{
+      const rect = mapCanvas.getBoundingClientRect();
+      const mx = Math.floor((e.clientX - rect.left) / TILE_SIZE);
+      const my = Math.floor((e.clientY - rect.top) / TILE_SIZE);
+      if(mx>=0 && my>=0 && mx<cols && my<rows){
+        map[my][mx] = (map[my][mx] + 1) % 3; // cycle 0->1->2->0
+        render();
+      }
+    });
+
+    render();
+    </script>
+  </body>
+</html>

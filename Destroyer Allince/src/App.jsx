@@ -1,0 +1,31 @@
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import ProtectedRoute from "./components/ProtectedRoute";
+import Dashboard from "./pages/Dashboard";
+import GamePage from "./pages/GamePage";
+import Login from "./pages/login";
+import Register from "./pages/register";
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Navigate to="/game" replace />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route
+          path="/dashboard"
+          element={(
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          )}
+        />
+        <Route path="/home" element={<Navigate to="/game" replace />} />
+        <Route path="/game" element={<GamePage />} />
+        <Route path="*" element={<Navigate to="/game" replace />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
+export default App;
