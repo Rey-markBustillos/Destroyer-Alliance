@@ -27,38 +27,41 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-gray-900 to-gray-800 px-4">
+    <div
+      className="min-h-screen flex items-center justify-center bg-slate-950/70 bg-cover bg-center bg-no-repeat px-4"
+      style={{ backgroundImage: "url('/assets/loginbackgound.png')" }}
+    >
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-md bg-gray-900/80 backdrop-blur-md rounded-2xl shadow-2xl p-8 border border-gray-700"
+        className="w-full max-w-sm p-6"
       >
-        <h2 className="text-3xl md:text-4xl font-bold text-center text-white mb-6">
+        <h2 className="mb-5 text-center text-2xl font-bold text-white md:text-3xl">
           Destroyer Alliance
         </h2>
 
-        <p className="text-gray-400 text-center mb-6 text-sm md:text-base">
+        <p className="mb-5 text-center text-xs text-slate-200 md:text-sm">
           Login to continue your battle
         </p>
 
-        <div className="mb-4">
-          <label className="text-gray-300 text-sm">Email</label>
+        <div className="mb-3">
+          <label className="text-xs text-slate-100">Email</label>
           <input
             type="email"
             placeholder="Enter your email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full mt-1 px-4 py-2 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-1.5 text-sm text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-400"
           />
         </div>
 
         <div className="mb-4">
-          <label className="text-gray-300 text-sm">Password</label>
+          <label className="text-xs text-slate-100">Password</label>
           <input
             type="password"
             placeholder="Enter your password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full mt-1 px-4 py-2 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-1.5 text-sm text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-400"
           />
         </div>
 
@@ -71,14 +74,14 @@ export default function Login() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-blue-600 hover:bg-blue-700 transition duration-300 text-white font-semibold py-2 rounded-lg shadow-lg disabled:cursor-not-allowed disabled:opacity-70"
+          className="mx-auto block rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-semibold text-white shadow-lg transition duration-300 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70"
         >
           {loading ? "Logging in..." : "Login"}
         </button>
 
-        <p className="text-center text-gray-400 text-sm mt-6">
+        <p className="mt-5 text-center text-xs text-slate-200">
           Don't have an account?{" "}
-          <Link to="/register" className="text-blue-400 hover:underline">
+          <Link to="/register" className="text-blue-300 hover:underline">
             Register
           </Link>
         </p>

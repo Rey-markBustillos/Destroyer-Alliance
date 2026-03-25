@@ -64,6 +64,52 @@ export const getBuildings = async (req, res) => {
   res.json(buildings);
 };
 
+export const getWarTarget = async (req, res) => {
+  try {
+    const opponents = await prisma.user.findMany({
+      where: {
+        id: {
+          not: req.user.id,
+        },
+        buildings: {
+          some: {},
+        },
+      },
+      select: {
+        id: true,
+        email: true,
+        gold: true,
+        buildings: {
+          orderBy: [
+            { y: "asc" },
+            { x: "asc" },
+          ],
+        },
+      },
+    });
+
+    if (opponents.length === 0) {
+      return res.status(404).json({ message: "No enemy village found" });
+    }
+
+    const target = opponents[Math.floor(Math.random() * opponents.length)];
+    const townHall = target.buildings.find((building) => building.type === "town-hall") ?? null;
+
+    res.json({
+      id: target.id,
+      name: target.email,
+      gold: target.gold ?? 0,
+      townHallLevel: townHall?.level ?? 1,
+      defense: `${target.buildings.length} structures`,
+      loot: Math.max(200, Math.floor((target.gold ?? 0) * 0.25)),
+      buildings: target.buildings,
+    });
+  } catch (error) {
+    console.error("getWarTarget error:", error);
+    res.status(500).json({ message: "Unable to find war target" });
+  }
+};
+
 export const updateBuilding = async (req, res) => {
   const buildingId = Number(req.params.id);
   const { x, y, level, isUpgrading, upgradeCompleteAt } = req.body;

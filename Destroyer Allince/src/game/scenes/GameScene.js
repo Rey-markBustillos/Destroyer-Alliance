@@ -22,8 +22,38 @@ const WOOD_MACHINE_LEVEL_TWO_GOLD_PER_TICK = 20;
 const BUILDING_UPGRADE_DURATION_MS = 1800000;
 const BUILDING_MAX_LEVEL = 2;
 const COMMAND_CENTER_SOLDIER_LIMIT = 50;
-const SOLDIER_WAGE_INTERVAL_MS = 86400000;
-const SOLDIER_WAGE_PER_UNIT = 1;
+const SOLDIER_HUNGER_WARNING_MS = 18000000;
+const SOLDIER_STARVATION_MS = 86400000;
+const SOLDIER_FEED_COST_PER_UNIT = 1;
+const SKYPORT_CHOPPER_COST = 5000;
+const SKYPORT_CHOPPER_LEVEL_TWO_COST = 3500;
+const SKYPORT_CHOPPER_SELL_VALUE = 4000;
+const BUILDABLE_GRASS_MASK = [
+  [0, 9],
+  [0, 9],
+  [0, 9],
+  [0, 8],
+  [0, 8],
+  [0, 8],
+  [0, 7],
+  [0, 7],
+  [0, 7],
+  [0, 6],
+  [0, 6],
+  [0, 5],
+];
+
+const darkenColor = (hex, amount = 16) => {
+  const color = Phaser.Display.Color.ValueToColor(hex);
+  color.darken(amount);
+  return color.color;
+};
+
+const lightenColor = (hex, amount = 16) => {
+  const color = Phaser.Display.Color.ValueToColor(hex);
+  color.lighten(amount);
+  return color.color;
+};
 
 export default class GameScene extends Phaser.Scene {
   constructor() {
@@ -154,22 +184,101 @@ export default class GameScene extends Phaser.Scene {
     return row >= 0 && row < this.iso.rows && col >= 0 && col < this.iso.cols;
   }
 
+  isBuildableGrassTile(row, col) {
+    if (!this.isInsideGrid(row, col)) {
+      return false;
+    }
+
+    const range = BUILDABLE_GRASS_MASK[row];
+
+    if (!range) {
+      return false;
+    }
+
+    const [minCol, maxCol] = range;
+    return col >= minCol && col <= maxCol;
+  }
+
   canPlaceFootprint(row, col, buildingType) {
     const footprint = this.getFootprint(buildingType);
-    return (
-      row >= 0 &&
-      col >= 0 &&
-      row + footprint.rows - 1 < this.iso.rows &&
-      col + footprint.cols - 1 < this.iso.cols
-    );
+
+    if (
+      row < 0 ||
+      col < 0 ||
+      row + footprint.rows - 1 >= this.iso.rows ||
+      col + footprint.cols - 1 >= this.iso.cols
+    ) {
+      return false;
+    }
+
+    for (let rowOffset = 0; rowOffset < footprint.rows; rowOffset += 1) {
+      for (let colOffset = 0; colOffset < footprint.cols; colOffset += 1) {
+        if (!this.isBuildableGrassTile(row + rowOffset, col + colOffset)) {
+          return false;
+        }
+      }
+    }
+
+    return true;
   }
 
   getTileColor(row, col) {
-    return (row + col) % 2 === 0 ? 0x90c96f : 0x7db65f;
+    const seed = Math.abs((row * 47) + (col * 29) + ((row - col) * 13));
+    const grassPalette = [
+      0x6e9652,
+      0x769d57,
+      0x7ea45d,
+      0x6a8d4e,
+      0x86aa64,
+      0x73934d,
+    ];
+
+    return grassPalette[seed % grassPalette.length];
   }
 
   getTileStroke(row, col) {
-    return (row + col) % 2 === 0 ? 0x55823f : 0x4f783b;
+    return darkenColor(this.getTileColor(row, col), 26);
+  }
+
+  getTileAccentColor(row, col) {
+    return lightenColor(this.getTileColor(row, col), 14);
+  }
+
+  getTileShadowColor(row, col) {
+    return darkenColor(this.getTileColor(row, col), 42);
+  }
+
+  createDiamondSidePoints(centerX, centerY, side = "left", drop = 12) {
+    const halfW = this.iso.tileWidth / 2;
+    const halfH = this.iso.tileHeight / 2;
+
+    if (side === "right") {
+      return [
+        new Phaser.Geom.Point(centerX, centerY + halfH),
+        new Phaser.Geom.Point(centerX + halfW, centerY),
+        new Phaser.Geom.Point(centerX + halfW, centerY + drop),
+        new Phaser.Geom.Point(centerX, centerY + halfH + drop),
+      ];
+    }
+
+    return [
+      new Phaser.Geom.Point(centerX - halfW, centerY),
+      new Phaser.Geom.Point(centerX, centerY + halfH),
+      new Phaser.Geom.Point(centerX, centerY + halfH + drop),
+      new Phaser.Geom.Point(centerX - halfW, centerY + drop),
+    ];
+  }
+
+  createTilePatchPoints(centerX, centerY, widthScale = 0.34, heightScale = 0.24) {
+    const halfW = this.iso.tileWidth * widthScale;
+    const halfH = this.iso.tileHeight * heightScale;
+
+    return [
+      new Phaser.Geom.Point(centerX, centerY - halfH),
+      new Phaser.Geom.Point(centerX + halfW, centerY),
+      new Phaser.Geom.Point(centerX, centerY + halfH),
+      new Phaser.Geom.Point(centerX - halfW, centerY),
+    ];
   }
 
   createDiamondPoints(centerX, centerY) {
@@ -185,17 +294,73 @@ export default class GameScene extends Phaser.Scene {
   }
 
   drawBoard() {
+    if (this.textures.exists("base")) {
+      const boardCenter = this.gridToWorld(
+        (this.iso.cols - 1) / 2,
+        (this.iso.rows - 1) / 2
+      );
+      const village = this.add.image(
+        boardCenter.x,
+        boardCenter.y + this.iso.tileHeight * 2.2,
+        "base"
+      );
+
+      village.setOrigin(0.5, 0.5);
+      village.setDisplaySize(
+        this.iso.cols * this.iso.tileWidth * 1.45,
+        this.iso.rows * this.iso.tileHeight * 2.8
+      );
+      village.setDepth(-50);
+      this.groundLayer.add(village);
+      return;
+    }
+
     for (let row = 0; row < this.iso.rows; row += 1) {
       for (let col = 0; col < this.iso.cols; col += 1) {
         const { x, y } = this.gridToWorld(col, row);
         const tile = this.add.graphics();
         const top = this.createDiamondPoints(x, y);
+        const leftFace = this.createDiamondSidePoints(x, y, "left", 12);
+        const rightFace = this.createDiamondSidePoints(x, y, "right", 12);
 
         const topColor = this.getTileColor(row, col);
+        const edgeColor = this.getTileStroke(row, col);
+        const seed = Math.abs((row * 53) + (col * 37) + ((row + col) * 11));
+        const patchOffsetX = ((seed % 7) - 3) * 3;
+        const patchOffsetY = ((Math.floor(seed / 7) % 5) - 2) * 2;
+        const patch = this.createTilePatchPoints(
+          x + patchOffsetX,
+          y - 1 + patchOffsetY,
+          0.18 + (seed % 3) * 0.05,
+          0.12 + (seed % 2) * 0.05
+        );
+        const patchColor =
+          seed % 5 === 0
+            ? darkenColor(topColor, 12)
+            : seed % 3 === 0
+              ? lightenColor(topColor, 10)
+              : null;
+
+        tile.fillStyle(this.getTileShadowColor(row, col), 0.95);
+        tile.fillPoints(leftFace, true);
+        tile.fillStyle(darkenColor(topColor, 26), 0.98);
+        tile.fillPoints(rightFace, true);
         tile.fillStyle(topColor, 1);
         tile.fillPoints(top, true);
-        tile.lineStyle(2, this.getTileStroke(row, col), 0.95);
+
+        if (patchColor) {
+          tile.fillStyle(patchColor, 0.24);
+          tile.fillPoints(patch, true);
+        }
+
+        tile.lineStyle(2, edgeColor, 0.8);
         tile.strokePoints([...top, top[0]], false, false);
+        tile.lineStyle(1, this.getTileAccentColor(row, col), 0.32);
+        tile.strokePoints(
+          [top[0], new Phaser.Geom.Point(x + this.iso.tileWidth / 2 - 8, y)],
+          false,
+          false
+        );
         tile.setDepth(row + col);
         this.groundLayer.add(tile);
       }
@@ -203,81 +368,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   drawForestRing() {
-    if (!this.textures.exists("tree")) {
-      return;
-    }
-
-    const occupiedDecor = new Set();
-    const treeRows = [-10, -9, -8, -7, -6, -5, -4, this.iso.rows + 3, this.iso.rows + 4, this.iso.rows + 5, this.iso.rows + 6, this.iso.rows + 7, this.iso.rows + 8, this.iso.rows + 9];
-    const treeCols = [-10, -9, -8, -7, -6, -5, -4, this.iso.cols + 3, this.iso.cols + 4, this.iso.cols + 5, this.iso.cols + 6, this.iso.cols + 7, this.iso.cols + 8, this.iso.cols + 9];
-    const minCol = -10;
-    const maxCol = this.iso.cols + 9;
-    const minRow = -10;
-    const maxRow = this.iso.rows + 9;
-
-    const addDecor = (row, col, type = "tree") => {
-      const decorKey = `${row},${col}`;
-
-      if (occupiedDecor.has(decorKey)) {
-        return;
-      }
-
-      occupiedDecor.add(decorKey);
-
-      const { x, y } = this.gridToWorld(col, row);
-      const seed = Math.abs((row * 31) + (col * 17));
-
-      if (type === "stone" && this.textures.exists("stone")) {
-        const stone = this.add.image(
-          x + ((seed % 5) - 2) * 8,
-          y + this.iso.tileHeight + 16 + ((seed % 7) - 3) * 4,
-          "stone"
-        );
-
-        stone.setOrigin(0.5, 1);
-        stone.setDisplaySize(42 + (seed % 3) * 8, 28 + (seed % 2) * 6);
-        stone.setAlpha(0.92);
-        stone.setDepth(120 + row + col);
-        this.decorLayer.add(stone);
-        return;
-      }
-
-      const width = 66 + (seed % 3) * 8;
-      const height = 74 + (seed % 4) * 6;
-      const xOffset = ((seed % 5) - 2) * 5;
-      const yOffset = ((seed % 7) - 3) * 4;
-      const tree = this.add.image(
-        x + xOffset,
-        y + this.iso.tileHeight + 42 + yOffset,
-        "tree"
-      );
-
-      tree.setOrigin(0.5, 1);
-      tree.setDisplaySize(width, height);
-      tree.setAlpha(0.95);
-      tree.setDepth(170 + row + col);
-      this.decorLayer.add(tree);
-    };
-
-    treeRows.forEach((row) => {
-      for (let col = minCol; col <= maxCol; col += 1) {
-        addDecor(row, col, "tree");
-
-        if ((col + row) % 2 === 0) {
-          addDecor(row + (row < 0 ? 1 : -1), col, "stone");
-        }
-      }
-    });
-
-    treeCols.forEach((col) => {
-      for (let row = minRow; row <= maxRow; row += 1) {
-        addDecor(row, col, "tree");
-
-        if ((col + row) % 3 === 0) {
-          addDecor(row, col + (col < 0 ? 1 : -1), "stone");
-        }
-      }
-    });
+    return;
   }
 
   createHoverIndicator() {
@@ -295,7 +386,7 @@ export default class GameScene extends Phaser.Scene {
 
   createCamera() {
     const camera = this.cameras.main;
-    camera.setBackgroundColor("#84b966");
+    camera.setBackgroundColor("#44553a");
     camera.setBounds(
       this.worldBounds.minX,
       this.worldBounds.minY,
@@ -315,7 +406,7 @@ export default class GameScene extends Phaser.Scene {
         this.updateTownHallProduction();
         this.updateWoodMachineProduction();
         this.updateBuildingUpgrades();
-        this.updateCommandCenterWages();
+        this.updateCommandCenterHunger();
       },
     });
   }
@@ -525,11 +616,14 @@ export default class GameScene extends Phaser.Scene {
     building.lastGeneratedAt = Number(resourceState.lastGeneratedAt ?? Date.now());
     building.soldierCount = Math.max(0, Number(resourceState.soldierCount ?? 0) || 0);
     building.lastWagePaidAt = Number(resourceState.lastWagePaidAt ?? Date.now());
+    building.lastFedAt = Number(resourceState.lastFedAt ?? Date.now());
+    building.hasChopper = Boolean(resourceState.hasChopper ?? false);
     building.setLevel(Number(resourceState.level ?? 1));
     building.setUpgradeState(
       Boolean(resourceState.isUpgrading),
       resourceState.upgradeCompleteAt ?? null
     );
+    building.setSkyportState?.(building.hasChopper);
     building.setMachineGoldDisplay(
       building.machineGold,
       this.getBuildingMaxGold(building)
@@ -606,6 +700,8 @@ export default class GameScene extends Phaser.Scene {
           lastGeneratedAt: entry.lastGeneratedAt ?? Date.now(),
           soldierCount: entry.soldierCount ?? 0,
           lastWagePaidAt: entry.lastWagePaidAt ?? Date.now(),
+          lastFedAt: entry.lastFedAt ?? Date.now(),
+          hasChopper: entry.hasChopper ?? false,
         },
       });
     });
@@ -676,6 +772,8 @@ export default class GameScene extends Phaser.Scene {
         lastGeneratedAt: building.lastGeneratedAt ?? Date.now(),
         soldierCount: building.soldierCount ?? 0,
         lastWagePaidAt: building.lastWagePaidAt ?? Date.now(),
+        lastFedAt: building.lastFedAt ?? Date.now(),
+        hasChopper: building.hasChopper ?? false,
       })),
     };
   }
@@ -782,7 +880,16 @@ export default class GameScene extends Phaser.Scene {
       return null;
     }
 
-    return Number(building?.lastWagePaidAt ?? Date.now()) + SOLDIER_WAGE_INTERVAL_MS;
+    return Number(building?.lastFedAt ?? Date.now()) + SOLDIER_STARVATION_MS;
+  }
+
+  isCommandCenterHungry(building) {
+    if (!this.isCommandCenter(building) || (building?.soldierCount ?? 0) <= 0) {
+      return false;
+    }
+
+    const lastFedAt = Number(building?.lastFedAt ?? Date.now());
+    return Date.now() - lastFedAt >= SOLDIER_HUNGER_WARNING_MS;
   }
 
   getSoldiersForCommandCenter(commandCenter) {
@@ -905,6 +1012,10 @@ export default class GameScene extends Phaser.Scene {
       soldierCount: building.soldierCount ?? 0,
       maxSoldiers: this.getCommandCenterSoldierLimit(building),
       nextWageAt: this.getNextCommandCenterWageAt(building),
+      isHungry: this.isCommandCenterHungry(building),
+      hasChopper: building.hasChopper ?? false,
+      chopperCost: this.getSkyportChopperCost(building),
+      chopperSellValue: this.isSkyport(building) ? SKYPORT_CHOPPER_SELL_VALUE : 0,
     };
   }
 
@@ -919,8 +1030,84 @@ export default class GameScene extends Phaser.Scene {
       soldierCount: building.soldierCount ?? 0,
       maxSoldiers: this.getCommandCenterSoldierLimit(building),
       lastWagePaidAt: building.lastWagePaidAt ?? Date.now(),
+      lastFedAt: building.lastFedAt ?? Date.now(),
       nextWageAt: this.getNextCommandCenterWageAt(building),
+      isHungry: this.isCommandCenterHungry(building),
+      hasChopper: building.hasChopper ?? false,
+      chopperCost: this.getSkyportChopperCost(building),
+      chopperSellValue: this.isSkyport(building) ? SKYPORT_CHOPPER_SELL_VALUE : 0,
     };
+  }
+
+  isSkyport(buildingOrType) {
+    const typeId = typeof buildingOrType === "string"
+      ? buildingOrType
+      : buildingOrType?.buildingType?.id ?? buildingOrType?.id;
+
+    return typeId === "skyport";
+  }
+
+  getSkyportChopperCost(building) {
+    if (!this.isSkyport(building)) {
+      return 0;
+    }
+
+    return (building?.level ?? 1) >= 2
+      ? SKYPORT_CHOPPER_LEVEL_TWO_COST
+      : SKYPORT_CHOPPER_COST;
+  }
+
+  buyChopperAtSelectedBuilding() {
+    if (!this.selectedPlacedBuilding || !this.isSkyport(this.selectedPlacedBuilding)) {
+      return;
+    }
+
+    const building = this.selectedPlacedBuilding;
+    const chopperCost = this.getSkyportChopperCost(building);
+
+    if (building.hasChopper || this.gold < chopperCost) {
+      return;
+    }
+
+    building.hasChopper = true;
+    building.setSkyportState?.(true);
+    this.setGoldState(this.gold - chopperCost);
+
+    this.events.emit("structure-resource-updated", {
+      structure: building,
+      id: building.persistedId,
+      type: building.buildingType.id,
+      row: building.row,
+      col: building.col,
+      ...this.getBuildingPersistenceState(building),
+    });
+    this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
+  }
+
+  sellChopperAtSelectedBuilding() {
+    if (!this.selectedPlacedBuilding || !this.isSkyport(this.selectedPlacedBuilding)) {
+      return;
+    }
+
+    const building = this.selectedPlacedBuilding;
+
+    if (!building.hasChopper) {
+      return;
+    }
+
+    building.hasChopper = false;
+    building.setSkyportState?.(false);
+    this.setGoldState(this.gold + SKYPORT_CHOPPER_SELL_VALUE);
+
+    this.events.emit("structure-resource-updated", {
+      structure: building,
+      id: building.persistedId,
+      type: building.buildingType.id,
+      row: building.row,
+      col: building.col,
+      ...this.getBuildingPersistenceState(building),
+    });
+    this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
   }
 
   hireSoldierAtSelectedBuilding() {
@@ -938,6 +1125,62 @@ export default class GameScene extends Phaser.Scene {
 
     building.soldierCount = currentSoldiers + 1;
     building.lastWagePaidAt = Number(building.lastWagePaidAt ?? Date.now());
+    building.lastFedAt = Number(building.lastFedAt ?? Date.now());
+    this.syncCommandCenterSoldiers(building);
+
+    this.events.emit("structure-army-updated", {
+      structure: building,
+      id: building.persistedId,
+      type: building.buildingType.id,
+      row: building.row,
+      col: building.col,
+      ...this.getBuildingPersistenceState(building),
+    });
+    this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
+  }
+
+  feedSelectedCommandCenterSoldiers() {
+    if (!this.selectedPlacedBuilding || !this.isCommandCenter(this.selectedPlacedBuilding)) {
+      return;
+    }
+
+    const building = this.selectedPlacedBuilding;
+    const soldierCount = Math.max(0, Number(building.soldierCount ?? 0) || 0);
+    const totalFeedCost = soldierCount * SOLDIER_FEED_COST_PER_UNIT;
+
+    if (soldierCount <= 0 || this.gold < totalFeedCost) {
+      return;
+    }
+
+    building.lastFedAt = Date.now();
+    this.setGoldState(this.gold - totalFeedCost);
+    this.syncCommandCenterSoldiers(building);
+
+    this.events.emit("structure-army-updated", {
+      structure: building,
+      id: building.persistedId,
+      type: building.buildingType.id,
+      row: building.row,
+      col: building.col,
+      ...this.getBuildingPersistenceState(building),
+    });
+    this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
+  }
+
+  removeSoldiersAtSelectedBuilding(count = 1) {
+    if (!this.selectedPlacedBuilding || !this.isCommandCenter(this.selectedPlacedBuilding)) {
+      return;
+    }
+
+    const building = this.selectedPlacedBuilding;
+    const currentSoldiers = Math.max(0, Number(building.soldierCount ?? 0) || 0);
+    const removeCount = Math.max(0, Math.floor(Number(count) || 0));
+
+    if (currentSoldiers <= 0 || removeCount <= 0) {
+      return;
+    }
+
+    building.soldierCount = Math.max(0, currentSoldiers - removeCount);
     this.syncCommandCenterSoldiers(building);
 
     this.events.emit("structure-army-updated", {
@@ -1363,7 +1606,7 @@ export default class GameScene extends Phaser.Scene {
     });
   }
 
-  updateCommandCenterWages() {
+  updateCommandCenterHunger() {
     const now = Date.now();
 
     this.placedBuildings.forEach((building) => {
@@ -1371,17 +1614,19 @@ export default class GameScene extends Phaser.Scene {
         return;
       }
 
-      const lastWagePaidAt = Number(building.lastWagePaidAt ?? now);
-      const elapsed = now - lastWagePaidAt;
-      const wageCycles = Math.floor(elapsed / SOLDIER_WAGE_INTERVAL_MS);
+      const lastFedAt = Number(building.lastFedAt ?? now);
+      const elapsed = now - lastFedAt;
 
-      if (wageCycles <= 0) {
+      if (elapsed < SOLDIER_STARVATION_MS) {
+        this.getSoldiersForCommandCenter(building).forEach((unit) => {
+          unit.setHungryState?.(this.isCommandCenterHungry(building));
+        });
         return;
       }
 
-      const totalWage = (building.soldierCount ?? 0) * SOLDIER_WAGE_PER_UNIT * wageCycles;
-      building.lastWagePaidAt = lastWagePaidAt + wageCycles * SOLDIER_WAGE_INTERVAL_MS;
-      this.setGoldState(Math.max(0, this.gold - totalWage));
+      building.soldierCount = 0;
+      building.lastFedAt = now;
+      this.syncCommandCenterSoldiers(building);
 
       this.events.emit("structure-army-updated", {
         structure: building,
@@ -1390,7 +1635,6 @@ export default class GameScene extends Phaser.Scene {
         row: building.row,
         col: building.col,
         ...this.getBuildingPersistenceState(building),
-        totalWage,
       });
 
       if (this.selectedPlacedBuilding === building) {

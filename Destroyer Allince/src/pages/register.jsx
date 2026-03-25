@@ -27,38 +27,41 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-gray-900 to-gray-800 px-4">
+    <div
+      className="min-h-screen flex items-center justify-center bg-slate-950/70 bg-cover bg-center bg-no-repeat px-4"
+      style={{ backgroundImage: "url('/assets/loginbackgound.png')" }}
+    >
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-md bg-gray-900/80 backdrop-blur-md rounded-2xl shadow-2xl p-8 border border-gray-700"
+        className="w-full max-w-md rounded-2xl border border-white/20 bg-black/18 p-8 shadow-2xl backdrop-blur-sm"
       >
         <h2 className="text-3xl md:text-4xl font-bold text-center text-white mb-6">
           Create Account
         </h2>
 
-        <p className="text-gray-400 text-center mb-6 text-sm md:text-base">
+        <p className="text-slate-200 text-center mb-6 text-sm md:text-base">
           Join Destroyer Alliance
         </p>
 
         <div className="mb-4">
-          <label className="text-gray-300 text-sm">Email</label>
+          <label className="text-slate-100 text-sm">Email</label>
           <input
             type="email"
             placeholder="Enter your email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full mt-1 px-4 py-2 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500"
+            className="w-full mt-1 rounded-lg border border-slate-800 bg-slate-950 px-4 py-2 text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-green-400"
           />
         </div>
 
         <div className="mb-4">
-          <label className="text-gray-300 text-sm">Password</label>
+          <label className="text-slate-100 text-sm">Password</label>
           <input
             type="password"
             placeholder="Create a password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full mt-1 px-4 py-2 rounded-lg bg-gray-800 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-green-500"
+            className="w-full mt-1 rounded-lg border border-slate-800 bg-slate-950 px-4 py-2 text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-green-400"
           />
         </div>
 
@@ -71,14 +74,14 @@ export default function Register() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-green-600 hover:bg-green-700 transition duration-300 text-white font-semibold py-2 rounded-lg shadow-lg disabled:cursor-not-allowed disabled:opacity-70"
+          className="mx-auto block rounded-lg bg-green-600 px-5 py-2 text-sm font-semibold text-white shadow-lg transition duration-300 hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-70"
         >
           {loading ? "Creating account..." : "Register"}
         </button>
 
-        <p className="text-center text-gray-400 text-sm mt-6">
+        <p className="text-center text-slate-200 text-sm mt-6">
           Already have an account?{" "}
-          <Link to="/" className="text-green-400 hover:underline">
+          <Link to="/" className="text-green-300 hover:underline">
             Login
           </Link>
         </p>

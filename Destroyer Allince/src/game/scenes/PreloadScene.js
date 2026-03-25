@@ -23,8 +23,12 @@ export default class PreloadScene extends Phaser.Scene {
     this.load.image("stone", "/assets/stone.png");
     this.load.image("wall", "/assets/wall.png");
     this.load.image("town", "/assets/town.png");
+    this.load.image("base", "/assets/base.png");
     this.load.image("machine-wood", "/assets/machine-wood.png");
     this.load.image("command-center", "/assets/command center.png");
+    this.load.image("skyport-shop", "/assets/chopper/skychop.png");
+    this.load.image("skyport-empty", "/assets/chopper/skychop.png");
+    this.load.image("skyport-bought", "/assets/chopper/skychop2.png");
     this.load.image("goldcoin", "/assets/goldcoin.png");
     this.load.image("working", "/assets/working.png");
     this.load.image("builder-frame-1", "/assets/builders/frame1.png");

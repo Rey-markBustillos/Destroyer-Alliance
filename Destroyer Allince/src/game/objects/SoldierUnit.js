@@ -36,11 +36,25 @@ export default class SoldierUnit extends Phaser.GameObjects.Container {
     this.frameEvent = null;
     this.moveTween = null;
     this.walkFrameIndex = 0;
+    this.hungryLabel = null;
 
     this.sprite = scene.add.image(0, 0, WALK_TEXTURES.front[0]);
     this.sprite.setOrigin(0.5, 1);
-    this.sprite.setDisplaySize(24, 30);
+    this.sprite.setDisplaySize(14, 22);
     this.add(this.sprite);
+
+    this.hungryLabel = scene.add.text(0, -26, "Gutom na ako", {
+      fontFamily: "Verdana",
+      fontSize: "8px",
+      fontStyle: "bold",
+      color: "#fee2e2",
+      stroke: "#450a0a",
+      strokeThickness: 3,
+      align: "center",
+    });
+    this.hungryLabel.setOrigin(0.5, 0.5);
+    this.hungryLabel.setVisible(false);
+    this.add(this.hungryLabel);
 
     this.assignCommandCenter(commandCenter, index);
 
@@ -48,9 +62,11 @@ export default class SoldierUnit extends Phaser.GameObjects.Container {
       this.behaviorEvent?.remove(false);
       this.frameEvent?.remove(false);
       this.moveTween?.remove();
+      this.hungryLabel?.destroy();
       this.behaviorEvent = null;
       this.frameEvent = null;
       this.moveTween = null;
+      this.hungryLabel = null;
     });
   }
 
@@ -61,6 +77,7 @@ export default class SoldierUnit extends Phaser.GameObjects.Container {
     const homePoint = this.scene.getSoldierHomePoint(commandCenter, this.unitIndex);
     this.setPosition(homePoint.x, homePoint.y);
     this.setDepth(320 + commandCenter.row + commandCenter.col + 2);
+    this.setHungryState(this.scene.isCommandCenterHungry?.(commandCenter) ?? false);
     this.playIdle("front");
     this.queueNextAction(300 + index * 120);
   }
@@ -152,5 +169,9 @@ export default class SoldierUnit extends Phaser.GameObjects.Container {
   stopFrameAnimation() {
     this.frameEvent?.remove(false);
     this.frameEvent = null;
+  }
+
+  setHungryState(isHungry = false) {
+    this.hungryLabel?.setVisible(Boolean(isHungry));
   }
 }

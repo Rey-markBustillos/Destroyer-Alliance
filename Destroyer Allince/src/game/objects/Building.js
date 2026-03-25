@@ -62,6 +62,7 @@ export default class Building extends Phaser.GameObjects.Container {
     this.resourceLabel = null;
     this.resourceIcon = null;
     this.levelLabel = null;
+    this.skyportSprite = null;
     this.visualContainer = scene.add.container(0, 0);
     this.workingSprite = null;
     this.builderSprite = null;
@@ -80,8 +81,8 @@ export default class Building extends Phaser.GameObjects.Container {
     const tileHalfW = scene.iso.tileWidth / 2;
     const tileHalfH = scene.iso.tileHeight / 2;
 
-    const baseWidth = scene.iso.tileWidth * (0.84 + (this.footprintCols - 1) * 0.62);
-    const baseHeight = scene.iso.tileHeight * (0.62 + (this.footprintRows - 1) * 0.3);
+    const baseWidth = scene.iso.tileWidth * (1.02 + (this.footprintCols - 1) * 0.78);
+    const baseHeight = scene.iso.tileHeight * (0.78 + (this.footprintRows - 1) * 0.42);
     const bodyHeight = buildingType.bodyHeight ?? 54;
     const roofHeight = buildingType.roofHeight ?? 18;
     const labelText = buildingType.label ?? buildingType.name.slice(0, 1).toUpperCase();
@@ -93,9 +94,9 @@ export default class Building extends Phaser.GameObjects.Container {
       const cropY = 22;
       const cropWidth = 412;
       const cropHeight = 380;
-      const townWidth = footprintWidth * 0.92;
+      const townWidth = footprintWidth * 1.2;
       const townHeight = townWidth * (cropHeight / cropWidth);
-      const townSprite = scene.add.image(0, footprintHeight / 2 + 14, "town");
+      const townSprite = scene.add.image(0, 12, "town");
 
       townSprite.setOrigin(0.5, 1);
       townSprite.setCrop(cropX, cropY, cropWidth, cropHeight);
@@ -103,9 +104,9 @@ export default class Building extends Phaser.GameObjects.Container {
       this.visualContainer.add(townSprite);
 
       if (scene.textures.exists("goldcoin")) {
-        this.resourceIcon = scene.add.image(0, -townHeight + 38, "goldcoin");
+        this.resourceIcon = scene.add.image(0, -56, "goldcoin");
         this.resourceIcon.setOrigin(0.5, 0.5);
-        this.resourceIcon.setDisplaySize(28, 28);
+        this.resourceIcon.setDisplaySize(24, 24);
         this.resourceIcon.setVisible(false);
         this.resourceIcon.setInteractive({ useHandCursor: true });
         this.resourceIcon.on("pointerup", (_pointer, _localX, _localY, event) => {
@@ -122,7 +123,7 @@ export default class Building extends Phaser.GameObjects.Container {
       const cropY = 4;
       const cropWidth = 124;
       const cropHeight = 129;
-      const commandCenterWidth = footprintWidth * 0.9;
+      const commandCenterWidth = footprintWidth * 1.24;
       const commandCenterHeight = commandCenterWidth * (cropHeight / cropWidth);
       const commandCenterSprite = scene.add.image(0, footprintHeight / 2 + 4, "command-center");
 
@@ -130,12 +131,25 @@ export default class Building extends Phaser.GameObjects.Container {
       commandCenterSprite.setCrop(cropX, cropY, cropWidth, cropHeight);
       commandCenterSprite.setDisplaySize(commandCenterWidth, commandCenterHeight);
       this.visualContainer.add(commandCenterSprite);
+    } else if (
+      buildingType.id === "skyport"
+      && scene.textures.exists("skyport-empty")
+      && scene.textures.exists("skyport-bought")
+    ) {
+      const skyportWidth = footprintWidth * 0.82;
+      const skyportHeight = skyportWidth;
+      const skyportSprite = scene.add.image(0, footprintHeight / 2 + 8, "skyport-empty");
+
+      skyportSprite.setOrigin(0.5, 1);
+      skyportSprite.setDisplaySize(skyportWidth, skyportHeight);
+      this.skyportSprite = skyportSprite;
+      this.visualContainer.add(skyportSprite);
     } else if (buildingType.id === "wood-machine" && scene.textures.exists("machine-wood")) {
       const cropX = 64;
       const cropY = 0;
       const cropWidth = 513;
       const cropHeight = 364;
-      const machineWidth = footprintWidth * 0.92;
+      const machineWidth = footprintWidth * 1.18;
       const machineHeight = machineWidth * (cropHeight / cropWidth);
       const machineSprite = scene.add.image(0, footprintHeight / 2 + 6, "machine-wood");
 
@@ -277,7 +291,8 @@ export default class Building extends Phaser.GameObjects.Container {
     }
 
     if (buildingType.id === "town-hall") {
-      this.levelLabel.setY(-26);
+      this.levelLabel.setY(-82);
+      this.levelLabel.setVisible(false);
     }
 
     this.add(this.levelLabel);
@@ -374,5 +389,15 @@ export default class Building extends Phaser.GameObjects.Container {
     this.resourceLabel.setText(
       machineGold >= maxGold ? "Full" : `${machineGold}/${maxGold}`
     );
+  }
+
+  setSkyportState(hasChopper = false) {
+    this.hasChopper = Boolean(hasChopper);
+
+    if (this.buildingType?.id !== "skyport" || !this.skyportSprite) {
+      return;
+    }
+
+    this.skyportSprite.setTexture(this.hasChopper ? "skyport-bought" : "skyport-empty");
   }
 }

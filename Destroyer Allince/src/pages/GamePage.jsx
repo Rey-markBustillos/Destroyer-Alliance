@@ -54,6 +54,7 @@ export default function GamePage() {
   const [isMoveMode, setIsMoveMode] = useState(false);
   const [shopOpen, setShopOpen] = useState(true);
   const [hireModalOpen, setHireModalOpen] = useState(false);
+  const [removeSoldierCount, setRemoveSoldierCount] = useState("1");
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -107,11 +108,13 @@ export default function GamePage() {
       const handleStructureSelectionCleared = () => {
         setSelectedBuilding(null);
         setHireModalOpen(false);
+        setRemoveSoldierCount("1");
       };
 
       const handlePlacedBuildingSelected = (building) => {
         setSelectedPlacedBuilding(building);
         setIsMoveMode(false);
+        setRemoveSoldierCount("1");
         if (building?.type !== "command-center") {
           setHireModalOpen(false);
         }
@@ -130,6 +133,7 @@ export default function GamePage() {
         maxGold,
         soldierCount,
         lastWagePaidAt,
+        hasChopper,
       }) => {
         upsertStoredBuilding({
           id: structure.persistedId ?? null,
@@ -143,6 +147,7 @@ export default function GamePage() {
           lastGeneratedAt,
           soldierCount,
           lastWagePaidAt,
+          hasChopper,
         }, session);
         persistCurrentSnapshot();
 
@@ -170,6 +175,7 @@ export default function GamePage() {
             lastGeneratedAt,
             soldierCount,
             lastWagePaidAt,
+            hasChopper,
           }, session);
           persistCurrentSnapshot();
         } catch (error) {
@@ -194,6 +200,7 @@ export default function GamePage() {
         maxSoldiers,
         nextWageAt,
         lastWagePaidAt,
+        hasChopper,
       }) => {
         removeStoredBuilding({
           id: structure.persistedId ?? null,
@@ -213,6 +220,7 @@ export default function GamePage() {
           lastGeneratedAt,
           soldierCount,
           lastWagePaidAt,
+          hasChopper,
         }, session);
         persistCurrentSnapshot();
 
@@ -230,6 +238,7 @@ export default function GamePage() {
           soldierCount,
           maxSoldiers,
           nextWageAt,
+          hasChopper,
         });
         setIsMoveMode(false);
 
@@ -264,6 +273,7 @@ export default function GamePage() {
         maxGold,
         soldierCount,
         lastWagePaidAt,
+        hasChopper,
       }) => {
         upsertStoredBuilding({
           id: id ?? null,
@@ -277,6 +287,7 @@ export default function GamePage() {
           lastGeneratedAt,
           soldierCount,
           lastWagePaidAt,
+          hasChopper,
         }, session);
         persistCurrentSnapshot();
 
@@ -295,6 +306,7 @@ export default function GamePage() {
             soldierCount,
             nextWageAt: current.nextWageAt,
             maxSoldiers: current.maxSoldiers,
+            hasChopper,
           };
         });
       };
@@ -331,6 +343,7 @@ export default function GamePage() {
         maxGold,
         soldierCount,
         lastWagePaidAt,
+        hasChopper,
       }) => {
         upsertStoredBuilding({
           id: id ?? structure?.persistedId ?? null,
@@ -344,6 +357,7 @@ export default function GamePage() {
           lastGeneratedAt,
           soldierCount,
           lastWagePaidAt,
+          hasChopper,
         }, session);
         persistCurrentSnapshot();
 
@@ -362,6 +376,7 @@ export default function GamePage() {
             soldierCount,
             nextWageAt: current.nextWageAt,
             maxSoldiers: current.maxSoldiers,
+            hasChopper,
           };
         });
 
@@ -398,6 +413,7 @@ export default function GamePage() {
         maxGold,
         soldierCount,
         lastWagePaidAt,
+        hasChopper,
       }) => {
         upsertStoredBuilding({
           id: id ?? structure?.persistedId ?? null,
@@ -411,6 +427,7 @@ export default function GamePage() {
           lastGeneratedAt,
           soldierCount,
           lastWagePaidAt,
+          hasChopper,
         }, session);
         persistCurrentSnapshot();
 
@@ -429,6 +446,7 @@ export default function GamePage() {
             soldierCount,
             nextWageAt: current.nextWageAt,
             maxSoldiers: current.maxSoldiers,
+            hasChopper,
           };
         });
 
@@ -465,6 +483,7 @@ export default function GamePage() {
         maxGold,
         soldierCount,
         lastWagePaidAt,
+        hasChopper,
       }) => {
         upsertStoredBuilding({
           id: id ?? structure?.persistedId ?? null,
@@ -478,6 +497,7 @@ export default function GamePage() {
           lastGeneratedAt,
           soldierCount,
           lastWagePaidAt,
+          hasChopper,
         }, session);
         persistCurrentSnapshot();
 
@@ -496,6 +516,7 @@ export default function GamePage() {
             soldierCount,
             nextWageAt: current.nextWageAt,
             maxSoldiers: current.maxSoldiers,
+            hasChopper,
           };
         });
 
@@ -533,6 +554,7 @@ export default function GamePage() {
         lastWagePaidAt,
         maxSoldiers,
         nextWageAt,
+        hasChopper,
       }) => {
         upsertStoredBuilding({
           id: id ?? null,
@@ -546,6 +568,7 @@ export default function GamePage() {
           lastGeneratedAt,
           soldierCount,
           lastWagePaidAt,
+          hasChopper,
         }, session);
         persistCurrentSnapshot();
 
@@ -564,6 +587,7 @@ export default function GamePage() {
             soldierCount,
             maxSoldiers,
             nextWageAt,
+            hasChopper,
           };
         });
       };
@@ -719,6 +743,29 @@ export default function GamePage() {
     setHireModalOpen(false);
   };
 
+  const handleRemoveSoldiers = () => {
+    const gameScene = gameRef.current?.scene?.getScene("GameScene");
+    const count = Math.max(1, Math.floor(Number(removeSoldierCount) || 1));
+
+    gameScene?.removeSoldiersAtSelectedBuilding(count);
+    setRemoveSoldierCount("1");
+  };
+
+  const handleFeedSoldiers = () => {
+    const gameScene = gameRef.current?.scene?.getScene("GameScene");
+    gameScene?.feedSelectedCommandCenterSoldiers();
+  };
+
+  const handleBuyChopper = () => {
+    const gameScene = gameRef.current?.scene?.getScene("GameScene");
+    gameScene?.buyChopperAtSelectedBuilding();
+  };
+
+  const handleSellChopper = () => {
+    const gameScene = gameRef.current?.scene?.getScene("GameScene");
+    gameScene?.sellChopperAtSelectedBuilding();
+  };
+
   const handleStartWar = () => {
     navigate("/war");
   };
@@ -742,6 +789,18 @@ export default function GamePage() {
   const wageMinutes = Math.floor((wageRemainingMs % 3600000) / 60000);
   const canHireSoldier = selectedPlacedBuilding?.type === "command-center"
     && (selectedPlacedBuilding.soldierCount ?? 0) < (selectedPlacedBuilding.maxSoldiers ?? 0);
+  const parsedRemoveSoldierCount = Math.max(1, Math.floor(Number(removeSoldierCount) || 1));
+  const canRemoveSoldier = selectedPlacedBuilding?.type === "command-center"
+    && (selectedPlacedBuilding.soldierCount ?? 0) > 0;
+  const feedCost = (selectedPlacedBuilding?.soldierCount ?? 0) * 1;
+  const canFeedSoldiers = selectedPlacedBuilding?.type === "command-center"
+    && (selectedPlacedBuilding.soldierCount ?? 0) > 0
+    && gameState.gold >= feedCost;
+  const canBuyChopper = selectedPlacedBuilding?.type === "skyport"
+    && !selectedPlacedBuilding.hasChopper
+    && gameState.gold >= (selectedPlacedBuilding.chopperCost ?? 0);
+  const canSellChopper = selectedPlacedBuilding?.type === "skyport"
+    && selectedPlacedBuilding.hasChopper;
   const availableSoldierOption = SOLDIER_OPTIONS.find((option) => option.available);
   const canStartWar = gameState.totalSoldiers > 0;
 
@@ -786,56 +845,67 @@ export default function GamePage() {
         <div ref={gameRootRef} className="h-full w-full overflow-hidden" />
 
         {selectedPlacedBuilding ? (
-          <div className="pointer-events-none absolute inset-x-0 bottom-28 z-10 flex justify-center px-4">
-            <div className="pointer-events-auto flex items-center gap-3 rounded-3xl border border-white/15 bg-slate-950/90 px-4 py-3 text-white shadow-[0_20px_50px_rgba(2,6,23,0.45)] backdrop-blur">
-              <div className="pr-2">
+          <div className="pointer-events-none absolute inset-x-0 bottom-14 z-10 flex justify-center px-4">
+            <div className="pointer-events-auto flex max-w-[78vw] flex-wrap items-center justify-center gap-1.5 rounded-2xl border border-white/15 bg-slate-950/84 px-2.5 py-2 text-white shadow-[0_14px_28px_rgba(2,6,23,0.34)] backdrop-blur">
+              <div className="min-w-[9.5rem] max-w-[11rem] pr-1">
                 <p className="text-[0.68rem] uppercase tracking-[0.28em] text-amber-300/75">
                   Selected
                 </p>
-                <p className="text-base font-black">{selectedPlacedBuilding.name}</p>
-                <p className="text-xs text-slate-400">
+                <p className="text-sm font-black">{selectedPlacedBuilding.name}</p>
+                <p className="text-[11px] text-slate-400">
                   {isMoveMode ? "Choose a new tile to replace this building." : "Choose an action."}
                 </p>
-                <p className="mt-1 text-xs font-semibold text-sky-300">
+                <p className="mt-1 text-[11px] font-semibold text-sky-300">
                   Level {selectedPlacedBuilding.level ?? 1}
                 </p>
                 {selectedPlacedBuilding.isUpgrading ? (
-                  <p className="mt-1 text-xs font-semibold text-amber-300">
+                  <p className="mt-1 text-[11px] font-semibold text-amber-300">
                     Upgrading... {upgradeMinutes}:{String(upgradeSeconds).padStart(2, "0")}
                   </p>
                 ) : (selectedPlacedBuilding.level ?? 1) < 2 ? (
-                  <p className="mt-1 text-xs font-semibold text-emerald-300">
+                  <p className="mt-1 text-[11px] font-semibold text-emerald-300">
                     Upgrade Cost: {upgradeCost} gold
                   </p>
                 ) : null}
                 {selectedPlacedBuilding.type === "wood-machine" ? (
-                  <p className="mt-1 text-xs font-semibold text-amber-300">
+                  <p className="mt-1 text-[11px] font-semibold text-amber-300">
                     {selectedPlacedBuilding.machineGold ?? 0}/
                     {selectedPlacedBuilding.maxGold ?? 250} gold
                   </p>
                 ) : null}
                 {selectedPlacedBuilding.type === "command-center" ? (
                   <>
-                    <p className="mt-1 text-xs font-semibold text-amber-300">
+                    <p className="mt-1 text-[11px] font-semibold text-amber-300">
                       Soldiers: {selectedPlacedBuilding.soldierCount ?? 0}/
                       {selectedPlacedBuilding.maxSoldiers ?? 50}
                     </p>
-                    <p className="mt-1 text-xs font-semibold text-emerald-300">
-                      Wage: 1 gold bawat sundalo / 24 hrs
+                    <p className="mt-1 text-[11px] font-semibold text-emerald-300">
+                      Kain cost: {feedCost} gold
                     </p>
                     {(selectedPlacedBuilding.soldierCount ?? 0) > 0 ? (
-                      <p className="mt-1 text-xs font-semibold text-sky-300">
-                        Next wage in {wageHours}h {String(wageMinutes).padStart(2, "0")}m
+                      <p className={`mt-1 text-[11px] font-semibold ${
+                        selectedPlacedBuilding.isHungry ? "text-rose-300" : "text-sky-300"
+                      }`}>
+                        {selectedPlacedBuilding.isHungry
+                          ? "Gutom na sila"
+                          : `May food pa for ${wageHours}h ${String(wageMinutes).padStart(2, "0")}m`}
                       </p>
                     ) : null}
                   </>
+                ) : null}
+                {selectedPlacedBuilding.type === "skyport" ? (
+                  <p className="mt-1 text-[11px] font-semibold text-amber-300">
+                    {selectedPlacedBuilding.hasChopper
+                      ? "Chopper ready"
+                      : `Buy Chopper: ${selectedPlacedBuilding.chopperCost ?? 0} gold`}
+                  </p>
                 ) : null}
               </div>
 
               <button
                 type="button"
                 onClick={handleMoveBuilding}
-                className="rounded-2xl bg-amber-500 px-4 py-3 text-sm font-bold text-slate-950 transition hover:bg-amber-400"
+                className="rounded-xl bg-amber-500 px-2.5 py-2 text-[11px] font-bold text-slate-950 transition hover:bg-amber-400"
               >
                 Move
               </button>
@@ -844,7 +914,7 @@ export default function GamePage() {
                 type="button"
                 onClick={handleUpgradeBuilding}
                 disabled={!canUpgrade}
-                className="rounded-2xl bg-sky-500 px-4 py-3 text-sm font-bold text-sky-950 transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-xl bg-sky-500 px-2.5 py-2 text-[11px] font-bold text-sky-950 transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {selectedPlacedBuilding.isUpgrading
                   ? "Upgrading"
@@ -857,7 +927,7 @@ export default function GamePage() {
                 <button
                   type="button"
                   onClick={handleCancelUpgrade}
-                  className="rounded-2xl bg-slate-200 px-4 py-3 text-sm font-bold text-slate-950 transition hover:bg-white"
+                  className="rounded-xl bg-slate-200 px-2.5 py-2 text-[11px] font-bold text-slate-950 transition hover:bg-white"
                 >
                   Cancel Upgrade
                 </button>
@@ -868,27 +938,81 @@ export default function GamePage() {
                   type="button"
                   onClick={handleCollectGold}
                   disabled={(selectedPlacedBuilding.machineGold ?? 0) <= 0 || selectedPlacedBuilding.isUpgrading}
-                  className="rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-bold text-emerald-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-xl bg-emerald-500 px-2.5 py-2 text-[11px] font-bold text-emerald-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Collect Gold
                 </button>
               ) : null}
 
               {selectedPlacedBuilding.type === "command-center" ? (
-                <button
-                  type="button"
-                  onClick={handleHireSoldier}
-                  disabled={!canHireSoldier}
-                  className="rounded-2xl bg-violet-500 px-4 py-3 text-sm font-bold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {canHireSoldier ? "Hire Soldier" : "Max Soldiers"}
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={handleHireSoldier}
+                    disabled={!canHireSoldier}
+                    className="rounded-xl bg-violet-500 px-2.5 py-2 text-[11px] font-bold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {canHireSoldier ? "Hire Soldier" : "Max Soldiers"}
+                  </button>
+
+                  <input
+                    type="number"
+                    min="1"
+                    max={Math.max(1, selectedPlacedBuilding.soldierCount ?? 1)}
+                    value={removeSoldierCount}
+                    onChange={(event) => setRemoveSoldierCount(event.target.value)}
+                    className="w-12 rounded-xl border border-white/10 bg-slate-900 px-1.5 py-2 text-center text-[11px] font-bold text-white outline-none transition focus:border-rose-400"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={handleRemoveSoldiers}
+                    disabled={
+                      !canRemoveSoldier
+                      || parsedRemoveSoldierCount > (selectedPlacedBuilding.soldierCount ?? 0)
+                    }
+                    className="rounded-xl bg-rose-500 px-2.5 py-2 text-[11px] font-bold text-white transition hover:bg-rose-400 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Remove
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleFeedSoldiers}
+                    disabled={!canFeedSoldiers}
+                    className="rounded-xl bg-emerald-500 px-2.5 py-2 text-[11px] font-bold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Kain Na
+                  </button>
+                </div>
+              ) : null}
+
+              {selectedPlacedBuilding.type === "skyport" ? (
+                selectedPlacedBuilding.hasChopper ? (
+                  <button
+                    type="button"
+                    onClick={handleSellChopper}
+                    disabled={!canSellChopper}
+                    className="rounded-xl bg-orange-500 px-2.5 py-2 text-[11px] font-bold text-slate-950 transition hover:bg-orange-400 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Sell Chopper
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleBuyChopper}
+                    disabled={!canBuyChopper}
+                    className="rounded-xl bg-cyan-500 px-2.5 py-2 text-[11px] font-bold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Buy Chopper
+                  </button>
+                )
               ) : null}
 
               <button
                 type="button"
                 onClick={handleSellBuilding}
-                className="rounded-2xl bg-rose-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-rose-500"
+                className="rounded-xl bg-rose-600 px-2.5 py-2 text-[11px] font-bold text-white transition hover:bg-rose-500"
               >
                 Sell
               </button>
