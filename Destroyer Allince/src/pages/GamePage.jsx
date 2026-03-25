@@ -681,10 +681,10 @@ export default function GamePage() {
       };
     };
 
-    game.events.on("ready", handleSceneReady);
+    game.events.on("game-scene-ready", handleSceneReady);
 
     return () => {
-      game.events.off("ready", handleSceneReady);
+      game.events.off("game-scene-ready", handleSceneReady);
       if (gameRef.current?.cleanup) {
         gameRef.current.cleanup();
       }

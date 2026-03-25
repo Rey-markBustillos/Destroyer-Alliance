@@ -29,18 +29,20 @@ const phaserConfig = {
 		mode: Phaser.Scale.FIT,
 		autoCenter: Phaser.Scale.CENTER_BOTH,
 	},
-	scene: [BootScene, PreloadScene, GameScene, UIScene],
 };
 
-export const createGame = (parentElement) => {
+export const createGame = (parentElement, options = {}) => {
 	const existingCanvas = parentElement.querySelector("canvas");
 	if (existingCanvas) {
 		existingCanvas.remove();
 	}
 
+	const gameScene = new GameScene(options);
+
 	return new Phaser.Game({
 		...phaserConfig,
 		parent: parentElement,
+		scene: [BootScene, PreloadScene, gameScene, UIScene],
 	});
 };
 

@@ -43,6 +43,20 @@ const BUILDABLE_GRASS_MASK = [
   [0, 5],
 ];
 
+const WAR_SOLDIER_TEXTURES = {
+  front: ["soldier-front-walk-1", "soldier-front-walk-2"],
+  back: ["soldier-back-walk-1", "soldier-back-walk-2"],
+  left: ["soldier-left-walk-1", "soldier-left-walk-2"],
+  right: ["soldier-right-walk-1", "soldier-right-walk-2"],
+};
+
+const WAR_FIRING_TEXTURES = {
+  front: "soldier-front-firing",
+  back: "soldier-back-firing",
+  left: "soldier-left-firing",
+  right: "soldier-right-firing",
+};
+
 const darkenColor = (hex, amount = 16) => {
   const color = Phaser.Display.Color.ValueToColor(hex);
   color.darken(amount);
@@ -56,11 +70,14 @@ const lightenColor = (hex, amount = 16) => {
 };
 
 export default class GameScene extends Phaser.Scene {
-  constructor() {
+  constructor(runtimeOptions = {}) {
     super("GameScene");
+    this.runtimeOptions = runtimeOptions;
   }
 
   create() {
+    this.mode = this.runtimeOptions?.mode ?? "village";
+    this.isWarMode = this.mode === "war";
     this.iso = {
       tileWidth: TILE_WIDTH,
       tileHeight: TILE_HEIGHT,
@@ -76,6 +93,14 @@ export default class GameScene extends Phaser.Scene {
     this.soldierUnits = [];
     this.enemyUnits = [];
     this.occupiedTiles = new Map();
+    this.warDeployments = new Map();
+    this.warState = {
+      roomId: null,
+      status: "idle",
+      selfUserId: null,
+      targetUserId: null,
+      targetSignature: "",
+    };
     this.pointerDrag = {
       active: false,
       moved: false,
@@ -93,19 +118,22 @@ export default class GameScene extends Phaser.Scene {
     this.createPlacementIndicator();
     this.createCamera();
     this.bindInput();
-    this.startResourceProduction();
+    if (!this.isWarMode) {
+      this.startResourceProduction();
+    }
     this.updateHoverAtScreenPoint(
       this.scale.width / 2,
       this.scale.height / 2
     );
     this.emitGameState();
-    this.game.events.emit("ready");
+    this.game.events.emit("game-scene-ready");
   }
 
   createWorldLayers() {
     this.groundLayer = this.add.layer();
     this.decorLayer = this.add.layer();
     this.structureLayer = this.add.layer();
+    this.warUnitLayer = this.add.layer();
     this.overlayLayer = this.add.layer();
   }
 
@@ -435,6 +463,11 @@ export default class GameScene extends Phaser.Scene {
       this.pointerDrag.active = false;
 
       if (!wasDrag) {
+        if (this.isWarMode) {
+          this.handleWarTileClick(pointer.worldX, pointer.worldY);
+          return;
+        }
+
         this.handleTileClick(pointer.worldX, pointer.worldY);
       }
     });
@@ -629,13 +662,19 @@ export default class GameScene extends Phaser.Scene {
       this.getBuildingMaxGold(building)
     );
     building.setDepth(300 + row + col + footprint.rows + footprint.cols);
-    building.on("pointerup", (pointer, _localX, _localY, event) => {
-      event.stopPropagation();
 
-      if (!this.pointerDrag.moved) {
-        this.selectPlacedBuilding(building);
-      }
-    });
+    if (!this.isWarMode) {
+      building.on("pointerup", (pointer, _localX, _localY, event) => {
+        event.stopPropagation();
+
+        if (!this.pointerDrag.moved) {
+          this.selectPlacedBuilding(building);
+        }
+      });
+    } else {
+      building.disableInteractive();
+    }
+
     this.structureLayer.add(building);
     this.placedBuildings.push(building);
 
@@ -709,12 +748,17 @@ export default class GameScene extends Phaser.Scene {
 
   clearPlacedBuildings() {
     this.clearPlacedBuildingSelection();
-    this.placementIndicator.clear();
-    this.soldierUnits.forEach((unit) => unit.destroy());
+    this.placementIndicator?.clear();
+    this.soldierUnits?.forEach((unit) => unit.destroy());
     this.soldierUnits = [];
-    this.placedBuildings.forEach((building) => building.destroy());
+    this.clearWarDeployments();
+    this.placedBuildings?.forEach((building) => building.destroy());
     this.placedBuildings = [];
-    this.occupiedTiles.clear();
+    this.occupiedTiles?.clear();
+  }
+
+  getTownHall() {
+    return this.placedBuildings.find((building) => this.isTownHall(building)) ?? null;
   }
 
   ensureTownHall(options = {}) {
@@ -755,6 +799,133 @@ export default class GameScene extends Phaser.Scene {
     this.loadPersistedBuildings(buildings);
     this.ensureTownHall({ emitPlacedEvent: false });
     this.emitGameState();
+  }
+
+  initializeWarVillage({
+    roomId = null,
+    selfUserId = null,
+    targetUserId = null,
+    buildings = [],
+    structures = [],
+  } = {}) {
+    const normalizedBuildings = Array.isArray(buildings) && buildings.length > 0
+      ? buildings
+      : (structures ?? []).map((structure) => ({
+        id: structure.sourceId ?? structure.id ?? null,
+        type: structure.type,
+        x: structure.col,
+        y: structure.row,
+        level: structure.level ?? 1,
+      }));
+    const targetSignature = JSON.stringify(
+      normalizedBuildings.map((building) => ({
+        id: building.id ?? null,
+        type: building.type,
+        x: Number(building.x ?? building.col ?? 0),
+        y: Number(building.y ?? building.row ?? 0),
+        level: Number(building.level ?? 1),
+      }))
+    );
+
+    if (this.warState.targetSignature !== targetSignature) {
+      this.clearPlacedBuildings();
+      this.loadPersistedBuildings(normalizedBuildings);
+      this.ensureTownHall({ emitPlacedEvent: false });
+      this.warState.targetSignature = targetSignature;
+    }
+
+    this.warState.roomId = roomId;
+    this.warState.selfUserId = selfUserId;
+    this.warState.targetUserId = targetUserId;
+    this.syncWarStructureHealth(structures);
+  }
+
+  syncWarStructureHealth(structures = []) {
+    const structureMap = new Map();
+
+    structures.forEach((structure) => {
+      const key = structure.sourceId ?? `${structure.type}:${structure.row}:${structure.col}`;
+      structureMap.set(key, structure);
+    });
+
+    this.placedBuildings.forEach((building) => {
+      const key = building.persistedId ?? `${building.buildingType.id}:${building.row}:${building.col}`;
+      const structure = structureMap.get(key);
+
+      if (!structure) {
+        building.setVisible(false);
+        building.setBattleHealth(null, null);
+        return;
+      }
+
+      const isAlive = Number(structure.health ?? 0) > 0;
+      building.setVisible(isAlive);
+      building.setBattleHealth(structure.health, structure.maxHealth ?? structure.health);
+    });
+  }
+
+  clearWarDeployments() {
+    this.warDeployments?.forEach((sprite) => sprite.destroy());
+    this.warDeployments?.clear();
+  }
+
+  syncWarDeployments(deployments = []) {
+    const seenIds = new Set();
+
+    deployments.forEach((deployment) => {
+      const deploymentId = String(deployment.id);
+      seenIds.add(deploymentId);
+      const textureKey = deployment.state === "firing"
+        ? WAR_FIRING_TEXTURES[deployment.direction] ?? WAR_FIRING_TEXTURES.front
+        : (WAR_SOLDIER_TEXTURES[deployment.direction] ?? WAR_SOLDIER_TEXTURES.front)[
+          Number(deployment.frameIndex ?? 0) % 2
+        ];
+      const position = this.gridToWorld(Number(deployment.col ?? 0), Number(deployment.row ?? 0));
+      const existingSprite = this.warDeployments.get(deploymentId);
+
+      if (!existingSprite) {
+        const sprite = this.add.image(position.x, position.y, textureKey);
+        sprite.setOrigin(0.5, 1);
+        sprite.setDisplaySize(18, 28);
+        sprite.setDepth(460 + Number(deployment.row ?? 0) + Number(deployment.col ?? 0));
+        this.warUnitLayer.add(sprite);
+        this.warDeployments.set(deploymentId, sprite);
+        return;
+      }
+
+      existingSprite.setPosition(position.x, position.y);
+      existingSprite.setTexture(textureKey);
+      existingSprite.setDepth(460 + Number(deployment.row ?? 0) + Number(deployment.col ?? 0));
+    });
+
+    Array.from(this.warDeployments.entries()).forEach(([deploymentId, sprite]) => {
+      if (seenIds.has(deploymentId)) {
+        return;
+      }
+
+      sprite.destroy();
+      this.warDeployments.delete(deploymentId);
+    });
+  }
+
+  applyWarBattleState({
+    roomId = null,
+    selfUserId = null,
+    targetUserId = null,
+    targetBuildings = [],
+    targetStructures = [],
+    selfDeployments = [],
+    status = "active",
+  } = {}) {
+    this.warState.status = status;
+    this.initializeWarVillage({
+      roomId,
+      selfUserId,
+      targetUserId,
+      buildings: targetBuildings,
+      structures: targetStructures,
+    });
+    this.syncWarDeployments(selfDeployments);
   }
 
   getPersistedSnapshot() {
@@ -1275,6 +1446,25 @@ export default class GameScene extends Phaser.Scene {
     });
     this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
 
+  }
+
+  handleWarTileClick(worldX, worldY) {
+    const tile = this.getNearestTile(worldX, worldY);
+
+    if (!tile || tile.row < this.iso.rows - 2) {
+      return;
+    }
+
+    const occupiedBuilding = this.occupiedTiles.get(this.getTileKey(tile.row, tile.col));
+
+    if (occupiedBuilding) {
+      return;
+    }
+
+    this.events.emit("war-deploy-request", {
+      row: tile.row,
+      col: tile.col,
+    });
   }
 
   sellSelectedBuilding() {

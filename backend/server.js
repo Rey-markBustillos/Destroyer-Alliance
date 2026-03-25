@@ -1,14 +1,17 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import { createServer } from "http";
 
 import authRoutes from "./routes/authRoutes.js";
 import gameRoutes from "./routes/gameRoutes.js";
 import prisma from "./prismaClient.js";
+import { createBattleSocketServer } from "./socket/battleServer.js";
 
 dotenv.config();
 
 const app = express();
+const httpServer = createServer(app);
 
 app.use(cors());
 app.use(express.json());
@@ -28,8 +31,9 @@ const startServer = async () => {
   try {
     await prisma.$connect();
     console.log("Database connected successfully");
+    createBattleSocketServer(httpServer);
 
-    app.listen(PORT, () => {
+    httpServer.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
     });
   } catch (error) {

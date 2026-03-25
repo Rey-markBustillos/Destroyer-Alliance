@@ -63,6 +63,7 @@ export default class Building extends Phaser.GameObjects.Container {
     this.resourceIcon = null;
     this.levelLabel = null;
     this.skyportSprite = null;
+    this.battleHealthLabel = null;
     this.visualContainer = scene.add.container(0, 0);
     this.workingSprite = null;
     this.builderSprite = null;
@@ -297,6 +298,19 @@ export default class Building extends Phaser.GameObjects.Container {
 
     this.add(this.levelLabel);
 
+    this.battleHealthLabel = scene.add.text(0, roofY - roofHeight - 24, "", {
+      fontFamily: "Verdana",
+      fontSize: "10px",
+      fontStyle: "bold",
+      color: "#fde68a",
+      stroke: "#111827",
+      strokeThickness: 4,
+      align: "center",
+    });
+    this.battleHealthLabel.setOrigin(0.5, 0.5);
+    this.battleHealthLabel.setVisible(false);
+    this.add(this.battleHealthLabel);
+
     this.setSize(baseWidth, bodyHeight + roofHeight + baseHeight);
 
     const hitArea = createFootprintHitArea(
@@ -399,5 +413,21 @@ export default class Building extends Phaser.GameObjects.Container {
     }
 
     this.skyportSprite.setTexture(this.hasChopper ? "skyport-bought" : "skyport-empty");
+  }
+
+  setBattleHealth(health = null, maxHealth = null) {
+    if (!this.battleHealthLabel) {
+      return;
+    }
+
+    if (!Number.isFinite(Number(health)) || !Number.isFinite(Number(maxHealth))) {
+      this.battleHealthLabel.setVisible(false);
+      return;
+    }
+
+    this.battleHealthLabel.setText(
+      `${Math.max(0, Math.round(health))}/${Math.max(0, Math.round(maxHealth))}`
+    );
+    this.battleHealthLabel.setVisible(true);
   }
 }

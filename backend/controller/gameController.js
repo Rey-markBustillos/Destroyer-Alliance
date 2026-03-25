@@ -71,9 +71,6 @@ export const getWarTarget = async (req, res) => {
         id: {
           not: req.user.id,
         },
-        buildings: {
-          some: {},
-        },
       },
       select: {
         id: true,
@@ -93,16 +90,32 @@ export const getWarTarget = async (req, res) => {
     }
 
     const target = opponents[Math.floor(Math.random() * opponents.length)];
-    const townHall = target.buildings.find((building) => building.type === "town-hall") ?? null;
+    const targetBuildings = [...(target.buildings ?? [])];
+    const hasTownHall = targetBuildings.some((building) => building.type === "town-hall");
+
+    if (!hasTownHall) {
+      targetBuildings.push({
+        id: `synthetic-townhall-${target.id}`,
+        type: "town-hall",
+        x: 4,
+        y: 4,
+        level: 1,
+        isUpgrading: false,
+        upgradeCompleteAt: null,
+        userId: target.id,
+      });
+    }
+
+    const townHall = targetBuildings.find((building) => building.type === "town-hall") ?? null;
 
     res.json({
       id: target.id,
       name: target.email,
       gold: target.gold ?? 0,
       townHallLevel: townHall?.level ?? 1,
-      defense: `${target.buildings.length} structures`,
+      defense: `${targetBuildings.length} structures`,
       loot: Math.max(200, Math.floor((target.gold ?? 0) * 0.25)),
-      buildings: target.buildings,
+      buildings: targetBuildings,
     });
   } catch (error) {
     console.error("getWarTarget error:", error);
