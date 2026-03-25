@@ -2,22 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { getStoredBuildings } from "../services/buildingStorage";
+import { fetchWarTarget } from "../services/game";
 import { getSession } from "../services/session";
 
-const GRID_ROWS = 7;
-const GRID_COLS = 8;
+const GRID_ROWS = 12;
+const GRID_COLS = 12;
 const SEARCH_DELAY_MS = 1500;
 const SOLDIER_SPEED_PER_TICK = 0.18;
 const SOLDIER_FIRE_RANGE = 0.42;
 const SOLDIER_DAMAGE_PER_TICK = 8;
-
-const DUMMY_WAR_TARGET = {
-  id: "dummy-raider-001",
-  name: "Dummy Raider",
-  townHallLevel: 2,
-  defense: "Light Base",
-  loot: 900,
-};
 
 const WALK_TEXTURES = {
   front: ["/assets/army/front/walk.png", "/assets/army/front/walk2.png"],
@@ -33,40 +26,28 @@ const FIRING_TEXTURES = {
   right: "/assets/army/right/firing.png",
 };
 
-const INITIAL_STRUCTURES = [
-  {
-    id: "enemy-town",
-    row: 1,
-    col: 4,
+const BUILDING_WAR_CONFIG = {
+  "town-hall": {
     image: "/assets/town.png",
     name: "Town Hall",
-    health: 180,
+    health: 220,
   },
-  {
-    id: "enemy-machine-1",
-    row: 3,
-    col: 5,
+  "wood-machine": {
     image: "/assets/machine-wood.png",
     name: "Wood Machine",
-    health: 90,
+    health: 110,
   },
-  {
-    id: "enemy-machine-2",
-    row: 2,
-    col: 2,
-    image: "/assets/machine-wood.png",
-    name: "Wood Machine",
-    health: 90,
-  },
-  {
-    id: "enemy-command",
-    row: 4,
-    col: 3,
+  "command-center": {
     image: "/assets/command center.png",
     name: "Command Center",
-    health: 120,
+    health: 160,
   },
-];
+  skyport: {
+    image: "/assets/chopper/skychop.png",
+    name: "Chopper Bay",
+    health: 180,
+  },
+};
 
 const getTileId = (row, col) => `${row}-${col}`;
 
@@ -89,7 +70,7 @@ export default function WarPage() {
   const navigate = useNavigate();
   const [searchState, setSearchState] = useState("searching");
   const [target, setTarget] = useState(null);
-  const [structures, setStructures] = useState(INITIAL_STRUCTURES);
+  const [structures, setStructures] = useState([]);
   const [droppedSoldiers, setDroppedSoldiers] = useState([]);
 
   const totalSoldiers = useMemo(() => {
@@ -103,9 +84,42 @@ export default function WarPage() {
   }, []);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setTarget(DUMMY_WAR_TARGET);
-      setSearchState("found");
+    const timer = window.setTimeout(async () => {
+      const session = getSession();
+      const token = session?.token ?? null;
+
+      if (!token) {
+        setSearchState("empty");
+        return;
+      }
+
+      try {
+        const enemy = await fetchWarTarget(token);
+        const mappedStructures = (enemy.buildings ?? []).map((building) => {
+          const config = BUILDING_WAR_CONFIG[building.type] ?? {
+            image: "/assets/command center.png",
+            name: building.type,
+            health: 120,
+          };
+
+          return {
+            id: `enemy-${building.id}`,
+            row: Number(building.y ?? 0),
+            col: Number(building.x ?? 0),
+            image: config.image,
+            name: config.name,
+            health: config.health + Math.max(0, (Number(building.level ?? 1) - 1) * 40),
+          };
+        });
+
+        setTarget(enemy);
+        setStructures(mappedStructures);
+        setSearchState("found");
+      } catch (_error) {
+        setTarget(null);
+        setStructures([]);
+        setSearchState("empty");
+      }
     }, SEARCH_DELAY_MS);
 
     return () => {
@@ -301,7 +315,16 @@ export default function WarPage() {
               <div className="mt-5 rounded-3xl border border-emerald-400/25 bg-emerald-500/15 p-4">
                 <p className="text-sm font-black text-emerald-200">Enemy base cleared</p>
                 <p className="mt-2 text-xs text-slate-200">
-                  Your soldiers destroyed the dummy village.
+                  Your soldiers destroyed the enemy village.
+                </p>
+              </div>
+            ) : null}
+
+            {searchState === "empty" ? (
+              <div className="mt-5 rounded-3xl border border-white/10 bg-white/5 p-4">
+                <p className="text-sm font-bold text-white">No enemy village found</p>
+                <p className="mt-2 text-xs text-slate-400">
+                  Walang ibang account na may village pa sa ngayon.
                 </p>
               </div>
             ) : null}
