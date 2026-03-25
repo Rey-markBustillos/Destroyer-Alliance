@@ -16,10 +16,13 @@ model User {
 }
 
 model Building {
-  id      Int    @id @default(autoincrement())
-  type    String
-  x       Int
-  y       Int
-  userId  Int
-  user    User   @relation(fields: [userId], references: [id])
+  id                Int       @id @default(autoincrement())
+  type              String
+  x                 Int
+  y                 Int
+  level             Int       @default(1)
+  isUpgrading       Boolean   @default(false)
+  upgradeCompleteAt DateTime?
+  userId            Int
+  user              User      @relation(fields: [userId], references: [id])
 }

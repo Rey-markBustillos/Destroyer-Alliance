@@ -1,7 +1,8 @@
 import Phaser from "phaser";
 
 import Building from "../objects/Building";
-import { BUILDING_LIST } from "../utils/buildingTypes";
+import SoldierUnit from "../objects/SoldierUnit";
+import { BUILDING_LIST, getBuildingUpgradeCost } from "../utils/buildingTypes";
 
 const TILE_WIDTH = 64;
 const TILE_HEIGHT = 32;
@@ -15,6 +16,14 @@ const ZOOM_STEP = 0.1;
 const WOOD_MACHINE_TICK_MS = 180000;
 const WOOD_MACHINE_GOLD_PER_TICK = 10;
 const WOOD_MACHINE_MAX_GOLD = 250;
+const TOWN_HALL_GOLD_PER_TICK = 100;
+const TOWN_HALL_MAX_GOLD = 500;
+const WOOD_MACHINE_LEVEL_TWO_GOLD_PER_TICK = 20;
+const BUILDING_UPGRADE_DURATION_MS = 1800000;
+const BUILDING_MAX_LEVEL = 2;
+const COMMAND_CENTER_SOLDIER_LIMIT = 50;
+const SOLDIER_WAGE_INTERVAL_MS = 86400000;
+const SOLDIER_WAGE_PER_UNIT = 1;
 
 export default class GameScene extends Phaser.Scene {
   constructor() {
@@ -34,6 +43,8 @@ export default class GameScene extends Phaser.Scene {
     this.movingBuilding = null;
     this.gold = STARTING_GOLD;
     this.placedBuildings = [];
+    this.soldierUnits = [];
+    this.enemyUnits = [];
     this.occupiedTiles = new Map();
     this.pointerDrag = {
       active: false,
@@ -301,7 +312,10 @@ export default class GameScene extends Phaser.Scene {
       delay: 1000,
       loop: true,
       callback: () => {
+        this.updateTownHallProduction();
         this.updateWoodMachineProduction();
+        this.updateBuildingUpgrades();
+        this.updateCommandCenterWages();
       },
     });
   }
@@ -509,7 +523,17 @@ export default class GameScene extends Phaser.Scene {
     building.persistedId = persistedId;
     building.machineGold = Number(resourceState.machineGold ?? 0);
     building.lastGeneratedAt = Number(resourceState.lastGeneratedAt ?? Date.now());
-    building.setMachineGoldDisplay(building.machineGold, WOOD_MACHINE_MAX_GOLD);
+    building.soldierCount = Math.max(0, Number(resourceState.soldierCount ?? 0) || 0);
+    building.lastWagePaidAt = Number(resourceState.lastWagePaidAt ?? Date.now());
+    building.setLevel(Number(resourceState.level ?? 1));
+    building.setUpgradeState(
+      Boolean(resourceState.isUpgrading),
+      resourceState.upgradeCompleteAt ?? null
+    );
+    building.setMachineGoldDisplay(
+      building.machineGold,
+      this.getBuildingMaxGold(building)
+    );
     building.setDepth(300 + row + col + footprint.rows + footprint.cols);
     building.on("pointerup", (pointer, _localX, _localY, event) => {
       event.stopPropagation();
@@ -520,6 +544,10 @@ export default class GameScene extends Phaser.Scene {
     });
     this.structureLayer.add(building);
     this.placedBuildings.push(building);
+
+    if (this.isCommandCenter(building)) {
+      this.syncCommandCenterSoldiers(building);
+    }
 
     for (let rowOffset = 0; rowOffset < footprint.rows; rowOffset += 1) {
       for (let colOffset = 0; colOffset < footprint.cols; colOffset += 1) {
@@ -541,8 +569,7 @@ export default class GameScene extends Phaser.Scene {
         type: buildingType.id,
         row,
         col,
-        machineGold: building.machineGold,
-        lastGeneratedAt: building.lastGeneratedAt,
+        ...this.getBuildingPersistenceState(building),
       });
     }
   }
@@ -572,11 +599,85 @@ export default class GameScene extends Phaser.Scene {
         deductCost: false,
         emitPlacedEvent: false,
         resourceState: {
+          level: entry.level ?? 1,
+          isUpgrading: entry.isUpgrading ?? false,
+          upgradeCompleteAt: entry.upgradeCompleteAt ?? null,
           machineGold: entry.machineGold ?? 0,
           lastGeneratedAt: entry.lastGeneratedAt ?? Date.now(),
+          soldierCount: entry.soldierCount ?? 0,
+          lastWagePaidAt: entry.lastWagePaidAt ?? Date.now(),
         },
       });
     });
+  }
+
+  clearPlacedBuildings() {
+    this.clearPlacedBuildingSelection();
+    this.placementIndicator.clear();
+    this.soldierUnits.forEach((unit) => unit.destroy());
+    this.soldierUnits = [];
+    this.placedBuildings.forEach((building) => building.destroy());
+    this.placedBuildings = [];
+    this.occupiedTiles.clear();
+  }
+
+  ensureTownHall(options = {}) {
+    const { emitPlacedEvent = false } = options;
+    const existingTownHall = this.getTownHall();
+
+    if (existingTownHall) {
+      return existingTownHall;
+    }
+
+    const townHallType = BUILDING_LIST.find((item) => item.id === "town-hall");
+
+    if (!townHallType) {
+      return null;
+    }
+
+    const defaultRow = 4;
+    const defaultCol = 4;
+
+    if (
+      !this.canPlaceFootprint(defaultRow, defaultCol, townHallType) ||
+      this.isTileOccupied(defaultRow, defaultCol, townHallType)
+    ) {
+      return null;
+    }
+
+    this.placeBuilding(defaultRow, defaultCol, townHallType, {
+      deductCost: false,
+      emitPlacedEvent,
+    });
+
+    return this.getTownHall();
+  }
+
+  initializeFromSnapshot({ gold = this.gold, buildings = [] } = {}) {
+    this.clearPlacedBuildings();
+    this.setGoldState(gold, { emitChangeEvent: false });
+    this.loadPersistedBuildings(buildings);
+    this.ensureTownHall({ emitPlacedEvent: false });
+    this.emitGameState();
+  }
+
+  getPersistedSnapshot() {
+    return {
+      gold: this.gold,
+      buildings: this.placedBuildings.map((building) => ({
+        id: building.persistedId ?? null,
+        type: building.buildingType.id,
+        x: building.col,
+        y: building.row,
+        level: building.level ?? 1,
+        isUpgrading: building.isUpgrading ?? false,
+        upgradeCompleteAt: building.upgradeCompleteAt ?? null,
+        machineGold: building.machineGold ?? 0,
+        lastGeneratedAt: building.lastGeneratedAt ?? Date.now(),
+        soldierCount: building.soldierCount ?? 0,
+        lastWagePaidAt: building.lastWagePaidAt ?? Date.now(),
+      })),
+    };
   }
 
   setSelectedBuilding(buildingType) {
@@ -602,10 +703,18 @@ export default class GameScene extends Phaser.Scene {
       this.isWoodMachine(building)
     );
     const fullWoodMachines = woodMachines.filter(
-      (building) => (building.machineGold ?? 0) >= WOOD_MACHINE_MAX_GOLD
+      (building) => (building.machineGold ?? 0) >= this.getBuildingMaxGold(building)
     ).length;
     const totalMachineGold = woodMachines.reduce(
       (total, building) => total + (building.machineGold ?? 0),
+      0
+    );
+    const totalMachineCapacity = woodMachines.reduce(
+      (total, building) => total + this.getBuildingMaxGold(building),
+      0
+    );
+    const totalSoldiers = this.placedBuildings.reduce(
+      (total, building) => total + (building.soldierCount ?? 0),
       0
     );
 
@@ -613,6 +722,8 @@ export default class GameScene extends Phaser.Scene {
       gold: this.gold,
       buildings: this.placedBuildings.length,
       totalMachineGold,
+      totalMachineCapacity,
+      totalSoldiers,
       woodMachines: woodMachines.length,
       fullWoodMachines,
     });
@@ -646,20 +757,206 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
-  selectPlacedBuilding(building) {
-    this.selectedPlacedBuilding = building;
-    this.selectedBuildingType = null;
-    this.movingBuilding = null;
-    this.events.emit("structure-selection-cleared");
-    this.events.emit("placed-building-selected", {
+  isCommandCenter(buildingOrType) {
+    const typeId = typeof buildingOrType === "string"
+      ? buildingOrType
+      : buildingOrType?.buildingType?.id ?? buildingOrType?.id;
+
+    return typeId === "command-center";
+  }
+
+  isTownHall(buildingOrType) {
+    const typeId = typeof buildingOrType === "string"
+      ? buildingOrType
+      : buildingOrType?.buildingType?.id ?? buildingOrType?.id;
+
+    return typeId === "town-hall";
+  }
+
+  getCommandCenterSoldierLimit(building) {
+    return this.isCommandCenter(building) ? COMMAND_CENTER_SOLDIER_LIMIT : 0;
+  }
+
+  getNextCommandCenterWageAt(building) {
+    if (!this.isCommandCenter(building) || (building?.soldierCount ?? 0) <= 0) {
+      return null;
+    }
+
+    return Number(building?.lastWagePaidAt ?? Date.now()) + SOLDIER_WAGE_INTERVAL_MS;
+  }
+
+  getSoldiersForCommandCenter(commandCenter) {
+    return this.soldierUnits.filter((unit) => unit.commandCenter === commandCenter);
+  }
+
+  getSoldierHomePoint(commandCenter, index = 0) {
+    const offsets = [
+      { row: 1, col: 0 },
+      { row: 0, col: 1 },
+      { row: 1, col: -1 },
+      { row: 2, col: 0 },
+      { row: 0, col: 2 },
+      { row: 2, col: 1 },
+    ];
+    const offset = offsets[index % offsets.length];
+    const row = Phaser.Math.Clamp(commandCenter.row + offset.row, 0, this.iso.rows - 1);
+    const col = Phaser.Math.Clamp(commandCenter.col + offset.col, 0, this.iso.cols - 1);
+
+    return this.gridToWorld(col, row);
+  }
+
+  getRandomSoldierPatrolPoint(commandCenter, index = 0) {
+    const patrolOffsets = [
+      { row: 1, col: 0 },
+      { row: 0, col: 1 },
+      { row: 1, col: 1 },
+      { row: 2, col: 0 },
+      { row: 2, col: 1 },
+      { row: 0, col: 2 },
+      { row: 1, col: 2 },
+      { row: -1, col: 1 },
+      { row: 1, col: -1 },
+    ];
+    const candidates = patrolOffsets
+      .map((offset) => ({
+        row: commandCenter.row + offset.row,
+        col: commandCenter.col + offset.col,
+      }))
+      .filter(({ row, col }) => this.isInsideGrid(row, col))
+      .filter(({ row, col }) => {
+        const occupied = this.occupiedTiles.get(this.getTileKey(row, col));
+        return !occupied || occupied === commandCenter;
+      });
+
+    if (candidates.length === 0) {
+      return this.getSoldierHomePoint(commandCenter, index);
+    }
+
+    const choice = Phaser.Utils.Array.GetRandom(candidates);
+    return this.gridToWorld(choice.col, choice.row);
+  }
+
+  syncCommandCenterSoldiers(commandCenter) {
+    if (!this.isCommandCenter(commandCenter)) {
+      return;
+    }
+
+    const desiredCount = Math.max(0, Number(commandCenter.soldierCount ?? 0) || 0);
+    const currentUnits = this.getSoldiersForCommandCenter(commandCenter);
+
+    while (currentUnits.length > desiredCount) {
+      const unit = currentUnits.pop();
+      this.soldierUnits = this.soldierUnits.filter((entry) => entry !== unit);
+      unit?.destroy();
+    }
+
+    while (currentUnits.length < desiredCount) {
+      const unit = new SoldierUnit(this, commandCenter, currentUnits.length);
+      this.structureLayer.add(unit);
+      this.soldierUnits.push(unit);
+      currentUnits.push(unit);
+    }
+
+    currentUnits.forEach((unit, index) => {
+      unit.assignCommandCenter(commandCenter, index);
+    });
+  }
+
+  removeCommandCenterSoldiers(commandCenter) {
+    const currentUnits = this.getSoldiersForCommandCenter(commandCenter);
+    currentUnits.forEach((unit) => unit.destroy());
+    this.soldierUnits = this.soldierUnits.filter((unit) => unit.commandCenter !== commandCenter);
+  }
+
+  getNearestEnemyTarget(unit) {
+    const activeEnemies = (this.enemyUnits ?? []).filter((enemy) => enemy?.active);
+
+    if (activeEnemies.length === 0) {
+      return null;
+    }
+
+    let nearestEnemy = null;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+
+    activeEnemies.forEach((enemy) => {
+      const distance = Phaser.Math.Distance.Between(unit.x, unit.y, enemy.x, enemy.y);
+
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestEnemy = enemy;
+      }
+    });
+
+    return nearestEnemy;
+  }
+
+  getPlacedBuildingSelectionPayload(building) {
+    return {
       id: building.persistedId,
       type: building.buildingType.id,
       name: building.buildingType.name,
       row: building.row,
       col: building.col,
+      level: building.level ?? 1,
+      isUpgrading: building.isUpgrading ?? false,
+      upgradeCompleteAt: building.upgradeCompleteAt ?? null,
       machineGold: building.machineGold ?? 0,
-      maxGold: WOOD_MACHINE_MAX_GOLD,
+      maxGold: this.getBuildingMaxGold(building),
+      soldierCount: building.soldierCount ?? 0,
+      maxSoldiers: this.getCommandCenterSoldierLimit(building),
+      nextWageAt: this.getNextCommandCenterWageAt(building),
+    };
+  }
+
+  getBuildingPersistenceState(building) {
+    return {
+      level: building.level ?? 1,
+      isUpgrading: building.isUpgrading ?? false,
+      upgradeCompleteAt: building.upgradeCompleteAt ?? null,
+      machineGold: building.machineGold ?? 0,
+      maxGold: this.getBuildingMaxGold(building),
+      lastGeneratedAt: building.lastGeneratedAt ?? Date.now(),
+      soldierCount: building.soldierCount ?? 0,
+      maxSoldiers: this.getCommandCenterSoldierLimit(building),
+      lastWagePaidAt: building.lastWagePaidAt ?? Date.now(),
+      nextWageAt: this.getNextCommandCenterWageAt(building),
+    };
+  }
+
+  hireSoldierAtSelectedBuilding() {
+    if (!this.selectedPlacedBuilding || !this.isCommandCenter(this.selectedPlacedBuilding)) {
+      return;
+    }
+
+    const building = this.selectedPlacedBuilding;
+    const currentSoldiers = building.soldierCount ?? 0;
+    const maxSoldiers = this.getCommandCenterSoldierLimit(building);
+
+    if (currentSoldiers >= maxSoldiers) {
+      return;
+    }
+
+    building.soldierCount = currentSoldiers + 1;
+    building.lastWagePaidAt = Number(building.lastWagePaidAt ?? Date.now());
+    this.syncCommandCenterSoldiers(building);
+
+    this.events.emit("structure-army-updated", {
+      structure: building,
+      id: building.persistedId,
+      type: building.buildingType.id,
+      row: building.row,
+      col: building.col,
+      ...this.getBuildingPersistenceState(building),
     });
+    this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
+  }
+
+  selectPlacedBuilding(building) {
+    this.selectedPlacedBuilding = building;
+    this.selectedBuildingType = null;
+    this.movingBuilding = null;
+    this.events.emit("structure-selection-cleared");
+    this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
     this.drawTileOverlay(
       this.placementIndicator,
       { row: building.row, col: building.col, buildingType: building.buildingType },
@@ -723,6 +1020,7 @@ export default class GameScene extends Phaser.Scene {
     building.setDepth(300 + row + col + footprint.rows + footprint.cols);
     this.setBuildingTiles(building, true);
     this.selectedPlacedBuilding = building;
+    this.syncCommandCenterSoldiers(building);
     this.events.emit("structure-moved", {
       structure: building,
       type: building.buildingType.id,
@@ -730,18 +1028,10 @@ export default class GameScene extends Phaser.Scene {
       previousCol,
       row,
       col,
-      machineGold: building.machineGold ?? 0,
-      lastGeneratedAt: building.lastGeneratedAt ?? Date.now(),
+      ...this.getBuildingPersistenceState(building),
     });
-    this.events.emit("placed-building-selected", {
-      id: building.persistedId,
-      type: building.buildingType.id,
-      name: building.buildingType.name,
-      row,
-      col,
-      machineGold: building.machineGold ?? 0,
-      maxGold: WOOD_MACHINE_MAX_GOLD,
-    });
+    this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
+
   }
 
   sellSelectedBuilding() {
@@ -750,6 +1040,7 @@ export default class GameScene extends Phaser.Scene {
     }
 
     const building = this.selectedPlacedBuilding;
+    this.removeCommandCenterSoldiers(building);
     this.setBuildingTiles(building, false);
     this.placedBuildings = this.placedBuildings.filter((entry) => entry !== building);
     building.destroy();
@@ -765,7 +1056,7 @@ export default class GameScene extends Phaser.Scene {
       type: building.buildingType.id,
       row: building.row,
       col: building.col,
-      machineGold: building.machineGold ?? 0,
+      ...this.getBuildingPersistenceState(building),
     });
   }
 
@@ -783,7 +1074,7 @@ export default class GameScene extends Phaser.Scene {
 
     building.machineGold = 0;
     building.lastGeneratedAt = Date.now();
-    building.setMachineGoldDisplay(0, WOOD_MACHINE_MAX_GOLD);
+    building.setMachineGoldDisplay(0, this.getBuildingMaxGold(building));
     this.setGoldState(this.gold + collectedGold);
     this.events.emit("structure-resource-updated", {
       structure: building,
@@ -791,19 +1082,99 @@ export default class GameScene extends Phaser.Scene {
       type: building.buildingType.id,
       row: building.row,
       col: building.col,
-      machineGold: building.machineGold,
-      lastGeneratedAt: building.lastGeneratedAt,
+      ...this.getBuildingPersistenceState(building),
       isFull: false,
     });
-    this.events.emit("placed-building-selected", {
+    this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
+  }
+
+  collectTownHallGold(building) {
+    if (!this.isTownHall(building)) {
+      return;
+    }
+
+    const collectedGold = Number(building.machineGold ?? 0);
+
+    if (collectedGold <= 0) {
+      return;
+    }
+
+    building.machineGold = 0;
+    building.lastGeneratedAt = Date.now();
+    building.setMachineGoldDisplay(building.machineGold);
+    this.setGoldState(this.gold + collectedGold);
+
+    this.events.emit("structure-resource-updated", {
+      structure: building,
       id: building.persistedId,
       type: building.buildingType.id,
-      name: building.buildingType.name,
       row: building.row,
       col: building.col,
-      machineGold: 0,
-      maxGold: WOOD_MACHINE_MAX_GOLD,
+      ...this.getBuildingPersistenceState(building),
+      isFull: false,
     });
+
+    if (this.selectedPlacedBuilding === building) {
+      this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
+    }
+  }
+
+  startUpgradeSelectedBuilding() {
+    if (!this.selectedPlacedBuilding) {
+      return;
+    }
+
+    const building = this.selectedPlacedBuilding;
+    const upgradeCost = getBuildingUpgradeCost(building.buildingType);
+
+    if (
+      (building.level ?? 1) >= BUILDING_MAX_LEVEL ||
+      building.isUpgrading ||
+      this.gold < upgradeCost
+    ) {
+      return;
+    }
+
+    this.setGoldState(this.gold - upgradeCost);
+    building.isUpgrading = true;
+    building.upgradeCompleteAt = Date.now() + BUILDING_UPGRADE_DURATION_MS;
+    building.setUpgradeState(true, building.upgradeCompleteAt);
+
+    this.events.emit("structure-upgrade-started", {
+      structure: building,
+      id: building.persistedId,
+      type: building.buildingType.id,
+      row: building.row,
+      col: building.col,
+      ...this.getBuildingPersistenceState(building),
+    });
+    this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
+  }
+
+  cancelUpgradeSelectedBuilding() {
+    if (!this.selectedPlacedBuilding) {
+      return;
+    }
+
+    const building = this.selectedPlacedBuilding;
+
+    if (!building.isUpgrading) {
+      return;
+    }
+
+    building.isUpgrading = false;
+    building.upgradeCompleteAt = null;
+    building.setUpgradeState(false, null);
+
+    this.events.emit("structure-upgrade-cancelled", {
+      structure: building,
+      id: building.persistedId,
+      type: building.buildingType.id,
+      row: building.row,
+      col: building.col,
+      ...this.getBuildingPersistenceState(building),
+    });
+    this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
   }
 
   isWoodMachine(buildingOrType) {
@@ -814,16 +1185,54 @@ export default class GameScene extends Phaser.Scene {
     return typeId === "wood-machine";
   }
 
-  updateWoodMachineProduction() {
+  getBuildingGoldPerTick(building) {
+    if (this.isWoodMachine(building)) {
+      return (building?.level ?? 1) >= 2
+        ? WOOD_MACHINE_GOLD_PER_TICK * 2
+        : WOOD_MACHINE_GOLD_PER_TICK;
+    }
+
+    if (this.isTownHall(building)) {
+      return (building?.level ?? 1) >= 2
+        ? TOWN_HALL_GOLD_PER_TICK * 2
+        : TOWN_HALL_GOLD_PER_TICK;
+    }
+
+    return 0;
+  }
+
+  getBuildingMaxGold(building) {
+    if (this.isWoodMachine(building)) {
+      return (building?.level ?? 1) >= 2
+        ? WOOD_MACHINE_MAX_GOLD * 2
+        : WOOD_MACHINE_MAX_GOLD;
+    }
+
+    if (this.isTownHall(building)) {
+      return (building?.level ?? 1) >= 2
+        ? TOWN_HALL_MAX_GOLD * 2
+        : TOWN_HALL_MAX_GOLD;
+    }
+
+    if (this.isCommandCenter(building)) {
+      return 0;
+    }
+
+    return 0;
+  }
+
+  updateTownHallProduction() {
     const now = Date.now();
-    let hasChanges = false;
 
     this.placedBuildings.forEach((building) => {
-      if (!this.isWoodMachine(building)) {
+      if (!this.isTownHall(building) || building.isUpgrading) {
         return;
       }
 
-      if ((building.machineGold ?? 0) >= WOOD_MACHINE_MAX_GOLD) {
+      const maxGold = this.getBuildingMaxGold(building);
+      const goldPerTick = this.getBuildingGoldPerTick(building);
+
+      if ((building.machineGold ?? 0) >= maxGold) {
         return;
       }
 
@@ -836,11 +1245,62 @@ export default class GameScene extends Phaser.Scene {
       }
 
       building.machineGold = Math.min(
-        WOOD_MACHINE_MAX_GOLD,
-        (building.machineGold ?? 0) + earnedTicks * WOOD_MACHINE_GOLD_PER_TICK
+        maxGold,
+        (building.machineGold ?? 0) + earnedTicks * goldPerTick
       );
       building.lastGeneratedAt = lastGeneratedAt + earnedTicks * WOOD_MACHINE_TICK_MS;
-      building.setMachineGoldDisplay(building.machineGold, WOOD_MACHINE_MAX_GOLD);
+      building.setMachineGoldDisplay(building.machineGold, maxGold);
+
+      this.events.emit("structure-resource-updated", {
+        structure: building,
+        id: building.persistedId,
+        type: building.buildingType.id,
+        row: building.row,
+        col: building.col,
+        ...this.getBuildingPersistenceState(building),
+        isFull: false,
+      });
+
+      if (this.selectedPlacedBuilding === building) {
+        this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
+      }
+    });
+  }
+
+  updateWoodMachineProduction() {
+    const now = Date.now();
+    let hasChanges = false;
+
+    this.placedBuildings.forEach((building) => {
+      if (!this.isWoodMachine(building)) {
+        return;
+      }
+
+      if (building.isUpgrading) {
+        return;
+      }
+
+      const maxGold = this.getBuildingMaxGold(building);
+      const goldPerTick = this.getBuildingGoldPerTick(building);
+
+      if ((building.machineGold ?? 0) >= maxGold) {
+        return;
+      }
+
+      const lastGeneratedAt = Number(building.lastGeneratedAt ?? now);
+      const elapsed = now - lastGeneratedAt;
+      const earnedTicks = Math.floor(elapsed / WOOD_MACHINE_TICK_MS);
+
+      if (earnedTicks <= 0) {
+        return;
+      }
+
+      building.machineGold = Math.min(
+        maxGold,
+        (building.machineGold ?? 0) + earnedTicks * goldPerTick
+      );
+      building.lastGeneratedAt = lastGeneratedAt + earnedTicks * WOOD_MACHINE_TICK_MS;
+      building.setMachineGoldDisplay(building.machineGold, maxGold);
       hasChanges = true;
 
       this.events.emit("structure-resource-updated", {
@@ -849,21 +1309,12 @@ export default class GameScene extends Phaser.Scene {
         type: building.buildingType.id,
         row: building.row,
         col: building.col,
-        machineGold: building.machineGold,
-        lastGeneratedAt: building.lastGeneratedAt,
-        isFull: building.machineGold >= WOOD_MACHINE_MAX_GOLD,
+        ...this.getBuildingPersistenceState(building),
+        isFull: building.machineGold >= maxGold,
       });
 
       if (this.selectedPlacedBuilding === building) {
-        this.events.emit("placed-building-selected", {
-          id: building.persistedId,
-          type: building.buildingType.id,
-          name: building.buildingType.name,
-          row: building.row,
-          col: building.col,
-          machineGold: building.machineGold,
-          maxGold: WOOD_MACHINE_MAX_GOLD,
-        });
+        this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
       }
     });
 
@@ -871,4 +1322,81 @@ export default class GameScene extends Phaser.Scene {
       this.emitGameState();
     }
   }
+
+  updateBuildingUpgrades() {
+    const now = Date.now();
+
+    this.placedBuildings.forEach((building) => {
+      if (!building.isUpgrading || !building.upgradeCompleteAt) {
+        return;
+      }
+
+      if (now < Number(building.upgradeCompleteAt)) {
+        return;
+      }
+
+      building.isUpgrading = false;
+      building.upgradeCompleteAt = null;
+      building.setLevel(Math.min(BUILDING_MAX_LEVEL, (building.level ?? 1) + 1));
+      building.setUpgradeState(false, null);
+      building.machineGold = Math.min(
+        building.machineGold ?? 0,
+        this.getBuildingMaxGold(building)
+      );
+      building.setMachineGoldDisplay(
+        building.machineGold ?? 0,
+        this.getBuildingMaxGold(building)
+      );
+
+      this.events.emit("structure-upgrade-completed", {
+        structure: building,
+        id: building.persistedId,
+        type: building.buildingType.id,
+        row: building.row,
+        col: building.col,
+        ...this.getBuildingPersistenceState(building),
+      });
+
+      if (this.selectedPlacedBuilding === building) {
+        this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
+      }
+    });
+  }
+
+  updateCommandCenterWages() {
+    const now = Date.now();
+
+    this.placedBuildings.forEach((building) => {
+      if (!this.isCommandCenter(building) || (building.soldierCount ?? 0) <= 0) {
+        return;
+      }
+
+      const lastWagePaidAt = Number(building.lastWagePaidAt ?? now);
+      const elapsed = now - lastWagePaidAt;
+      const wageCycles = Math.floor(elapsed / SOLDIER_WAGE_INTERVAL_MS);
+
+      if (wageCycles <= 0) {
+        return;
+      }
+
+      const totalWage = (building.soldierCount ?? 0) * SOLDIER_WAGE_PER_UNIT * wageCycles;
+      building.lastWagePaidAt = lastWagePaidAt + wageCycles * SOLDIER_WAGE_INTERVAL_MS;
+      this.setGoldState(Math.max(0, this.gold - totalWage));
+
+      this.events.emit("structure-army-updated", {
+        structure: building,
+        id: building.persistedId,
+        type: building.buildingType.id,
+        row: building.row,
+        col: building.col,
+        ...this.getBuildingPersistenceState(building),
+        totalWage,
+      });
+
+      if (this.selectedPlacedBuilding === building) {
+        this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
+      }
+    });
+  }
+
 }

@@ -67,6 +67,26 @@ export const BUILDING_TYPES = {
     footprintRows: 1,
     footprintCols: 1,
   },
+  COMMAND_CENTER: {
+    id: "command-center",
+    name: "Command Center",
+    label: "CC",
+    cost: 1800,
+    color: 0x334155,
+    shopImage: "/assets/command center.png",
+    bodyHeight: 84,
+    roofHeight: 22,
+    footprintRows: 1,
+    footprintCols: 1,
+  },
 };
 
 export const BUILDING_LIST = Object.values(BUILDING_TYPES);
+
+export const getBuildingUpgradeCost = (buildingTypeOrId) => {
+  const buildingType = typeof buildingTypeOrId === "string"
+    ? BUILDING_LIST.find((item) => item.id === buildingTypeOrId)
+    : buildingTypeOrId;
+
+  return Math.max(0, Number(buildingType?.cost ?? 0) * 3);
+};

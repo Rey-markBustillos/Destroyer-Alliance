@@ -26,6 +26,32 @@ const drawDiamond = (graphics, centerX, centerY, halfW, halfH, fillColor, stroke
   graphics.strokePoints([...diamond, diamond[0]], false, false);
 };
 
+const createFootprintHitArea = (footprintRows, footprintCols, tileHalfW, tileHalfH) => {
+  const diamonds = [];
+  const verticalOffset = ((footprintRows + footprintCols - 2) * tileHalfH) / 2;
+
+  for (let row = 0; row < footprintRows; row += 1) {
+    for (let col = 0; col < footprintCols; col += 1) {
+      const centerX = (col - row) * tileHalfW;
+      const centerY = (col + row) * tileHalfH - verticalOffset;
+
+      diamonds.push(new Phaser.Geom.Polygon([
+        new Phaser.Geom.Point(centerX, centerY - tileHalfH),
+        new Phaser.Geom.Point(centerX + tileHalfW, centerY),
+        new Phaser.Geom.Point(centerX, centerY + tileHalfH),
+        new Phaser.Geom.Point(centerX - tileHalfW, centerY),
+      ]));
+    }
+  }
+
+  return {
+    diamonds,
+    contains(x, y) {
+      return diamonds.some((diamond) => Phaser.Geom.Polygon.Contains(diamond, x, y));
+    },
+  };
+};
+
 export default class Building extends Phaser.GameObjects.Container {
   constructor(scene, x, y, buildingType) {
     super(scene, x, y);
@@ -34,6 +60,19 @@ export default class Building extends Phaser.GameObjects.Container {
     this.buildingType = buildingType;
     this.isStructure = true;
     this.resourceLabel = null;
+    this.resourceIcon = null;
+    this.levelLabel = null;
+    this.visualContainer = scene.add.container(0, 0);
+    this.workingSprite = null;
+    this.builderSprite = null;
+    this.builderTween = null;
+    this.builderFrameEvent = null;
+    this.builderFrameIndex = 0;
+    this.builderBaseX = 0;
+    this.builderBaseY = 0;
+    this.level = 1;
+    this.isUpgrading = false;
+    this.upgradeCompleteAt = null;
     this.footprintRows = buildingType.footprintRows ?? 1;
     this.footprintCols = buildingType.footprintCols ?? 1;
     const footprintWidth = scene.iso.tileWidth * this.footprintCols;
@@ -49,53 +88,62 @@ export default class Building extends Phaser.GameObjects.Container {
     const halfW = baseWidth / 2;
     const halfH = baseHeight / 2;
     const roofY = -bodyHeight;
-    const foundation = scene.add.graphics();
-
-    for (let row = 0; row < this.footprintRows; row += 1) {
-      for (let col = 0; col < this.footprintCols; col += 1) {
-        const offsetX = (col - row) * tileHalfW;
-        const offsetY = (col + row) * tileHalfH - ((this.footprintRows + this.footprintCols - 2) * tileHalfH) / 2;
-        drawDiamond(
-          foundation,
-          offsetX,
-          offsetY,
-          tileHalfW,
-          tileHalfH,
-          darken(buildingType.color, 8),
-          darken(buildingType.color, 28),
-          0.92
-        );
-      }
-    }
-
-    this.add(foundation);
-
     if (buildingType.id === "town-hall" && scene.textures.exists("town")) {
       const cropX = 48;
       const cropY = 22;
       const cropWidth = 412;
       const cropHeight = 380;
-      const townWidth = footprintWidth * 1.18;
+      const townWidth = footprintWidth * 0.92;
       const townHeight = townWidth * (cropHeight / cropWidth);
       const townSprite = scene.add.image(0, footprintHeight / 2 + 14, "town");
 
       townSprite.setOrigin(0.5, 1);
       townSprite.setCrop(cropX, cropY, cropWidth, cropHeight);
       townSprite.setDisplaySize(townWidth, townHeight);
-      this.add(townSprite);
+      this.visualContainer.add(townSprite);
+
+      if (scene.textures.exists("goldcoin")) {
+        this.resourceIcon = scene.add.image(0, -townHeight + 38, "goldcoin");
+        this.resourceIcon.setOrigin(0.5, 0.5);
+        this.resourceIcon.setDisplaySize(28, 28);
+        this.resourceIcon.setVisible(false);
+        this.resourceIcon.setInteractive({ useHandCursor: true });
+        this.resourceIcon.on("pointerup", (_pointer, _localX, _localY, event) => {
+          event.stopPropagation();
+
+          if (!scene.pointerDrag?.moved && this.machineGold > 0) {
+            scene.collectTownHallGold?.(this);
+          }
+        });
+        this.visualContainer.add(this.resourceIcon);
+      }
+    } else if (buildingType.id === "command-center" && scene.textures.exists("command-center")) {
+      const cropX = 11;
+      const cropY = 4;
+      const cropWidth = 124;
+      const cropHeight = 129;
+      const commandCenterWidth = footprintWidth * 0.9;
+      const commandCenterHeight = commandCenterWidth * (cropHeight / cropWidth);
+      const commandCenterSprite = scene.add.image(0, footprintHeight / 2 + 4, "command-center");
+
+      commandCenterSprite.setOrigin(0.5, 1);
+      commandCenterSprite.setCrop(cropX, cropY, cropWidth, cropHeight);
+      commandCenterSprite.setDisplaySize(commandCenterWidth, commandCenterHeight);
+      this.visualContainer.add(commandCenterSprite);
     } else if (buildingType.id === "wood-machine" && scene.textures.exists("machine-wood")) {
       const cropX = 64;
       const cropY = 0;
       const cropWidth = 513;
       const cropHeight = 364;
-      const machineWidth = footprintWidth * 1.2;
+      const machineWidth = footprintWidth * 0.92;
       const machineHeight = machineWidth * (cropHeight / cropWidth);
       const machineSprite = scene.add.image(0, footprintHeight / 2 + 6, "machine-wood");
 
       machineSprite.setOrigin(0.5, 1);
       machineSprite.setCrop(cropX, cropY, cropWidth, cropHeight);
       machineSprite.setDisplaySize(machineWidth, machineHeight);
-      this.add(machineSprite);
+      this.visualContainer.add(machineSprite);
+
       this.resourceLabel = scene.add.text(0, -machineHeight + 18, "0", {
         fontFamily: "Verdana",
         fontSize: "13px",
@@ -106,8 +154,30 @@ export default class Building extends Phaser.GameObjects.Container {
         align: "center",
       });
       this.resourceLabel.setOrigin(0.5, 0.5);
-      this.add(this.resourceLabel);
+      this.visualContainer.add(this.resourceLabel);
     } else {
+      const foundation = scene.add.graphics();
+
+      for (let row = 0; row < this.footprintRows; row += 1) {
+        for (let col = 0; col < this.footprintCols; col += 1) {
+          const offsetX = (col - row) * tileHalfW;
+          const offsetY =
+            (col + row) * tileHalfH - ((this.footprintRows + this.footprintCols - 2) * tileHalfH) / 2;
+          drawDiamond(
+            foundation,
+            offsetX,
+            offsetY,
+            tileHalfW,
+            tileHalfH,
+            darken(buildingType.color, 8),
+            darken(buildingType.color, 28),
+            0.92
+          );
+        }
+      }
+
+      this.visualContainer.add(foundation);
+
       const graphics = scene.add.graphics();
       const roofPoints = [
         new Phaser.Geom.Point(0, roofY - roofHeight),
@@ -158,25 +228,145 @@ export default class Building extends Phaser.GameObjects.Container {
       });
       label.setOrigin(0.5, 0.5);
 
-      this.add([graphics, accent, label]);
+      this.visualContainer.add([graphics, accent, label]);
     }
+
+    this.add(this.visualContainer);
+
+    if (scene.textures.exists("working")) {
+      this.workingSprite = scene.add.image(0, footprintHeight / 2 + 8, "working");
+      this.workingSprite.setOrigin(0.5, 1);
+      this.workingSprite.setDisplaySize(
+        Math.max(40, footprintWidth * 0.72),
+        Math.max(44, footprintHeight * 1.55)
+      );
+      this.workingSprite.setVisible(false);
+      this.add(this.workingSprite);
+    }
+
+    if (scene.textures.exists("builder-frame-1")) {
+      this.builderBaseX = -Math.max(16, footprintWidth * 0.24);
+      this.builderBaseY = footprintHeight / 2 + 6;
+      this.builderSprite = scene.add.image(
+        this.builderBaseX,
+        this.builderBaseY,
+        "builder-frame-1"
+      );
+      this.builderSprite.setOrigin(0.5, 1);
+      this.builderSprite.setDisplaySize(
+        Math.max(12, footprintWidth * 0.16),
+        Math.max(18, footprintHeight * 0.72)
+      );
+      this.builderSprite.setVisible(false);
+      this.add(this.builderSprite);
+    }
+
+    this.levelLabel = scene.add.text(0, roofY - 8, "Lv.1", {
+      fontFamily: "Verdana",
+      fontSize: "12px",
+      fontStyle: "bold",
+      color: "#fef3c7",
+      stroke: "#422006",
+      strokeThickness: 4,
+      align: "center",
+    });
+    this.levelLabel.setOrigin(0.5, 0.5);
+
+    if (buildingType.id === "command-center") {
+      this.levelLabel.setY(-14);
+    }
+
+    if (buildingType.id === "town-hall") {
+      this.levelLabel.setY(-26);
+    }
+
+    this.add(this.levelLabel);
 
     this.setSize(baseWidth, bodyHeight + roofHeight + baseHeight);
 
-    const interactiveWidth = footprintWidth;
-    const interactiveHeight = bodyHeight + roofHeight + footprintHeight;
-    this.setInteractive(
-      new Phaser.Geom.Rectangle(
-        -interactiveWidth / 2,
-        roofY - roofHeight,
-        interactiveWidth,
-        interactiveHeight
-      ),
-      Phaser.Geom.Rectangle.Contains
+    const hitArea = createFootprintHitArea(
+      this.footprintRows,
+      this.footprintCols,
+      tileHalfW,
+      tileHalfH
     );
+
+    this.setInteractive(hitArea, (area, x, y) => area.contains(x, y));
+    this.once("destroy", () => {
+      this.builderTween?.remove();
+      this.builderTween = null;
+      this.builderFrameEvent?.remove(false);
+      this.builderFrameEvent = null;
+    });
+  }
+
+  setLevel(level = 1) {
+    this.level = Math.max(1, Number(level) || 1);
+
+    if (this.levelLabel) {
+      this.levelLabel.setText(`Lv.${this.level}`);
+    }
+  }
+
+  setUpgradeState(isUpgrading = false, upgradeCompleteAt = null) {
+    this.isUpgrading = Boolean(isUpgrading);
+    this.upgradeCompleteAt = upgradeCompleteAt ? Number(upgradeCompleteAt) : null;
+
+    if (this.visualContainer) {
+      this.visualContainer.setVisible(!this.isUpgrading);
+    }
+
+    if (this.workingSprite) {
+      this.workingSprite.setVisible(this.isUpgrading);
+    }
+
+    if (this.builderSprite) {
+      this.builderSprite.setVisible(this.isUpgrading);
+
+      if (this.isUpgrading) {
+        this.builderTween?.remove();
+        this.builderTween = null;
+        this.builderFrameEvent?.remove(false);
+        this.builderFrameEvent = null;
+        this.builderSprite.setPosition(this.builderBaseX, this.builderBaseY);
+        this.builderSprite.setAngle(0);
+        this.builderFrameIndex = 0;
+        this.builderSprite.setTexture("builder-frame-1");
+        this.builderFrameEvent = this.scene.time.addEvent({
+          delay: 140,
+          loop: true,
+          callback: () => {
+            this.builderFrameIndex = (this.builderFrameIndex + 1) % 4;
+            this.builderSprite.setTexture(`builder-frame-${this.builderFrameIndex + 1}`);
+          },
+        });
+      } else {
+        this.builderTween?.remove();
+        this.builderTween = null;
+        this.builderFrameEvent?.remove(false);
+        this.builderFrameEvent = null;
+        this.builderSprite.setPosition(this.builderBaseX, this.builderBaseY);
+        this.builderSprite.setAngle(0);
+        this.builderSprite.setTexture("builder-frame-1");
+      }
+    }
+
+    if (this.levelLabel) {
+      this.levelLabel.setColor(this.isUpgrading ? "#fde68a" : "#fef3c7");
+      this.levelLabel.setText(
+        this.isUpgrading ? `Lv.${this.level} -> Lv.${this.level + 1}` : `Lv.${this.level}`
+      );
+    }
   }
 
   setMachineGoldDisplay(machineGold = 0, maxGold = 250) {
+    if (this.buildingType?.id === "town-hall") {
+      if (this.resourceIcon) {
+        this.resourceIcon.setVisible(machineGold > 0);
+      }
+      return;
+    }
+
     if (!this.resourceLabel) {
       return;
     }

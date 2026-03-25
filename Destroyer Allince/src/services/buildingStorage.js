@@ -1,30 +1,26 @@
-const STORAGE_KEY = "destroyer-alliance-buildings";
+import { getGameSnapshot, saveGameSnapshot } from "./gameStorage";
 
 export const getBuildingKey = (building) =>
   `${building.type}:${Number(building.y ?? building.row ?? 0)}:${Number(building.x ?? building.col ?? 0)}`;
 
-export const getStoredBuildings = () => {
-  const raw = localStorage.getItem(STORAGE_KEY);
+export const getStoredBuildings = (session = null) =>
+  getGameSnapshot(session)?.buildings ?? [];
 
-  if (!raw) {
-    return [];
-  }
+export const saveStoredBuildings = (buildings, session = null) => {
+  const snapshot = getGameSnapshot(session) ?? { gold: 1200 };
+  const savedSnapshot = saveGameSnapshot(
+    {
+      ...snapshot,
+      buildings,
+    },
+    session
+  );
 
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    localStorage.removeItem(STORAGE_KEY);
-    return [];
-  }
+  return savedSnapshot.buildings ?? [];
 };
 
-export const saveStoredBuildings = (buildings) => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(buildings));
-};
-
-export const upsertStoredBuilding = (building) => {
-  const buildings = getStoredBuildings();
+export const upsertStoredBuilding = (building, session = null) => {
+  const buildings = getStoredBuildings(session);
   const buildingKey = getBuildingKey(building);
   const nextBuildings = [...buildings];
   const existingIndex = nextBuildings.findIndex(
@@ -40,14 +36,13 @@ export const upsertStoredBuilding = (building) => {
     nextBuildings.push(building);
   }
 
-  saveStoredBuildings(nextBuildings);
-  return nextBuildings;
+  return saveStoredBuildings(nextBuildings, session);
 };
 
-export const mergeStoredBuildings = (buildings) => {
+export const mergeStoredBuildings = (buildings, session = null) => {
   const merged = new Map();
 
-  getStoredBuildings().forEach((building) => {
+  getStoredBuildings(session).forEach((building) => {
     merged.set(getBuildingKey(building), building);
   });
 
@@ -60,15 +55,13 @@ export const mergeStoredBuildings = (buildings) => {
   });
 
   const result = Array.from(merged.values());
-  saveStoredBuildings(result);
-  return result;
+  return saveStoredBuildings(result, session);
 };
 
-export const removeStoredBuilding = (buildingToRemove) => {
-  const nextBuildings = getStoredBuildings().filter(
+export const removeStoredBuilding = (buildingToRemove, session = null) => {
+  const nextBuildings = getStoredBuildings(session).filter(
     (building) => getBuildingKey(building) !== getBuildingKey(buildingToRemove)
   );
 
-  saveStoredBuildings(nextBuildings);
-  return nextBuildings;
+  return saveStoredBuildings(nextBuildings, session);
 };

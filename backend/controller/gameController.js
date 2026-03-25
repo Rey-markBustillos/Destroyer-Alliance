@@ -66,7 +66,7 @@ export const getBuildings = async (req, res) => {
 
 export const updateBuilding = async (req, res) => {
   const buildingId = Number(req.params.id);
-  const { x, y } = req.body;
+  const { x, y, level, isUpgrading, upgradeCompleteAt } = req.body;
 
   const building = await prisma.building.findFirst({
     where: {
@@ -79,14 +79,39 @@ export const updateBuilding = async (req, res) => {
     return res.status(404).json({ message: "Building not found" });
   }
 
+  const nextData = {};
+
+  if (Number.isFinite(Number(x))) {
+    nextData.x = Number(x);
+  }
+
+  if (Number.isFinite(Number(y))) {
+    nextData.y = Number(y);
+  }
+
+  if (Number.isInteger(Number(level)) && Number(level) > 0) {
+    nextData.level = Number(level);
+  }
+
+  if (typeof isUpgrading === "boolean") {
+    nextData.isUpgrading = isUpgrading;
+  }
+
+  if (upgradeCompleteAt === null) {
+    nextData.upgradeCompleteAt = null;
+  } else if (upgradeCompleteAt) {
+    const parsedUpgradeCompleteAt = new Date(upgradeCompleteAt);
+
+    if (!Number.isNaN(parsedUpgradeCompleteAt.getTime())) {
+      nextData.upgradeCompleteAt = parsedUpgradeCompleteAt;
+    }
+  }
+
   const updatedBuilding = await prisma.building.update({
     where: {
       id: buildingId,
     },
-    data: {
-      x,
-      y,
-    },
+    data: nextData,
   });
 
   res.json(updatedBuilding);

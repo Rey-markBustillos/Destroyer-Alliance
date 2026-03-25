@@ -24,6 +24,25 @@ export default class PreloadScene extends Phaser.Scene {
     this.load.image("wall", "/assets/wall.png");
     this.load.image("town", "/assets/town.png");
     this.load.image("machine-wood", "/assets/machine-wood.png");
+    this.load.image("command-center", "/assets/command center.png");
+    this.load.image("goldcoin", "/assets/goldcoin.png");
+    this.load.image("working", "/assets/working.png");
+    this.load.image("builder-frame-1", "/assets/builders/frame1.png");
+    this.load.image("builder-frame-2", "/assets/builders/frame2.png");
+    this.load.image("builder-frame-3", "/assets/builders/frame3.png");
+    this.load.image("builder-frame-4", "/assets/builders/frame4.png");
+    this.load.image("soldier-front-walk-1", "/assets/army/front/walk.png");
+    this.load.image("soldier-front-walk-2", "/assets/army/front/walk2.png");
+    this.load.image("soldier-front-firing", "/assets/army/front/firing.png");
+    this.load.image("soldier-back-walk-1", "/assets/army/back/backamry.png");
+    this.load.image("soldier-back-walk-2", "/assets/army/back/backarmy2.png");
+    this.load.image("soldier-back-firing", "/assets/army/back/firing.png");
+    this.load.image("soldier-left-walk-1", "/assets/army/left/walk1.png");
+    this.load.image("soldier-left-walk-2", "/assets/army/left/walk2.png");
+    this.load.image("soldier-left-firing", "/assets/army/left/firing.png");
+    this.load.image("soldier-right-walk-1", "/assets/army/right/walk1.png");
+    this.load.image("soldier-right-walk-2", "/assets/army/right/walk2.png");
+    this.load.image("soldier-right-firing", "/assets/army/right/firing.png");
   }
 
   create() {
