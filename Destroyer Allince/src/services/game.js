@@ -26,6 +26,16 @@ export const fetchGameState = async (token) => {
   return data;
 };
 
+export const fetchWarTarget = async (token) => {
+  const { data } = await gameApi.get("/war-target", {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  return data;
+};
+
 export const updateGameState = async (payload, token) => {
   const { data } = await gameApi.put("/state", payload, {
     headers: {
