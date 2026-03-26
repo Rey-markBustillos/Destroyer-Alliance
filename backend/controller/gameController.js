@@ -66,30 +66,72 @@ export const getBuildings = async (req, res) => {
 
 export const getWarTarget = async (req, res) => {
   try {
-    const opponents = await prisma.user.findMany({
-      where: {
-        id: {
-          not: req.user.id,
-        },
-      },
-      select: {
-        id: true,
-        email: true,
-        gold: true,
-        buildings: {
-          orderBy: [
-            { y: "asc" },
-            { x: "asc" },
-          ],
-        },
-      },
-    });
+    const requestedPlayerId = String(req.query.playerId ?? "").trim();
+    let target = null;
 
-    if (opponents.length === 0) {
-      return res.status(404).json({ message: "No enemy village found" });
+    if (requestedPlayerId) {
+      const normalizedPlayerId = requestedPlayerId.toUpperCase();
+
+      target = await prisma.user.findFirst({
+        where: {
+          id: {
+            not: req.user.id,
+          },
+          OR: [
+            { playerId: normalizedPlayerId },
+            { email: requestedPlayerId },
+            Number.isInteger(Number(requestedPlayerId))
+              ? { id: Number(requestedPlayerId) }
+              : undefined,
+          ].filter(Boolean),
+        },
+        select: {
+          id: true,
+          name: true,
+          playerId: true,
+          email: true,
+          gold: true,
+          buildings: {
+            orderBy: [
+              { y: "asc" },
+              { x: "asc" },
+            ],
+          },
+        },
+      });
+
+      if (!target) {
+        return res.status(404).json({ message: "Enemy base not found for that player ID." });
+      }
+    } else {
+      const opponents = await prisma.user.findMany({
+        where: {
+          id: {
+            not: req.user.id,
+          },
+        },
+        select: {
+          id: true,
+          name: true,
+          playerId: true,
+          email: true,
+          gold: true,
+          buildings: {
+            orderBy: [
+              { y: "asc" },
+              { x: "asc" },
+            ],
+          },
+        },
+      });
+
+      if (opponents.length === 0) {
+        return res.status(404).json({ message: "No enemy village found" });
+      }
+
+      target = opponents[Math.floor(Math.random() * opponents.length)];
     }
 
-    const target = opponents[Math.floor(Math.random() * opponents.length)];
     const targetBuildings = [...(target.buildings ?? [])];
     const hasTownHall = targetBuildings.some((building) => building.type === "town-hall");
 
@@ -110,7 +152,8 @@ export const getWarTarget = async (req, res) => {
 
     res.json({
       id: target.id,
-      name: target.email,
+      name: target.name || target.email,
+      playerId: target.playerId || `PLYR-${String(target.id).padStart(6, "0")}`,
       gold: target.gold ?? 0,
       townHallLevel: townHall?.level ?? 1,
       defense: `${targetBuildings.length} structures`,

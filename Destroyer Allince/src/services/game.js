@@ -26,11 +26,12 @@ export const fetchGameState = async (token) => {
   return data;
 };
 
-export const fetchWarTarget = async (token) => {
+export const fetchWarTarget = async (token, playerId = "") => {
   const { data } = await gameApi.get("/war-target", {
     headers: {
       Authorization: `Bearer ${token}`,
     },
+    params: playerId ? { playerId } : undefined,
   });
 
   return data;

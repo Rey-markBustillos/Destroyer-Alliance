@@ -5,6 +5,7 @@ import { saveSession } from "../services/session";
 
 export default function Register() {
   const navigate = useNavigate();
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -16,7 +17,7 @@ export default function Register() {
     setError("");
 
     try {
-      const session = await register({ email, password });
+      const session = await register({ name, email, password });
       saveSession(session);
       navigate("/game");
     } catch (requestError) {
@@ -44,6 +45,18 @@ export default function Register() {
         </p>
 
         <div className="mb-4">
+          <label className="text-slate-100 text-sm">Commander Name</label>
+          <input
+            type="text"
+            placeholder="Enter your commander name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="w-full mt-1 rounded-lg border border-slate-800 bg-slate-950 px-4 py-2 text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-green-400"
+            required
+          />
+        </div>
+
+        <div className="mb-4">
           <label className="text-slate-100 text-sm">Email</label>
           <input
             type="email"
@@ -51,6 +64,7 @@ export default function Register() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="w-full mt-1 rounded-lg border border-slate-800 bg-slate-950 px-4 py-2 text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-green-400"
+            required
           />
         </div>
 
@@ -62,6 +76,7 @@ export default function Register() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full mt-1 rounded-lg border border-slate-800 bg-slate-950 px-4 py-2 text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-green-400"
+            required
           />
         </div>
 

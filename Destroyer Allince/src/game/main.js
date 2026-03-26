@@ -3,6 +3,7 @@ import Phaser from "phaser";
 import BootScene from "./scenes/BootScene";
 import PreloadScene from "./scenes/PreloadScene";
 import GameScene from "./scenes/GameScene";
+import BattleScene from "./scenes/BattleScene";
 import UIScene from "./scenes/UIScene";
 import { GAME_HEIGHT, GAME_WIDTH } from "./utils/config";
 import { GAME_RENDER_CONFIG } from "./tilemap/layoutConfig";
@@ -37,12 +38,16 @@ export const createGame = (parentElement, options = {}) => {
 		existingCanvas.remove();
 	}
 
-	const gameScene = new GameScene(options);
+	const SelectedScene = options?.mode === "war" ? BattleScene : GameScene;
+	const gameScene = new SelectedScene(options);
+	const scenes = options?.mode === "war"
+		? [BootScene, PreloadScene, gameScene]
+		: [BootScene, PreloadScene, gameScene, UIScene];
 
 	return new Phaser.Game({
 		...phaserConfig,
 		parent: parentElement,
-		scene: [BootScene, PreloadScene, gameScene, UIScene],
+		scene: scenes,
 	});
 };
 

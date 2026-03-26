@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Dashboard from "./pages/Dashboard";
 import GamePage from "./pages/GamePage";
+import ProfilePage from "./pages/ProfilePage";
 import WarPage from "./pages/WarPage";
 import Login from "./pages/login";
 import Register from "./pages/register";
@@ -35,6 +36,14 @@ function App() {
           element={(
             <ProtectedRoute>
               <WarPage />
+            </ProtectedRoute>
+          )}
+        />
+        <Route
+          path="/profile"
+          element={(
+            <ProtectedRoute>
+              <ProfilePage />
             </ProtectedRoute>
           )}
         />

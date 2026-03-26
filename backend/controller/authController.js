@@ -8,10 +8,23 @@ const generateToken = (id) => {
   });
 };
 
+const buildPlayerId = (id) => `PLYR-${String(id).padStart(6, "0")}`;
+
+const ensurePlayerId = async (user) => {
+  if (user?.playerId) {
+    return user;
+  }
+
+  return prisma.user.update({
+    where: { id: user.id },
+    data: { playerId: buildPlayerId(user.id) },
+  });
+};
+
 // REGISTER
 export const registerUser = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, name } = req.body;
 
     const userExists = await prisma.user.findUnique({
       where: { email },
@@ -23,18 +36,25 @@ export const registerUser = async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const user = await prisma.user.create({
+    const createdUser = await prisma.user.create({
       data: {
+        name: name?.trim() || "Commander",
         email,
         password: hashedPassword,
       },
     });
 
+    const user = await ensurePlayerId(createdUser);
+
+    const safeUser = await ensurePlayerId(user);
+
     res.json({
-      id: user.id,
-      email: user.email,
-      gold: user.gold,
-      token: generateToken(user.id),
+      id: safeUser.id,
+      name: safeUser.name,
+      playerId: safeUser.playerId,
+      email: safeUser.email,
+      gold: safeUser.gold,
+      token: generateToken(safeUser.id),
     });
   } catch (error) {
     console.error("registerUser failed:", error);
@@ -63,6 +83,8 @@ export const loginUser = async (req, res) => {
 
     res.json({
       id: user.id,
+      name: user.name,
+      playerId: user.playerId,
       email: user.email,
       gold: user.gold,
       token: generateToken(user.id),
@@ -70,5 +92,46 @@ export const loginUser = async (req, res) => {
   } catch (error) {
     console.error("loginUser failed:", error);
     res.status(500).json({ message: "Login failed on the server." });
+  }
+};
+
+// PROFILE
+export const getProfile = async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: {
+        id: true,
+        name: true,
+        playerId: true,
+        email: true,
+        gold: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "Profile not found" });
+    }
+
+    if (user.playerId) {
+      return res.json(user);
+    }
+
+    const patchedUser = await prisma.user.update({
+      where: { id: user.id },
+      data: { playerId: buildPlayerId(user.id) },
+      select: {
+        id: true,
+        name: true,
+        playerId: true,
+        email: true,
+        gold: true,
+      },
+    });
+
+    res.json(patchedUser);
+  } catch (error) {
+    console.error("getProfile failed:", error);
+    res.status(500).json({ message: "Unable to load profile." });
   }
 };

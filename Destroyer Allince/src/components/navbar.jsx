@@ -4,6 +4,8 @@ import { clearSession, getSession } from "../services/session";
 export default function Navbar() {
   const navigate = useNavigate();
   const session = getSession();
+  const playerName = session?.name || session?.email?.split("@")[0] || "Commander";
+  const playerId = session?.playerId || (session?.id ? `PLYR-${String(session.id).padStart(6, "0")}` : "-");
 
   const handleLogout = () => {
     clearSession();
@@ -30,6 +32,12 @@ export default function Navbar() {
         <nav className="flex items-center gap-2 text-sm">
           {session ? (
             <>
+              <div className="hidden rounded-xl border border-white/10 bg-white/5 px-3 py-1 text-left text-xs text-slate-300 md:block">
+                <p className="font-semibold text-slate-100">{playerName}</p>
+                <p className="text-[0.65rem] uppercase tracking-[0.2em] text-emerald-300">
+                  Player ID: {playerId}
+                </p>
+              </div>
               <Link
                 to="/dashboard"
                 className="rounded-full border border-white/10 px-4 py-2 text-slate-300 transition hover:border-emerald-400/40 hover:text-white"

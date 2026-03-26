@@ -39,6 +39,7 @@ export default function GamePage() {
   const navigate = useNavigate();
   const gameRootRef = useRef(null);
   const gameRef = useRef(null);
+  const activeSession = getSession();
   const [clock, setClock] = useState(() => Date.now());
   const [gameState, setGameState] = useState({
     gold: 1200,
@@ -803,6 +804,9 @@ export default function GamePage() {
     && selectedPlacedBuilding.hasChopper;
   const availableSoldierOption = SOLDIER_OPTIONS.find((option) => option.available);
   const canStartWar = gameState.totalSoldiers > 0;
+  const profileName = activeSession?.name || activeSession?.email?.split("@")[0] || "Commander";
+  const profileId = activeSession?.playerId
+    || (activeSession?.id ? `PLYR-${String(activeSession.id).padStart(6, "0")}` : "-");
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,#b7d7a8_0%,#9ec58c_45%,#86b174_100%)] text-slate-950">
@@ -834,12 +838,27 @@ export default function GamePage() {
             ) : null}
           </div>
 
-          <button
-            onClick={() => setShopOpen((open) => !open)}
-            className="pointer-events-auto rounded-2xl bg-slate-950 px-5 py-3 font-semibold text-white shadow-[0_10px_30px_rgba(2,6,23,0.28)] transition hover:bg-slate-800"
-          >
-            {shopOpen ? "Hide Shop" : "Open Shop"}
-          </button>
+          <div className="pointer-events-auto flex items-center gap-2">
+            <button
+              onClick={() => navigate("/profile")}
+              className="rounded-2xl border border-sky-400/40 bg-sky-950/70 px-4 py-3 font-semibold text-sky-100 shadow-[0_10px_30px_rgba(2,6,23,0.28)] transition hover:bg-sky-900"
+            >
+              Profile
+            </button>
+            <button
+              onClick={() => setShopOpen((open) => !open)}
+              className="rounded-2xl bg-slate-950 px-5 py-3 font-semibold text-white shadow-[0_10px_30px_rgba(2,6,23,0.28)] transition hover:bg-slate-800"
+            >
+              {shopOpen ? "Hide Shop" : "Open Shop"}
+            </button>
+          </div>
+        </div>
+
+        <div className="pointer-events-none absolute right-4 top-20 z-10 sm:right-5 sm:top-24">
+          <div className="rounded-xl border border-white/15 bg-slate-950/70 px-3 py-2 text-right text-white shadow-[0_12px_24px_rgba(2,6,23,0.24)] backdrop-blur">
+            <p className="text-xs font-semibold text-emerald-300">{profileName}</p>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-slate-300">{profileId}</p>
+          </div>
         </div>
 
         <div ref={gameRootRef} className="h-full w-full overflow-hidden" />
