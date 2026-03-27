@@ -6,7 +6,6 @@ import { login } from "../services/auth";
 import { saveSession } from "../services/session";
 
 const cinematicEase = [0.22, 1, 0.36, 1];
-const cardEase = [0.65, 0.05, 0.36, 1];
 
 const backgroundVariants = {
   idle: {
@@ -55,20 +54,6 @@ const cardVariants = {
       ease: cinematicEase,
     },
   },
-  loggingIn: {
-    scale: [1, 0.9, 0.97],
-    rotateY: [0, -34, -70],
-    boxShadow: [
-      "0 20px 60px rgba(15, 23, 42, 0.24)",
-      "0 35px 110px rgba(15, 23, 42, 0.48)",
-      "0 45px 130px rgba(2, 6, 23, 0.62)",
-    ],
-    transition: {
-      duration: 1.15,
-      ease: cardEase,
-      times: [0, 0.38, 1],
-    },
-  },
 };
 
 const contentVariants = {
@@ -88,32 +73,6 @@ const contentVariants = {
     transition: {
       duration: 0.35,
       ease: "easeInOut",
-    },
-  },
-};
-
-const loadingVariants = {
-  hidden: {
-    opacity: 0,
-    y: 20,
-    scale: 0.96,
-  },
-  visible: {
-    opacity: 1,
-    y: 0,
-    scale: 1,
-    transition: {
-      delay: 0.3,
-      duration: 0.45,
-      ease: cinematicEase,
-    },
-  },
-  exit: {
-    opacity: 0,
-    y: -10,
-    transition: {
-      duration: 0.2,
-      ease: "easeIn",
     },
   },
 };
@@ -240,7 +199,7 @@ export default function Login() {
 
       <div className="relative z-10 flex min-h-screen items-center justify-center px-4">
         <motion.div
-          className="w-full max-w-md [perspective:2000px]"
+          className="w-full max-w-md"
           initial="hidden"
           animate="visible"
           variants={cardVariants}
@@ -248,9 +207,8 @@ export default function Login() {
           <motion.form
             onSubmit={handleSubmit}
             className="relative overflow-hidden rounded-[1.8rem] border border-white/15 bg-white/10 p-7 shadow-[0_20px_80px_rgba(15,23,42,0.24)] backdrop-blur-2xl"
-            style={{ transformOrigin: "left center", transformStyle: "preserve-3d" }}
             initial={false}
-            animate={isLoggingIn ? "loggingIn" : "visible"}
+            animate="visible"
             variants={cardVariants}
           >
             <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(160deg,rgba(255,255,255,0.16)_0%,rgba(255,255,255,0.06)_30%,rgba(15,23,42,0.16)_100%)]" />
@@ -386,39 +344,17 @@ export default function Login() {
                   </p>
                 </motion.div>
               ) : (
-                <motion.div
+                <div
                   key="loading"
-                  variants={loadingVariants}
-                  initial="hidden"
-                  animate="visible"
-                  exit="exit"
                   className="relative z-10 flex h-[22rem] flex-col items-center justify-center"
                 >
-                  <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 1, ease: "linear", repeat: Infinity }}
-                    className="relative h-16 w-16"
-                  >
-                    <div className="absolute inset-0 rounded-full border-4 border-sky-300/20" />
-                    <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-sky-300 border-r-blue-400" />
-                  </motion.div>
-                  <motion.p
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.5, duration: 0.35 }}
-                    className="mt-6 text-lg font-semibold text-white"
-                  >
+                  <p className="text-lg font-semibold text-white">
                     Authenticating...
-                  </motion.p>
-                  <motion.p
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.68, duration: 0.35 }}
-                    className="mt-2 max-w-xs text-center text-sm leading-6 text-slate-300"
-                  >
+                  </p>
+                  <p className="mt-2 max-w-xs text-center text-sm leading-6 text-slate-300">
                     Opening your command interface and preparing the battlefield.
-                  </motion.p>
-                </motion.div>
+                  </p>
+                </div>
               )}
             </AnimatePresence>
           </motion.form>
