@@ -20,12 +20,14 @@ export default class PreloadScene extends Phaser.Scene {
     });
 
     this.load.image("town", "/assets/town.png");
-    this.load.image("base", "/assets/base.png");
+    this.load.image("base", "/assets/newmap.png");
     this.load.image("machine-wood", "/assets/machine-wood.png");
     this.load.image("command-center", "/assets/command center.png");
     this.load.image("skyport-shop", "/assets/chopper/skychop.png");
     this.load.image("skyport-empty", "/assets/chopper/skychop.png");
     this.load.image("skyport-bought", "/assets/chopper/skychop2.png");
+    this.load.image("tank-shop", "/assets/tank/tank1.png");
+    this.load.image("tank-owned", "/assets/tank/tank2.png");
     this.load.image("goldcoin", "/assets/goldcoin.png");
     this.load.image("working", "/assets/working.png");
     this.load.image("builder-frame-1", "/assets/builders/frame1.png");
@@ -48,6 +50,9 @@ export default class PreloadScene extends Phaser.Scene {
 
   create() {
     this.scene.start("GameScene");
-    this.scene.launch("UIScene");
+
+    if (this.game.scene.keys?.UIScene) {
+      this.scene.launch("UIScene");
+    }
   }
 }

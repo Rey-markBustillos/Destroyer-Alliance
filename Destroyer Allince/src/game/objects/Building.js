@@ -63,6 +63,7 @@ export default class Building extends Phaser.GameObjects.Container {
     this.resourceIcon = null;
     this.levelLabel = null;
     this.skyportSprite = null;
+    this.battleTankSprite = null;
     this.battleHealthLabel = null;
     this.visualContainer = scene.add.container(0, 0);
     this.workingSprite = null;
@@ -145,6 +146,15 @@ export default class Building extends Phaser.GameObjects.Container {
       skyportSprite.setDisplaySize(skyportWidth, skyportHeight);
       this.skyportSprite = skyportSprite;
       this.visualContainer.add(skyportSprite);
+    } else if (buildingType.id === "battle-tank" && scene.textures.exists("tank-shop")) {
+      const tankWidth = footprintWidth * 1.05;
+      const tankHeight = tankWidth * 0.9;
+      const tankSprite = scene.add.image(0, footprintHeight / 2 + 12, "tank-owned");
+
+      tankSprite.setOrigin(0.5, 1);
+      tankSprite.setDisplaySize(tankWidth, tankHeight);
+      this.battleTankSprite = tankSprite;
+      this.visualContainer.add(tankSprite);
     } else if (buildingType.id === "wood-machine" && scene.textures.exists("machine-wood")) {
       const cropX = 64;
       const cropY = 0;
@@ -413,6 +423,16 @@ export default class Building extends Phaser.GameObjects.Container {
     }
 
     this.skyportSprite.setTexture(this.hasChopper ? "skyport-bought" : "skyport-empty");
+  }
+
+  setBattleTankState(hasTank = false) {
+    this.hasTank = Boolean(hasTank);
+
+    if (this.buildingType?.id !== "battle-tank" || !this.battleTankSprite) {
+      return;
+    }
+
+    this.battleTankSprite.setTexture(this.hasTank ? "tank-shop" : "tank-owned");
   }
 
   setBattleHealth(health = null, maxHealth = null) {

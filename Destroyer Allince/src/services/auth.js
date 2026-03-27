@@ -25,3 +25,13 @@ export const fetchProfile = async (token) => {
 
   return data;
 };
+
+export const updateProfileName = async (token, name) => {
+  const { data } = await authApi.patch("/profile/name", { name }, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  return data;
+};

@@ -6,10 +6,10 @@ import { BUILDING_LIST, getBuildingUpgradeCost } from "../utils/buildingTypes";
 
 const TILE_WIDTH = 64;
 const TILE_HEIGHT = 32;
-const MAP_ROWS = 12;
-const MAP_COLS = 12;
+const MAP_ROWS = 15;
+const MAP_COLS = 15;
 const STARTING_GOLD = 1200;
-const INITIAL_ZOOM = 1.2;
+const INITIAL_ZOOM = 1.45;
 const MIN_ZOOM = INITIAL_ZOOM;
 const MAX_ZOOM = 1.8;
 const ZOOM_STEP = 0.1;
@@ -21,27 +21,28 @@ const TOWN_HALL_MAX_GOLD = 500;
 const WOOD_MACHINE_LEVEL_TWO_GOLD_PER_TICK = 20;
 const BUILDING_UPGRADE_DURATION_MS = 1800000;
 const BUILDING_MAX_LEVEL = 2;
-const COMMAND_CENTER_SOLDIER_LIMIT = 50;
+const WOOD_MACHINE_BASE_LIMIT = 4;
+const WOOD_MACHINE_LIMIT_PER_TOWN_HALL_LEVEL = 2;
+const COMMAND_CENTER_BASE_SOLDIER_LIMIT = 15;
+const COMMAND_CENTER_SOLDIER_LIMIT_PER_LEVEL = 5;
 const SOLDIER_HUNGER_WARNING_MS = 18000000;
 const SOLDIER_STARVATION_MS = 86400000;
 const SOLDIER_FEED_COST_PER_UNIT = 1;
 const SKYPORT_CHOPPER_COST = 5000;
 const SKYPORT_CHOPPER_LEVEL_TWO_COST = 3500;
 const SKYPORT_CHOPPER_SELL_VALUE = 4000;
-const BUILDABLE_GRASS_MASK = [
-  [0, 9],
-  [0, 9],
-  [0, 9],
-  [0, 8],
-  [0, 8],
-  [0, 8],
-  [0, 7],
-  [0, 7],
-  [0, 7],
-  [0, 6],
-  [0, 6],
-  [0, 5],
-];
+const BATTLE_TANK_PURCHASE_COST = 5000;
+const TANK_BASE_HEALTH = 260;
+const TANK_HEALTH_PER_LEVEL = 120;
+const TANK_BASE_DAMAGE = 34;
+const TANK_DAMAGE_PER_LEVEL = 18;
+const BUILDABLE_GRASS_MASK = Array.from({ length: MAP_ROWS }, (_, row) => (
+  row === 0 || row === MAP_ROWS - 1
+    ? [3, MAP_COLS - 4]
+    : row === 1 || row === MAP_ROWS - 2
+      ? [1, MAP_COLS - 2]
+      : [0, MAP_COLS - 1]
+));
 
 const WAR_SOLDIER_TEXTURES = {
   front: ["soldier-front-walk-1", "soldier-front-walk-2"],
@@ -250,6 +251,61 @@ export default class GameScene extends Phaser.Scene {
     return true;
   }
 
+  getTownHallLevel() {
+    return this.getTownHall()?.level ?? 1;
+  }
+
+  getWoodMachineLimit() {
+    return WOOD_MACHINE_BASE_LIMIT
+      + (Math.max(1, this.getTownHallLevel()) - 1) * WOOD_MACHINE_LIMIT_PER_TOWN_HALL_LEVEL;
+  }
+
+  getCommandCenterLimit() {
+    return 2;
+  }
+
+  getSkyportLimit() {
+    return Math.max(1, this.getTownHallLevel());
+  }
+
+  getBattleTankLimit() {
+    return Math.max(1, this.getTownHallLevel());
+  }
+
+  canAddBuildingType(buildingType, movingBuilding = null) {
+    const typeId = buildingType?.id ?? buildingType?.buildingType?.id ?? buildingType;
+
+    if (!typeId || movingBuilding) {
+      return true;
+    }
+
+    if (typeId === "town-hall") {
+      return !this.getTownHall();
+    }
+
+    if (typeId === "wood-machine") {
+      const woodMachineCount = this.placedBuildings.filter((building) => this.isWoodMachine(building)).length;
+      return woodMachineCount < this.getWoodMachineLimit();
+    }
+
+    if (typeId === "command-center") {
+      const commandCenterCount = this.placedBuildings.filter((building) => this.isCommandCenter(building)).length;
+      return commandCenterCount < this.getCommandCenterLimit();
+    }
+
+    if (typeId === "skyport") {
+      const skyportCount = this.placedBuildings.filter((building) => this.isSkyport(building)).length;
+      return skyportCount < this.getSkyportLimit();
+    }
+
+    if (typeId === "battle-tank") {
+      const battleTankCount = this.placedBuildings.filter((building) => this.isBattleTank(building)).length;
+      return battleTankCount < this.getBattleTankLimit();
+    }
+
+    return true;
+  }
+
   getTileColor(row, col) {
     const seed = Math.abs((row * 47) + (col * 29) + ((row - col) * 13));
     const grassPalette = [
@@ -426,6 +482,45 @@ export default class GameScene extends Phaser.Scene {
     camera.roundPixels = true;
   }
 
+  getCameraState() {
+    const camera = this.cameras.main;
+
+    return {
+      scrollX: Number(camera.scrollX ?? 0),
+      scrollY: Number(camera.scrollY ?? 0),
+      zoom: Number(camera.zoom ?? INITIAL_ZOOM),
+    };
+  }
+
+  applyCameraState(cameraState = null) {
+    if (!cameraState) {
+      return;
+    }
+
+    const camera = this.cameras.main;
+    const zoom = Phaser.Math.Clamp(
+      Number(cameraState.zoom ?? INITIAL_ZOOM) || INITIAL_ZOOM,
+      MIN_ZOOM,
+      MAX_ZOOM
+    );
+
+    camera.setZoom(zoom);
+    const minScrollX = this.worldBounds.minX;
+    const maxScrollX = this.worldBounds.maxX - camera.displayWidth;
+    const minScrollY = this.worldBounds.minY;
+    const maxScrollY = this.worldBounds.maxY - camera.displayHeight;
+    camera.scrollX = Phaser.Math.Clamp(
+      Number(cameraState.scrollX ?? camera.scrollX) || camera.scrollX,
+      minScrollX,
+      maxScrollX
+    );
+    camera.scrollY = Phaser.Math.Clamp(
+      Number(cameraState.scrollY ?? camera.scrollY) || camera.scrollY,
+      minScrollY,
+      maxScrollY
+    );
+  }
+
   startResourceProduction() {
     this.resourceTimer = this.time.addEvent({
       delay: 1000,
@@ -531,6 +626,7 @@ export default class GameScene extends Phaser.Scene {
 
     if (this.selectedBuildingType) {
       const blocked = !this.canPlaceFootprint(tile.row, tile.col, this.selectedBuildingType)
+        || !this.canAddBuildingType(this.selectedBuildingType, this.movingBuilding)
         || this.isTileOccupied(
           tile.row,
           tile.col,
@@ -605,6 +701,7 @@ export default class GameScene extends Phaser.Scene {
     if (
       !tile ||
       !this.canPlaceFootprint(tile.row, tile.col, this.selectedBuildingType) ||
+      !this.canAddBuildingType(this.selectedBuildingType, this.movingBuilding) ||
       this.isTileOccupied(
         tile.row,
         tile.col,
@@ -634,7 +731,13 @@ export default class GameScene extends Phaser.Scene {
       deductCost = true,
       emitPlacedEvent = true,
       resourceState = {},
+      ignoreBuildLimit = false,
     } = options;
+
+    if (!ignoreBuildLimit && !this.canAddBuildingType(buildingType)) {
+      return null;
+    }
+
     const footprint = this.getFootprint(buildingType);
     const { x, y } = this.gridToWorld(
       col + (footprint.cols - 1) / 2,
@@ -651,12 +754,14 @@ export default class GameScene extends Phaser.Scene {
     building.lastWagePaidAt = Number(resourceState.lastWagePaidAt ?? Date.now());
     building.lastFedAt = Number(resourceState.lastFedAt ?? Date.now());
     building.hasChopper = Boolean(resourceState.hasChopper ?? false);
+    building.hasTank = Boolean(resourceState.hasTank ?? false);
     building.setLevel(Number(resourceState.level ?? 1));
     building.setUpgradeState(
       Boolean(resourceState.isUpgrading),
       resourceState.upgradeCompleteAt ?? null
     );
     building.setSkyportState?.(building.hasChopper);
+    building.setBattleTankState?.(building.hasTank);
     building.setMachineGoldDisplay(
       building.machineGold,
       this.getBuildingMaxGold(building)
@@ -705,6 +810,8 @@ export default class GameScene extends Phaser.Scene {
         ...this.getBuildingPersistenceState(building),
       });
     }
+
+    return building;
   }
 
   loadPersistedBuildings(buildings = []) {
@@ -731,6 +838,7 @@ export default class GameScene extends Phaser.Scene {
         persistedId: entry.id ?? null,
         deductCost: false,
         emitPlacedEvent: false,
+        ignoreBuildLimit: true,
         resourceState: {
           level: entry.level ?? 1,
           isUpgrading: entry.isUpgrading ?? false,
@@ -741,6 +849,7 @@ export default class GameScene extends Phaser.Scene {
           lastWagePaidAt: entry.lastWagePaidAt ?? Date.now(),
           lastFedAt: entry.lastFedAt ?? Date.now(),
           hasChopper: entry.hasChopper ?? false,
+          hasTank: entry.hasTank ?? false,
         },
       });
     });
@@ -788,16 +897,18 @@ export default class GameScene extends Phaser.Scene {
     this.placeBuilding(defaultRow, defaultCol, townHallType, {
       deductCost: false,
       emitPlacedEvent,
+      ignoreBuildLimit: true,
     });
 
     return this.getTownHall();
   }
 
-  initializeFromSnapshot({ gold = this.gold, buildings = [] } = {}) {
+  initializeFromSnapshot({ gold = this.gold, buildings = [], camera = null } = {}) {
     this.clearPlacedBuildings();
     this.setGoldState(gold, { emitChangeEvent: false });
     this.loadPersistedBuildings(buildings);
     this.ensureTownHall({ emitPlacedEvent: false });
+    this.applyCameraState(camera);
     this.emitGameState();
   }
 
@@ -931,6 +1042,7 @@ export default class GameScene extends Phaser.Scene {
   getPersistedSnapshot() {
     return {
       gold: this.gold,
+      camera: this.getCameraState(),
       buildings: this.placedBuildings.map((building) => ({
         id: building.persistedId ?? null,
         type: building.buildingType.id,
@@ -945,6 +1057,7 @@ export default class GameScene extends Phaser.Scene {
         lastWagePaidAt: building.lastWagePaidAt ?? Date.now(),
         lastFedAt: building.lastFedAt ?? Date.now(),
         hasChopper: building.hasChopper ?? false,
+        hasTank: building.hasTank ?? false,
       })),
     };
   }
@@ -986,6 +1099,21 @@ export default class GameScene extends Phaser.Scene {
       (total, building) => total + (building.soldierCount ?? 0),
       0
     );
+    const totalTanks = this.placedBuildings.filter((building) =>
+      this.isBattleTank(building) && building.hasTank
+    ).length;
+    const battleTankBuildings = this.placedBuildings.filter((building) =>
+      this.isBattleTank(building)
+    ).length;
+    const commandCenters = this.placedBuildings.filter((building) =>
+      this.isCommandCenter(building)
+    ).length;
+    const totalHelicopters = this.placedBuildings.filter((building) =>
+      this.isSkyport(building) && building.hasChopper
+    ).length;
+    const skyports = this.placedBuildings.filter((building) =>
+      this.isSkyport(building)
+    ).length;
 
     this.events.emit("game-state-update", {
       gold: this.gold,
@@ -993,8 +1121,20 @@ export default class GameScene extends Phaser.Scene {
       totalMachineGold,
       totalMachineCapacity,
       totalSoldiers,
+      totalTanks,
+      totalHelicopters,
+      totalArmyUnits: totalSoldiers + totalTanks + totalHelicopters,
+      commandCenters,
+      commandCenterLimit: this.getCommandCenterLimit(),
+      battleTankBuildings,
+      battleTankLimit: this.getBattleTankLimit(),
+      skyports,
+      skyportLimit: this.getSkyportLimit(),
       woodMachines: woodMachines.length,
       fullWoodMachines,
+      townHallLevel: this.getTownHallLevel(),
+      townHallCount: this.getTownHall() ? 1 : 0,
+      woodMachineLimit: this.getWoodMachineLimit(),
     });
   }
 
@@ -1042,8 +1182,33 @@ export default class GameScene extends Phaser.Scene {
     return typeId === "town-hall";
   }
 
+  isBattleTank(buildingOrType) {
+    const typeId = typeof buildingOrType === "string"
+      ? buildingOrType
+      : buildingOrType?.buildingType?.id ?? buildingOrType?.id;
+
+    return typeId === "battle-tank";
+  }
+
   getCommandCenterSoldierLimit(building) {
-    return this.isCommandCenter(building) ? COMMAND_CENTER_SOLDIER_LIMIT : 0;
+    if (!this.isCommandCenter(building)) {
+      return 0;
+    }
+
+    const level = Math.max(1, Number(building?.level ?? 1) || 1);
+    return COMMAND_CENTER_BASE_SOLDIER_LIMIT + ((level - 1) * COMMAND_CENTER_SOLDIER_LIMIT_PER_LEVEL);
+  }
+
+  getBuildingUpgradeCap(building) {
+    if (!building) {
+      return 0;
+    }
+
+    if (this.isTownHall(building)) {
+      return BUILDING_MAX_LEVEL;
+    }
+
+    return Math.min(BUILDING_MAX_LEVEL, this.getTownHallLevel());
   }
 
   getNextCommandCenterWageAt(building) {
@@ -1184,6 +1349,10 @@ export default class GameScene extends Phaser.Scene {
       maxSoldiers: this.getCommandCenterSoldierLimit(building),
       nextWageAt: this.getNextCommandCenterWageAt(building),
       isHungry: this.isCommandCenterHungry(building),
+      hasTank: building.hasTank ?? false,
+      tankCost: this.isBattleTank(building) ? BATTLE_TANK_PURCHASE_COST : 0,
+      tankHealth: this.isBattleTank(building) ? this.getBattleTankStats(building).health : 0,
+      tankDamage: this.isBattleTank(building) ? this.getBattleTankStats(building).damage : 0,
       hasChopper: building.hasChopper ?? false,
       chopperCost: this.getSkyportChopperCost(building),
       chopperSellValue: this.isSkyport(building) ? SKYPORT_CHOPPER_SELL_VALUE : 0,
@@ -1204,10 +1373,49 @@ export default class GameScene extends Phaser.Scene {
       lastFedAt: building.lastFedAt ?? Date.now(),
       nextWageAt: this.getNextCommandCenterWageAt(building),
       isHungry: this.isCommandCenterHungry(building),
+      hasTank: building.hasTank ?? false,
+      tankCost: this.isBattleTank(building) ? BATTLE_TANK_PURCHASE_COST : 0,
+      tankHealth: this.isBattleTank(building) ? this.getBattleTankStats(building).health : 0,
+      tankDamage: this.isBattleTank(building) ? this.getBattleTankStats(building).damage : 0,
       hasChopper: building.hasChopper ?? false,
       chopperCost: this.getSkyportChopperCost(building),
       chopperSellValue: this.isSkyport(building) ? SKYPORT_CHOPPER_SELL_VALUE : 0,
     };
+  }
+
+  getBattleTankStats(building) {
+    const level = Math.max(1, Number(building?.level ?? 1) || 1);
+
+    return {
+      health: TANK_BASE_HEALTH + ((level - 1) * TANK_HEALTH_PER_LEVEL),
+      damage: TANK_BASE_DAMAGE + ((level - 1) * TANK_DAMAGE_PER_LEVEL),
+    };
+  }
+
+  buyTankAtSelectedBuilding() {
+    if (!this.selectedPlacedBuilding || !this.isBattleTank(this.selectedPlacedBuilding)) {
+      return;
+    }
+
+    const building = this.selectedPlacedBuilding;
+
+    if (building.hasTank || this.gold < BATTLE_TANK_PURCHASE_COST) {
+      return;
+    }
+
+    building.hasTank = true;
+    building.setBattleTankState?.(true);
+    this.setGoldState(this.gold - BATTLE_TANK_PURCHASE_COST);
+
+    this.events.emit("structure-army-updated", {
+      structure: building,
+      id: building.persistedId,
+      type: building.buildingType.id,
+      row: building.row,
+      col: building.col,
+      ...this.getBuildingPersistenceState(building),
+    });
+    this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
   }
 
   isSkyport(buildingOrType) {
@@ -1559,9 +1767,10 @@ export default class GameScene extends Phaser.Scene {
 
     const building = this.selectedPlacedBuilding;
     const upgradeCost = getBuildingUpgradeCost(building.buildingType);
+    const upgradeCap = this.getBuildingUpgradeCap(building);
 
     if (
-      (building.level ?? 1) >= BUILDING_MAX_LEVEL ||
+      (building.level ?? 1) >= upgradeCap ||
       building.isUpgrading ||
       this.gold < upgradeCost
     ) {

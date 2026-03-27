@@ -46,6 +46,18 @@ export const BUILDING_TYPES = {
     footprintRows: 2,
     footprintCols: 2,
   },
+  BATTLE_TANK: {
+    id: "battle-tank",
+    name: "Battle Tank",
+    label: "BT",
+    cost: 1500,
+    color: 0x64748b,
+    shopImage: "/assets/tank/tank1.png",
+    bodyHeight: 42,
+    roofHeight: 12,
+    footprintRows: 1,
+    footprintCols: 1,
+  },
 };
 
 export const BUILDING_LIST = Object.values(BUILDING_TYPES);

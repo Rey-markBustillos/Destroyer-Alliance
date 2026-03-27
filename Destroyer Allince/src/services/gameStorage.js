@@ -7,6 +7,31 @@ const normalizeGold = (gold) => {
   return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : 1200;
 };
 
+const normalizeTimestamp = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : null;
+};
+
+const normalizeCamera = (camera) => {
+  if (!camera || typeof camera !== "object") {
+    return null;
+  }
+
+  const scrollX = Number(camera.scrollX);
+  const scrollY = Number(camera.scrollY);
+  const zoom = Number(camera.zoom);
+
+  if (!Number.isFinite(scrollX) || !Number.isFinite(scrollY) || !Number.isFinite(zoom)) {
+    return null;
+  }
+
+  return {
+    scrollX,
+    scrollY,
+    zoom,
+  };
+};
+
 const normalizeBuildings = (buildings) => {
   if (!Array.isArray(buildings)) {
     return [];
@@ -27,6 +52,13 @@ const normalizeBuildings = (buildings) => {
       lastGeneratedAt: Number(building?.lastGeneratedAt ?? Date.now()),
       soldierCount: Math.max(0, Number(building?.soldierCount ?? 0) || 0),
       lastWagePaidAt: Number(building?.lastWagePaidAt ?? Date.now()),
+      lastFedAt: Number(building?.lastFedAt ?? Date.now()),
+      // Legacy saves dropped the purchased skyport flag, so recover it for
+      // older skyport entries that are missing the field entirely.
+      hasChopper: building?.type === "skyport"
+        ? Boolean(building?.hasChopper ?? true)
+        : Boolean(building?.hasChopper),
+      hasTank: Boolean(building?.hasTank),
     }))
     .filter((building) => typeof building.type === "string");
 };
@@ -57,7 +89,9 @@ const getLegacySnapshot = () => {
   return {
     gold: normalizeGold(legacyGoldRaw),
     buildings: normalizeBuildings(legacyBuildings),
+    camera: null,
     savedAt: Date.now(),
+    serverSyncedAt: null,
   };
 };
 
@@ -81,7 +115,9 @@ export const getGameSnapshot = (session) => {
     return {
       gold: normalizeGold(parsed?.gold),
       buildings: normalizeBuildings(parsed?.buildings),
-      savedAt: Number(parsed?.savedAt ?? 0),
+      camera: normalizeCamera(parsed?.camera),
+      savedAt: normalizeTimestamp(parsed?.savedAt) ?? 0,
+      serverSyncedAt: normalizeTimestamp(parsed?.serverSyncedAt),
     };
   } catch {
     localStorage.removeItem(storageKey);
@@ -93,7 +129,9 @@ export const saveGameSnapshot = (snapshot, session) => {
   const payload = {
     gold: normalizeGold(snapshot?.gold),
     buildings: normalizeBuildings(snapshot?.buildings),
+    camera: normalizeCamera(snapshot?.camera),
     savedAt: Date.now(),
+    serverSyncedAt: normalizeTimestamp(snapshot?.serverSyncedAt),
   };
 
   localStorage.setItem(getStorageKey(session), JSON.stringify(payload));

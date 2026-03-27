@@ -6,6 +6,7 @@
   "main": "server.js",
   "scripts": {
     "dev": "nodemon server.js",
+    "sync:snapshots": "node scripts/force-sync-snapshots.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js"
   },

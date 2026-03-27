@@ -1,0 +1,38 @@
+[
+  {
+    "playerId": "PLYR-000001",
+    "snapshot": {
+      "gold": 4200,
+      "buildings": [
+        {
+          "type": "town-hall",
+          "x": 4,
+          "y": 4,
+          "level": 2
+        },
+        {
+          "type": "command-center",
+          "x": 2,
+          "y": 7,
+          "level": 2,
+          "soldierCount": 18,
+          "lastFedAt": 1760000000000
+        },
+        {
+          "type": "skyport",
+          "x": 7,
+          "y": 6,
+          "level": 1,
+          "hasChopper": true
+        },
+        {
+          "type": "wood-machine",
+          "x": 6,
+          "y": 3,
+          "level": 1,
+          "machineGold": 90
+        }
+      ]
+    }
+  }
+]

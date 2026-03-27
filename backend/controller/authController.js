@@ -9,6 +9,7 @@ const generateToken = (id) => {
 };
 
 const buildPlayerId = (id) => `PLYR-${String(id).padStart(6, "0")}`;
+const RENAME_COST = 5000;
 
 const ensurePlayerId = async (user) => {
   if (user?.playerId) {
@@ -133,5 +134,68 @@ export const getProfile = async (req, res) => {
   } catch (error) {
     console.error("getProfile failed:", error);
     res.status(500).json({ message: "Unable to load profile." });
+  }
+};
+
+export const updateProfileName = async (req, res) => {
+  try {
+    const requestedName = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+
+    if (requestedName.length < 3) {
+      return res.status(400).json({ message: "Player name must be at least 3 characters." });
+    }
+
+    if (requestedName.length > 24) {
+      return res.status(400).json({ message: "Player name must be 24 characters or less." });
+    }
+
+    const currentUser = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: {
+        id: true,
+        name: true,
+        playerId: true,
+        email: true,
+        gold: true,
+      },
+    });
+
+    if (!currentUser) {
+      return res.status(404).json({ message: "Profile not found" });
+    }
+
+    if ((currentUser.gold ?? 0) < RENAME_COST) {
+      return res.status(400).json({ message: "You need 5000 gold to change your player name." });
+    }
+
+    if ((currentUser.name ?? "").trim() === requestedName) {
+      return res.status(400).json({ message: "Enter a different player name." });
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: req.user.id },
+      data: {
+        name: requestedName,
+        gold: {
+          decrement: RENAME_COST,
+        },
+      },
+      select: {
+        id: true,
+        name: true,
+        playerId: true,
+        email: true,
+        gold: true,
+      },
+    });
+
+    res.json({
+      ...updatedUser,
+      renameCost: RENAME_COST,
+      message: "Player name updated successfully.",
+    });
+  } catch (error) {
+    console.error("updateProfileName failed:", error);
+    res.status(500).json({ message: "Unable to update player name." });
   }
 };

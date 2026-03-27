@@ -26,12 +26,52 @@ export const fetchGameState = async (token) => {
   return data;
 };
 
+export const fetchGameSnapshot = async (token) => {
+  const { data } = await gameApi.get("/snapshot", {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  return data;
+};
+
 export const fetchWarTarget = async (token, playerId = "") => {
   const { data } = await gameApi.get("/war-target", {
     headers: {
       Authorization: `Bearer ${token}`,
     },
     params: playerId ? { playerId } : undefined,
+  });
+
+  return data;
+};
+
+export const syncGameSnapshot = async (payload, token) => {
+  const { data } = await gameApi.put("/snapshot", payload, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  return data;
+};
+
+export const fetchWarEnemies = async (token) => {
+  const { data } = await gameApi.get("/war-enemies", {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  return data;
+};
+
+export const applyWarResolution = async (payload, token) => {
+  const { data } = await gameApi.post("/war-resolution", payload, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
   });
 
   return data;

@@ -1,5 +1,111 @@
 import prisma from "../prismaClient.js";
 
+const DEFAULT_GOLD = 1200;
+
+const serializeTimestamp = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+  const time = date.getTime();
+  return Number.isNaN(time) ? null : time;
+};
+
+const serializeBuilding = (building) => ({
+  id: building.id,
+  type: building.type,
+  x: building.x,
+  y: building.y,
+  level: building.level ?? 1,
+  isUpgrading: Boolean(building.isUpgrading),
+  upgradeCompleteAt: serializeTimestamp(building.upgradeCompleteAt),
+  machineGold: building.machineGold ?? 0,
+  lastGeneratedAt: serializeTimestamp(building.lastGeneratedAt),
+  soldierCount: building.soldierCount ?? 0,
+  lastWagePaidAt: serializeTimestamp(building.lastWagePaidAt),
+  lastFedAt: serializeTimestamp(building.lastFedAt),
+  hasChopper: Boolean(building.hasChopper),
+  hasTank: Boolean(building.hasTank),
+});
+
+const parseOptionalDate = (value) => {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const normalizeBuildingPayload = (building) => {
+  const type = typeof building?.type === "string" ? building.type.trim() : "";
+  const x = Number(building?.x ?? building?.col);
+  const y = Number(building?.y ?? building?.row);
+  const level = Math.max(1, Math.floor(Number(building?.level ?? 1) || 1));
+  const machineGold = Math.max(0, Math.floor(Number(building?.machineGold ?? 0) || 0));
+  const soldierCount = Math.max(0, Math.floor(Number(building?.soldierCount ?? 0) || 0));
+
+  if (!type || !Number.isFinite(x) || !Number.isFinite(y)) {
+    return null;
+  }
+
+  return {
+    type,
+    x: Math.floor(x),
+    y: Math.floor(y),
+    level,
+    isUpgrading: Boolean(building?.isUpgrading),
+    upgradeCompleteAt: parseOptionalDate(building?.upgradeCompleteAt),
+    machineGold,
+    lastGeneratedAt: parseOptionalDate(building?.lastGeneratedAt),
+    soldierCount,
+    lastWagePaidAt: parseOptionalDate(building?.lastWagePaidAt),
+    lastFedAt: parseOptionalDate(building?.lastFedAt),
+    hasChopper: Boolean(building?.hasChopper),
+    hasTank: Boolean(building?.hasTank),
+  };
+};
+
+const getVillageSnapshotForUser = async (userId) => {
+  const user = await prisma.user.findUnique({
+    where: {
+      id: userId,
+    },
+    select: {
+      gold: true,
+      buildings: {
+        orderBy: [
+          { y: "asc" },
+          { x: "asc" },
+          { id: "asc" },
+        ],
+      },
+    },
+  });
+
+  return {
+    gold: user?.gold ?? DEFAULT_GOLD,
+    buildings: (user?.buildings ?? []).map(serializeBuilding),
+  };
+};
+
+const buildTargetPayload = (target) => {
+  const targetBuildings = [...(target.buildings ?? [])].map(serializeBuilding);
+  const townHall = targetBuildings.find((building) => building.type === "town-hall") ?? null;
+
+  return {
+    id: target.id,
+    name: target.name || target.email,
+    playerId: target.playerId || `PLYR-${String(target.id).padStart(6, "0")}`,
+    gold: target.gold ?? 0,
+    townHallLevel: townHall?.level ?? 0,
+    defense: `${targetBuildings.length} structures`,
+    loot: Math.max(0, Math.floor((target.gold ?? 0) * 0.2)),
+    buildings: targetBuildings,
+  };
+};
+
 export const getGameState = async (req, res) => {
   const user = await prisma.user.findUnique({
     where: {
@@ -11,8 +117,18 @@ export const getGameState = async (req, res) => {
   });
 
   res.json({
-    gold: user?.gold ?? 1200,
+    gold: user?.gold ?? DEFAULT_GOLD,
   });
+};
+
+export const getGameSnapshot = async (req, res) => {
+  try {
+    const snapshot = await getVillageSnapshotForUser(req.user.id);
+    res.json(snapshot);
+  } catch (error) {
+    console.error("getGameSnapshot error:", error);
+    res.status(500).json({ message: "Unable to load game snapshot" });
+  }
 };
 
 export const updateGameState = async (req, res) => {
@@ -39,18 +155,20 @@ export const updateGameState = async (req, res) => {
 
 // ADD BUILDING
 export const addBuilding = async (req, res) => {
-  const { type, x, y } = req.body;
+  const normalizedBuilding = normalizeBuildingPayload(req.body);
+
+  if (!normalizedBuilding) {
+    return res.status(400).json({ message: "Invalid building payload" });
+  }
 
   const building = await prisma.building.create({
     data: {
-      type,
-      x,
-      y,
+      ...normalizedBuilding,
       userId: req.user.id,
     },
   });
 
-  res.json(building);
+  res.json(serializeBuilding(building));
 };
 
 // GET USER BUILDINGS
@@ -61,7 +179,58 @@ export const getBuildings = async (req, res) => {
     },
   });
 
-  res.json(buildings);
+  res.json(buildings.map(serializeBuilding));
+};
+
+export const syncGameSnapshot = async (req, res) => {
+  try {
+    const nextGold = Number(req.body?.gold);
+    const incomingBuildings = Array.isArray(req.body?.buildings) ? req.body.buildings : null;
+
+    if (!Number.isFinite(nextGold) || nextGold < 0 || !incomingBuildings) {
+      return res.status(400).json({ message: "Invalid snapshot payload" });
+    }
+
+    const normalizedBuildings = incomingBuildings
+      .map(normalizeBuildingPayload)
+      .filter(Boolean);
+
+    if (normalizedBuildings.length !== incomingBuildings.length) {
+      return res.status(400).json({ message: "One or more buildings are invalid" });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: {
+          id: req.user.id,
+        },
+        data: {
+          gold: Math.floor(nextGold),
+        },
+      });
+
+      await tx.building.deleteMany({
+        where: {
+          userId: req.user.id,
+        },
+      });
+
+      if (normalizedBuildings.length > 0) {
+        await tx.building.createMany({
+          data: normalizedBuildings.map((building) => ({
+            ...building,
+            userId: req.user.id,
+          })),
+        });
+      }
+    });
+
+    const snapshot = await getVillageSnapshotForUser(req.user.id);
+    res.json(snapshot);
+  } catch (error) {
+    console.error("syncGameSnapshot error:", error);
+    res.status(500).json({ message: "Unable to save game snapshot" });
+  }
 };
 
 export const getWarTarget = async (req, res) => {
@@ -76,6 +245,9 @@ export const getWarTarget = async (req, res) => {
         where: {
           id: {
             not: req.user.id,
+          },
+          buildings: {
+            some: {},
           },
           OR: [
             { playerId: normalizedPlayerId },
@@ -109,6 +281,9 @@ export const getWarTarget = async (req, res) => {
           id: {
             not: req.user.id,
           },
+          buildings: {
+            some: {},
+          },
         },
         select: {
           id: true,
@@ -126,43 +301,166 @@ export const getWarTarget = async (req, res) => {
       });
 
       if (opponents.length === 0) {
-        return res.status(404).json({ message: "No enemy village found" });
+        return res.status(404).json({ message: "No real enemy village found in the database." });
       }
 
       target = opponents[Math.floor(Math.random() * opponents.length)];
     }
 
-    const targetBuildings = [...(target.buildings ?? [])];
-    const hasTownHall = targetBuildings.some((building) => building.type === "town-hall");
-
-    if (!hasTownHall) {
-      targetBuildings.push({
-        id: `synthetic-townhall-${target.id}`,
-        type: "town-hall",
-        x: 4,
-        y: 4,
-        level: 1,
-        isUpgrading: false,
-        upgradeCompleteAt: null,
-        userId: target.id,
-      });
-    }
-
-    const townHall = targetBuildings.find((building) => building.type === "town-hall") ?? null;
-
-    res.json({
-      id: target.id,
-      name: target.name || target.email,
-      playerId: target.playerId || `PLYR-${String(target.id).padStart(6, "0")}`,
-      gold: target.gold ?? 0,
-      townHallLevel: townHall?.level ?? 1,
-      defense: `${targetBuildings.length} structures`,
-      loot: Math.max(200, Math.floor((target.gold ?? 0) * 0.25)),
-      buildings: targetBuildings,
-    });
+    res.json(buildTargetPayload(target));
   } catch (error) {
     console.error("getWarTarget error:", error);
     res.status(500).json({ message: "Unable to find war target" });
+  }
+};
+
+export const getWarEnemies = async (req, res) => {
+  try {
+    const opponents = await prisma.user.findMany({
+      where: {
+        id: {
+          not: req.user.id,
+        },
+        buildings: {
+          some: {},
+        },
+      },
+      select: {
+        id: true,
+        name: true,
+        playerId: true,
+        email: true,
+        gold: true,
+        buildings: {
+          orderBy: [
+            { y: "asc" },
+            { x: "asc" },
+          ],
+        },
+      },
+      orderBy: [
+        { id: "asc" },
+      ],
+      take: 24,
+    });
+
+    res.json(
+      opponents.map((target) => {
+        const payload = buildTargetPayload(target);
+
+        return {
+          id: payload.id,
+          name: payload.name,
+          playerId: payload.playerId,
+          townHallLevel: payload.townHallLevel,
+          defense: payload.defense,
+          loot: payload.loot,
+        };
+      })
+    );
+  } catch (error) {
+    console.error("getWarEnemies error:", error);
+    res.status(500).json({ message: "Unable to load enemy list" });
+  }
+};
+
+export const applyWarResolution = async (req, res) => {
+  try {
+    const targetUserId = Number(req.body?.targetUserId);
+    const requestedLoot = Math.max(0, Math.floor(Number(req.body?.loot ?? 0) || 0));
+    const defenderLosses = typeof req.body?.defenderLosses === "object" && req.body?.defenderLosses
+      ? req.body.defenderLosses
+      : null;
+
+    if (!Number.isInteger(targetUserId) || targetUserId <= 0 || !defenderLosses) {
+      return res.status(400).json({ message: "Invalid war resolution payload" });
+    }
+
+    if (targetUserId === req.user.id) {
+      return res.status(400).json({ message: "You cannot resolve a battle against yourself" });
+    }
+
+    const target = await prisma.user.findUnique({
+      where: {
+        id: targetUserId,
+      },
+      select: {
+        id: true,
+        gold: true,
+        buildings: {
+          where: {
+            type: "command-center",
+          },
+          select: {
+            id: true,
+            soldierCount: true,
+          },
+        },
+      },
+    });
+
+    if (!target) {
+      return res.status(404).json({ message: "Target account not found" });
+    }
+
+    const maxLoot = Math.max(0, Math.floor((target.gold ?? 0) * 0.2));
+    const transferredLoot = Math.min(requestedLoot, maxLoot);
+    let attackerGold = 0;
+    let targetGold = 0;
+
+    await prisma.$transaction(async (tx) => {
+      for (const building of target.buildings) {
+        const rawLoss = defenderLosses[String(building.id)] ?? defenderLosses[building.id] ?? 0;
+        const loss = Math.max(0, Math.floor(Number(rawLoss) || 0));
+
+        if (!loss) {
+          continue;
+        }
+
+        await tx.building.update({
+          where: {
+            id: building.id,
+          },
+          data: {
+            soldierCount: Math.max(0, Number(building.soldierCount ?? 0) - loss),
+          },
+        });
+      }
+
+      const updatedTarget = await tx.user.update({
+        where: {
+          id: targetUserId,
+        },
+        data: {
+          gold: Math.max(0, Number(target.gold ?? 0) - transferredLoot),
+        },
+        select: {
+          gold: true,
+        },
+      });
+
+      const updatedAttacker = await tx.user.update({
+        where: {
+          id: req.user.id,
+        },
+        data: {
+          gold: {
+            increment: transferredLoot,
+          },
+        },
+        select: {
+          gold: true,
+        },
+      });
+
+      attackerGold = updatedAttacker.gold ?? 0;
+      targetGold = updatedTarget.gold ?? 0;
+    });
+
+    res.json({ success: true, transferredLoot, attackerGold, targetGold });
+  } catch (error) {
+    console.error("applyWarResolution error:", error);
+    res.status(500).json({ message: "Unable to save battle defender losses" });
   }
 };
 
@@ -209,6 +507,30 @@ export const updateBuilding = async (req, res) => {
     }
   }
 
+  if (Number.isFinite(Number(req.body.machineGold))) {
+    nextData.machineGold = Math.max(0, Math.floor(Number(req.body.machineGold)));
+  }
+
+  if (Number.isFinite(Number(req.body.soldierCount))) {
+    nextData.soldierCount = Math.max(0, Math.floor(Number(req.body.soldierCount)));
+  }
+
+  if (typeof req.body.hasChopper === "boolean") {
+    nextData.hasChopper = req.body.hasChopper;
+  }
+
+  if (req.body.lastGeneratedAt !== undefined) {
+    nextData.lastGeneratedAt = parseOptionalDate(req.body.lastGeneratedAt);
+  }
+
+  if (req.body.lastWagePaidAt !== undefined) {
+    nextData.lastWagePaidAt = parseOptionalDate(req.body.lastWagePaidAt);
+  }
+
+  if (req.body.lastFedAt !== undefined) {
+    nextData.lastFedAt = parseOptionalDate(req.body.lastFedAt);
+  }
+
   const updatedBuilding = await prisma.building.update({
     where: {
       id: buildingId,
@@ -216,7 +538,7 @@ export const updateBuilding = async (req, res) => {
     data: nextData,
   });
 
-  res.json(updatedBuilding);
+  res.json(serializeBuilding(updatedBuilding));
 };
 
 export const deleteBuilding = async (req, res) => {

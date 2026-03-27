@@ -1,42 +1,70 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { AnimatePresence, motion } from "framer-motion";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import BuildingShop from "../components/BuildingShop";
 import { createGame, destroyGame } from "../game/main";
 import { getBuildingUpgradeCost } from "../game/utils/buildingTypes";
 import {
-  addBuilding,
-  deleteBuilding,
-  fetchBuildings,
-  fetchGameState,
-  updateBuilding,
-  updateGameState,
+  fetchGameSnapshot,
+  syncGameSnapshot,
 } from "../services/game";
 import {
-  getStoredBuildings,
-  mergeStoredBuildings,
-  removeStoredBuilding,
-  upsertStoredBuilding,
-} from "../services/buildingStorage";
-import {
+  getGameSnapshot as getLocalGameSnapshot,
   saveGameSnapshot,
 } from "../services/gameStorage";
-import { getStoredGold, saveStoredGold } from "../services/goldStorage";
 import { getSession } from "../services/session";
 
-const SOLDIER_OPTIONS = [
-  {
-    id: "basic-soldier",
-    name: "Basic Soldier",
-    description: "Starter unit para sa Command Center.",
-    wage: 1,
-    image: "/assets/army/front/firing.png",
-    available: true,
-  },
-];
+const shouldPreferLocalSnapshot = (localSnapshot, serverSnapshot) => {
+  const localBuildings = Array.isArray(localSnapshot?.buildings) ? localSnapshot.buildings : [];
+  const serverBuildings = Array.isArray(serverSnapshot?.buildings) ? serverSnapshot.buildings : [];
+
+  if (!localBuildings.length || localSnapshot?.serverSyncedAt) {
+    return false;
+  }
+
+  if (!serverBuildings.length) {
+    return true;
+  }
+
+  return false;
+};
+
+const formatCompactNumber = (value) =>
+  new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(
+    Math.max(0, Number(value ?? 0) || 0)
+  );
+
+function HudMetric({ label, value, tone = "emerald" }) {
+  const toneClass = {
+    emerald: "text-emerald-50 border-emerald-300/20 bg-[linear-gradient(180deg,rgba(16,185,129,0.22)_0%,rgba(15,23,42,0.34)_100%)]",
+    amber: "text-amber-50 border-amber-300/20 bg-[linear-gradient(180deg,rgba(245,158,11,0.22)_0%,rgba(15,23,42,0.34)_100%)]",
+    sky: "text-sky-50 border-sky-300/20 bg-[linear-gradient(180deg,rgba(56,189,248,0.22)_0%,rgba(15,23,42,0.34)_100%)]",
+    rose: "text-rose-50 border-rose-300/20 bg-[linear-gradient(180deg,rgba(251,113,133,0.22)_0%,rgba(15,23,42,0.34)_100%)]",
+  }[tone];
+
+  return (
+    <div className={`min-w-0 rounded-[0.8rem] border px-2 py-1.5 backdrop-blur-md ${toneClass}`}>
+      <p className="text-[0.5rem] uppercase tracking-[0.18em] text-white/70">{label}</p>
+      <p className="mt-0.5 text-[0.95rem] font-black tracking-tight">{value}</p>
+    </div>
+  );
+}
+
+function CommandButton({ children, className = "", ...props }) {
+  return (
+    <button
+      {...props}
+      className={`rounded-2xl px-4 py-3 text-sm font-bold uppercase tracking-[0.16em] transition duration-200 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50 ${className}`}
+    >
+      {children}
+    </button>
+  );
+}
 
 export default function GamePage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const gameRootRef = useRef(null);
   const gameRef = useRef(null);
   const activeSession = getSession();
@@ -47,13 +75,25 @@ export default function GamePage() {
     totalMachineGold: 0,
     totalMachineCapacity: 0,
     totalSoldiers: 0,
+    totalTanks: 0,
+    totalHelicopters: 0,
+    totalArmyUnits: 0,
+    commandCenters: 0,
+    commandCenterLimit: 2,
+    battleTankBuildings: 0,
+    battleTankLimit: 1,
+    skyports: 0,
+    skyportLimit: 1,
     woodMachines: 0,
     fullWoodMachines: 0,
+    townHallLevel: 1,
+    townHallCount: 1,
+    woodMachineLimit: 4,
   });
   const [selectedBuilding, setSelectedBuilding] = useState(null);
   const [selectedPlacedBuilding, setSelectedPlacedBuilding] = useState(null);
   const [isMoveMode, setIsMoveMode] = useState(false);
-  const [shopOpen, setShopOpen] = useState(true);
+  const [shopOpen, setShopOpen] = useState(false);
   const [hireModalOpen, setHireModalOpen] = useState(false);
   const [removeSoldierCount, setRemoveSoldierCount] = useState("1");
 
@@ -84,26 +124,71 @@ export default function GamePage() {
         return;
       }
 
-      const persistCurrentSnapshot = () => {
-        saveGameSnapshot(gameScene.getPersistedSnapshot(), session);
+      let syncTimeoutId = null;
+      let syncInFlight = false;
+      let syncQueuedWhileSaving = false;
+
+      const persistCurrentSnapshot = (metadata = {}) => {
+        return saveGameSnapshot(
+          {
+            ...gameScene.getPersistedSnapshot(),
+            ...metadata,
+          },
+          session
+        );
+      };
+
+      const queueSnapshotSync = () => {
+        if (!token) {
+          return;
+        }
+
+        if (syncTimeoutId) {
+          window.clearTimeout(syncTimeoutId);
+        }
+
+        syncTimeoutId = window.setTimeout(async () => {
+          syncTimeoutId = null;
+
+          if (syncInFlight) {
+            syncQueuedWhileSaving = true;
+            return;
+          }
+
+          syncInFlight = true;
+
+          try {
+            const snapshot = gameScene.getPersistedSnapshot();
+            const savedSnapshot = await syncGameSnapshot(snapshot, token);
+            saveGameSnapshot({
+              ...savedSnapshot,
+              camera: snapshot.camera ?? null,
+              serverSyncedAt: Date.now(),
+            }, session);
+          } catch (error) {
+            console.error("Unable to sync game snapshot:", error);
+          } finally {
+            syncInFlight = false;
+
+            if (syncQueuedWhileSaving) {
+              syncQueuedWhileSaving = false;
+              queueSnapshotSync();
+            }
+          }
+        }, 400);
+      };
+
+      const persistAndSyncSnapshot = () => {
+        persistCurrentSnapshot();
+        queueSnapshotSync();
       };
 
       const handleGameStateUpdate = (state) => {
         setGameState(state);
       };
 
-      const handleGoldChanged = async ({ gold }) => {
-        saveStoredGold(gold, session);
-
-        if (!token) {
-          return;
-        }
-
-        try {
-          await updateGameState({ gold }, token);
-        } catch (error) {
-          console.error("Unable to save gold:", error);
-        }
+      const handleGoldChanged = () => {
+        persistAndSyncSnapshot();
       };
 
       const handleStructureSelectionCleared = () => {
@@ -121,109 +206,30 @@ export default function GamePage() {
         }
       };
 
-      const handleStructurePlaced = async ({
-        structure,
-        type,
-        row,
-        col,
-        level,
-        isUpgrading,
-        upgradeCompleteAt,
-        machineGold,
-        lastGeneratedAt,
-        maxGold,
-        soldierCount,
-        lastWagePaidAt,
-        hasChopper,
-      }) => {
-        upsertStoredBuilding({
-          id: structure.persistedId ?? null,
-          type,
-          x: col,
-          y: row,
-          level,
-          isUpgrading,
-          upgradeCompleteAt,
-          machineGold,
-          lastGeneratedAt,
-          soldierCount,
-          lastWagePaidAt,
-          hasChopper,
-        }, session);
-        persistCurrentSnapshot();
-
-        if (!token) {
-          return;
-        }
-
-        try {
-          const savedBuilding = await addBuilding(
-            {
-              type,
-              x: col,
-              y: row,
-            },
-            token
-          );
-
-          structure.persistedId = savedBuilding.id ?? null;
-          upsertStoredBuilding({
-            ...savedBuilding,
-            level,
-            isUpgrading,
-            upgradeCompleteAt,
-            machineGold,
-            lastGeneratedAt,
-            soldierCount,
-            lastWagePaidAt,
-            hasChopper,
-          }, session);
-          persistCurrentSnapshot();
-        } catch (error) {
-          console.error("Unable to save building:", error);
-        }
+      const handleStructurePlaced = () => {
+        persistAndSyncSnapshot();
       };
 
-      const handleStructureMoved = async ({
+      const handleStructureMoved = ({
         structure,
         type,
-        previousRow,
-        previousCol,
         row,
         col,
         level,
         isUpgrading,
         upgradeCompleteAt,
         machineGold,
-        lastGeneratedAt,
         maxGold,
         soldierCount,
         maxSoldiers,
         nextWageAt,
-        lastWagePaidAt,
         hasChopper,
+        hasTank,
+        tankCost,
+        tankHealth,
+        tankDamage,
       }) => {
-        removeStoredBuilding({
-          id: structure.persistedId ?? null,
-          type,
-          x: previousCol,
-          y: previousRow,
-        }, session);
-        upsertStoredBuilding({
-          id: structure.persistedId ?? null,
-          type,
-          x: col,
-          y: row,
-          level,
-          isUpgrading,
-          upgradeCompleteAt,
-          machineGold,
-          lastGeneratedAt,
-          soldierCount,
-          lastWagePaidAt,
-          hasChopper,
-        }, session);
-        persistCurrentSnapshot();
+        persistAndSyncSnapshot();
 
         setSelectedPlacedBuilding({
           id: structure.persistedId ?? null,
@@ -240,29 +246,15 @@ export default function GamePage() {
           maxSoldiers,
           nextWageAt,
           hasChopper,
+          hasTank,
+          tankCost,
+          tankHealth,
+          tankDamage,
         });
         setIsMoveMode(false);
-
-        if (!token || !structure.persistedId) {
-          return;
-        }
-
-        try {
-          await updateBuilding(
-            structure.persistedId,
-            {
-              x: col,
-              y: row,
-            },
-            token
-          );
-        } catch (error) {
-          console.error("Unable to move building:", error);
-        }
       };
 
       const handleStructureResourceUpdated = ({
-        id,
         type,
         row,
         col,
@@ -270,27 +262,15 @@ export default function GamePage() {
         isUpgrading,
         upgradeCompleteAt,
         machineGold,
-        lastGeneratedAt,
         maxGold,
         soldierCount,
-        lastWagePaidAt,
         hasChopper,
+        hasTank,
+        tankCost,
+        tankHealth,
+        tankDamage,
       }) => {
-        upsertStoredBuilding({
-          id: id ?? null,
-          type,
-          x: col,
-          y: row,
-          level,
-          isUpgrading,
-          upgradeCompleteAt,
-          machineGold,
-          lastGeneratedAt,
-          soldierCount,
-          lastWagePaidAt,
-          hasChopper,
-        }, session);
-        persistCurrentSnapshot();
+        persistAndSyncSnapshot();
 
         setSelectedPlacedBuilding((current) => {
           if (!current || current.type !== type || current.row !== row || current.col !== col) {
@@ -308,31 +288,22 @@ export default function GamePage() {
             nextWageAt: current.nextWageAt,
             maxSoldiers: current.maxSoldiers,
             hasChopper,
+            hasTank,
+            tankCost,
+            tankHealth,
+            tankDamage,
           };
         });
       };
 
-      const handleStructureSold = async ({ id, type, row, col }) => {
-        removeStoredBuilding({ id, type, x: col, y: row }, session);
-        persistCurrentSnapshot();
+      const handleStructureSold = () => {
+        persistAndSyncSnapshot();
         setSelectedPlacedBuilding(null);
         setIsMoveMode(false);
         setHireModalOpen(false);
-
-        if (!token || !id) {
-          return;
-        }
-
-        try {
-          await deleteBuilding(id, token);
-        } catch (error) {
-          console.error("Unable to delete building:", error);
-        }
       };
 
-      const handleStructureUpgradeStarted = async ({
-        structure,
-        id,
+      const handleStructureUpgradeStarted = ({
         type,
         row,
         col,
@@ -340,27 +311,15 @@ export default function GamePage() {
         isUpgrading,
         upgradeCompleteAt,
         machineGold,
-        lastGeneratedAt,
         maxGold,
         soldierCount,
-        lastWagePaidAt,
         hasChopper,
+        hasTank,
+        tankCost,
+        tankHealth,
+        tankDamage,
       }) => {
-        upsertStoredBuilding({
-          id: id ?? structure?.persistedId ?? null,
-          type,
-          x: col,
-          y: row,
-          level,
-          isUpgrading,
-          upgradeCompleteAt,
-          machineGold,
-          lastGeneratedAt,
-          soldierCount,
-          lastWagePaidAt,
-          hasChopper,
-        }, session);
-        persistCurrentSnapshot();
+        persistAndSyncSnapshot();
 
         setSelectedPlacedBuilding((current) => {
           if (!current || current.type !== type || current.row !== row || current.col !== col) {
@@ -378,31 +337,15 @@ export default function GamePage() {
             nextWageAt: current.nextWageAt,
             maxSoldiers: current.maxSoldiers,
             hasChopper,
+            hasTank,
+            tankCost,
+            tankHealth,
+            tankDamage,
           };
         });
-
-        if (!token || !id) {
-          return;
-        }
-
-        try {
-          await updateBuilding(
-            id,
-            {
-              level,
-              isUpgrading,
-              upgradeCompleteAt: new Date(upgradeCompleteAt).toISOString(),
-            },
-            token
-          );
-        } catch (error) {
-          console.error("Unable to start building upgrade:", error);
-        }
       };
 
-      const handleStructureUpgradeCompleted = async ({
-        structure,
-        id,
+      const handleStructureUpgradeCompleted = ({
         type,
         row,
         col,
@@ -410,27 +353,15 @@ export default function GamePage() {
         isUpgrading,
         upgradeCompleteAt,
         machineGold,
-        lastGeneratedAt,
         maxGold,
         soldierCount,
-        lastWagePaidAt,
         hasChopper,
+        hasTank,
+        tankCost,
+        tankHealth,
+        tankDamage,
       }) => {
-        upsertStoredBuilding({
-          id: id ?? structure?.persistedId ?? null,
-          type,
-          x: col,
-          y: row,
-          level,
-          isUpgrading,
-          upgradeCompleteAt,
-          machineGold,
-          lastGeneratedAt,
-          soldierCount,
-          lastWagePaidAt,
-          hasChopper,
-        }, session);
-        persistCurrentSnapshot();
+        persistAndSyncSnapshot();
 
         setSelectedPlacedBuilding((current) => {
           if (!current || current.type !== type || current.row !== row || current.col !== col) {
@@ -448,31 +379,15 @@ export default function GamePage() {
             nextWageAt: current.nextWageAt,
             maxSoldiers: current.maxSoldiers,
             hasChopper,
+            hasTank,
+            tankCost,
+            tankHealth,
+            tankDamage,
           };
         });
-
-        if (!token || !id) {
-          return;
-        }
-
-        try {
-          await updateBuilding(
-            id,
-            {
-              level,
-              isUpgrading,
-              upgradeCompleteAt: null,
-            },
-            token
-          );
-        } catch (error) {
-          console.error("Unable to finish building upgrade:", error);
-        }
       };
 
-      const handleStructureUpgradeCancelled = async ({
-        structure,
-        id,
+      const handleStructureUpgradeCancelled = ({
         type,
         row,
         col,
@@ -480,27 +395,15 @@ export default function GamePage() {
         isUpgrading,
         upgradeCompleteAt,
         machineGold,
-        lastGeneratedAt,
         maxGold,
         soldierCount,
-        lastWagePaidAt,
         hasChopper,
+        hasTank,
+        tankCost,
+        tankHealth,
+        tankDamage,
       }) => {
-        upsertStoredBuilding({
-          id: id ?? structure?.persistedId ?? null,
-          type,
-          x: col,
-          y: row,
-          level,
-          isUpgrading,
-          upgradeCompleteAt,
-          machineGold,
-          lastGeneratedAt,
-          soldierCount,
-          lastWagePaidAt,
-          hasChopper,
-        }, session);
-        persistCurrentSnapshot();
+        persistAndSyncSnapshot();
 
         setSelectedPlacedBuilding((current) => {
           if (!current || current.type !== type || current.row !== row || current.col !== col) {
@@ -518,30 +421,15 @@ export default function GamePage() {
             nextWageAt: current.nextWageAt,
             maxSoldiers: current.maxSoldiers,
             hasChopper,
+            hasTank,
+            tankCost,
+            tankHealth,
+            tankDamage,
           };
         });
-
-        if (!token || !id) {
-          return;
-        }
-
-        try {
-          await updateBuilding(
-            id,
-            {
-              level,
-              isUpgrading,
-              upgradeCompleteAt: null,
-            },
-            token
-          );
-        } catch (error) {
-          console.error("Unable to cancel building upgrade:", error);
-        }
       };
 
       const handleStructureArmyUpdated = ({
-        id,
         type,
         row,
         col,
@@ -549,29 +437,17 @@ export default function GamePage() {
         isUpgrading,
         upgradeCompleteAt,
         machineGold,
-        lastGeneratedAt,
         maxGold,
         soldierCount,
-        lastWagePaidAt,
         maxSoldiers,
         nextWageAt,
         hasChopper,
+        hasTank,
+        tankCost,
+        tankHealth,
+        tankDamage,
       }) => {
-        upsertStoredBuilding({
-          id: id ?? null,
-          type,
-          x: col,
-          y: row,
-          level,
-          isUpgrading,
-          upgradeCompleteAt,
-          machineGold,
-          lastGeneratedAt,
-          soldierCount,
-          lastWagePaidAt,
-          hasChopper,
-        }, session);
-        persistCurrentSnapshot();
+        persistAndSyncSnapshot();
 
         setSelectedPlacedBuilding((current) => {
           if (!current || current.type !== type || current.row !== row || current.col !== col) {
@@ -589,6 +465,10 @@ export default function GamePage() {
             maxSoldiers,
             nextWageAt,
             hasChopper,
+            hasTank,
+            tankCost,
+            tankHealth,
+            tankDamage,
           };
         });
       };
@@ -612,37 +492,52 @@ export default function GamePage() {
 
       const loadInitialState = async () => {
         try {
-          const localBuildings = getStoredBuildings(session);
-          const localGold = getStoredGold(session);
-          let resolvedGold = localGold ?? 1200;
-          let resolvedBuildings = localBuildings;
+          const localSnapshot = getLocalGameSnapshot(session) ?? {
+            gold: 1200,
+            buildings: [],
+          };
+          let resolvedSnapshot = localSnapshot;
+          let shouldSyncResolvedSnapshot = false;
+          let shouldMarkServerAuthority = false;
 
           if (token) {
-            const [savedGameState, savedBuildings] = await Promise.all([
-              fetchGameState(token),
-              fetchBuildings(token),
-            ]);
-            const serverGold = savedGameState.gold ?? 1200;
-            resolvedGold =
-              localGold !== null ? Math.max(localGold, serverGold) : serverGold;
-            resolvedBuildings = mergeStoredBuildings(savedBuildings, session);
+            const serverSnapshot = await fetchGameSnapshot(token);
 
-            if (resolvedGold !== serverGold) {
-              await updateGameState({ gold: resolvedGold }, token);
+            if (shouldPreferLocalSnapshot(localSnapshot, serverSnapshot)) {
+              resolvedSnapshot = localSnapshot;
+              shouldSyncResolvedSnapshot = true;
+            } else {
+              resolvedSnapshot = serverSnapshot;
+              shouldMarkServerAuthority = true;
             }
           }
 
-          gameScene.initializeFromSnapshot({
-            gold: resolvedGold,
-            buildings: resolvedBuildings,
-          });
-          saveStoredGold(resolvedGold, session);
-          persistCurrentSnapshot();
+          if (localSnapshot?.camera && !resolvedSnapshot?.camera) {
+            resolvedSnapshot = {
+              ...resolvedSnapshot,
+              camera: localSnapshot.camera,
+            };
+          }
+
+          gameScene.initializeFromSnapshot(resolvedSnapshot);
+          const initializedSnapshot = persistCurrentSnapshot(
+            shouldMarkServerAuthority ? { serverSyncedAt: Date.now() } : {}
+          );
+
+          if (
+            token
+            && (
+              shouldSyncResolvedSnapshot
+              || JSON.stringify(initializedSnapshot) !== JSON.stringify(resolvedSnapshot)
+            )
+          ) {
+            queueSnapshotSync();
+          }
         } catch (error) {
           console.error("Unable to load saved game state:", error);
-          gameScene.initializeFromSnapshot({
-            gold: getStoredGold(session) ?? 1200,
-            buildings: getStoredBuildings(session),
+          gameScene.initializeFromSnapshot(getLocalGameSnapshot(session) ?? {
+            gold: 1200,
+            buildings: [],
           });
           persistCurrentSnapshot();
         }
@@ -661,6 +556,9 @@ export default function GamePage() {
 
       gameRef.current.cleanup = () => {
         persistCurrentSnapshot();
+        if (syncTimeoutId) {
+          window.clearTimeout(syncTimeoutId);
+        }
         window.removeEventListener("beforeunload", handlePageHide);
         window.removeEventListener("pagehide", handlePageHide);
         document.removeEventListener("visibilitychange", handleVisibilityChange);
@@ -741,7 +639,6 @@ export default function GamePage() {
   const handleConfirmHireSoldier = () => {
     const gameScene = gameRef.current?.scene?.getScene("GameScene");
     gameScene?.hireSoldierAtSelectedBuilding();
-    setHireModalOpen(false);
   };
 
   const handleRemoveSoldiers = () => {
@@ -762,6 +659,11 @@ export default function GamePage() {
     gameScene?.buyChopperAtSelectedBuilding();
   };
 
+  const handleBuyTank = () => {
+    const gameScene = gameRef.current?.scene?.getScene("GameScene");
+    gameScene?.buyTankAtSelectedBuilding();
+  };
+
   const handleSellChopper = () => {
     const gameScene = gameRef.current?.scene?.getScene("GameScene");
     gameScene?.sellChopperAtSelectedBuilding();
@@ -779,9 +681,15 @@ export default function GamePage() {
   const upgradeCost = selectedPlacedBuilding
     ? getBuildingUpgradeCost(selectedPlacedBuilding.type)
     : 0;
+  const upgradeCap = selectedPlacedBuilding?.type === "town-hall"
+    ? 2
+    : Math.min(2, gameState.townHallLevel ?? 1);
+  const blockedByTownHall = selectedPlacedBuilding
+    && selectedPlacedBuilding.type !== "town-hall"
+    && (selectedPlacedBuilding.level ?? 1) >= upgradeCap;
   const canUpgrade = selectedPlacedBuilding
     && !selectedPlacedBuilding.isUpgrading
-    && (selectedPlacedBuilding.level ?? 1) < 2
+    && (selectedPlacedBuilding.level ?? 1) < upgradeCap
     && gameState.gold >= upgradeCost;
   const wageRemainingMs = selectedPlacedBuilding?.nextWageAt
     ? Math.max(0, Number(selectedPlacedBuilding.nextWageAt) - clock)
@@ -802,88 +710,102 @@ export default function GamePage() {
     && gameState.gold >= (selectedPlacedBuilding.chopperCost ?? 0);
   const canSellChopper = selectedPlacedBuilding?.type === "skyport"
     && selectedPlacedBuilding.hasChopper;
-  const availableSoldierOption = SOLDIER_OPTIONS.find((option) => option.available);
-  const canStartWar = gameState.totalSoldiers > 0;
+  const canBuyTank = selectedPlacedBuilding?.type === "battle-tank"
+    && !selectedPlacedBuilding.hasTank
+    && gameState.gold >= (selectedPlacedBuilding.tankCost ?? 0);
+  const tankGoldShortfall = selectedPlacedBuilding?.type === "battle-tank"
+    ? Math.max(0, (selectedPlacedBuilding.tankCost ?? 0) - gameState.gold)
+    : 0;
+  const canStartWar = (gameState.totalArmyUnits ?? 0) > 0;
   const profileName = activeSession?.name || activeSession?.email?.split("@")[0] || "Commander";
   const profileId = activeSession?.playerId
     || (activeSession?.id ? `PLYR-${String(activeSession.id).padStart(6, "0")}` : "-");
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,#b7d7a8_0%,#9ec58c_45%,#86b174_100%)] text-slate-950">
+    <main className="font-black-ops min-h-screen bg-[radial-gradient(circle_at_top,#c4ddb4_0%,#92bc7a_42%,#6f9d58_100%)] text-slate-950">
       <section className="relative h-screen w-full overflow-hidden bg-[radial-gradient(circle_at_30%_30%,#9fd37f_0%,#86bd69_38%,#73ab58_100%)]">
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-3 p-4 sm:p-5">
-          <div className="pointer-events-auto flex flex-wrap gap-3">
-            <div className="px-1 py-1">
-              <p className="text-xs uppercase tracking-[0.3em] text-emerald-800/75">
-                Gold
-              </p>
-              <p className="mt-1 text-3xl font-bold text-emerald-950">
-                {gameState.gold}
-              </p>
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.2),transparent_26%),linear-gradient(180deg,rgba(10,25,18,0.04)_0%,rgba(10,25,18,0.14)_100%)]" />
+
+        <motion.div
+          initial={{ opacity: 0, y: -18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="pointer-events-none absolute inset-x-0 top-0 z-10 p-3 sm:p-4"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="pointer-events-auto flex w-[7.2rem] flex-col gap-1">
+              <div className="rounded-[0.8rem] border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.56)_0%,rgba(15,23,42,0.38)_100%)] px-2 py-1.5 text-white backdrop-blur-sm">
+                <p className="text-[0.5rem] uppercase tracking-[0.24em] text-emerald-300/75">Base</p>
+                <p className="mt-1 text-[0.82rem] font-black leading-tight text-white">{profileName}</p>
+                <p className="mt-0.5 text-[0.46rem] uppercase tracking-[0.08em] text-slate-100/90">{profileId}</p>
+              </div>
+
+              <HudMetric label="Gold" value={formatCompactNumber(gameState.gold)} tone="emerald" />
+              <HudMetric label="Troops" value={formatCompactNumber(gameState.totalArmyUnits ?? 0)} tone="sky" />
+              <HudMetric label="Town Hall" value={`Lv ${gameState.townHallLevel ?? 1}`} tone="amber" />
+
+              {gameState.woodMachines > 0 ? (
+                <HudMetric
+                  label="Wood Machine"
+                  value={
+                    gameState.fullWoodMachines > 0
+                      ? `${gameState.fullWoodMachines} Full`
+                      : `${gameState.totalMachineGold}/${gameState.totalMachineCapacity}`
+                  }
+                  tone="rose"
+                />
+              ) : null}
             </div>
 
-            {gameState.woodMachines > 0 ? (
-              <div className="px-1 py-1">
-                <p className="text-xs uppercase tracking-[0.3em] text-amber-800/75">
-                  Wood Machine
-                </p>
-                <p className="mt-1 text-lg font-bold text-amber-950">
-                  {gameState.fullWoodMachines > 0
-                    ? `${gameState.fullWoodMachines} full na siya`
-                    : `${gameState.totalMachineGold}/${
-                        gameState.totalMachineCapacity
-                      }`}
-                </p>
-              </div>
-            ) : null}
+            <div className="pointer-events-auto flex items-center gap-1.5">
+              <CommandButton
+                onClick={() => navigate("/profile", { state: { backgroundLocation: location } })}
+                className="border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-2.5 py-1.5 text-[10px] text-sky-50 backdrop-blur-sm hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)]"
+              >
+                Profile
+              </CommandButton>
+              <CommandButton
+                onClick={() => setShopOpen((open) => !open)}
+                className="border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-2.5 py-1.5 text-[10px] text-white backdrop-blur-sm hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)]"
+              >
+                {shopOpen ? "Hide Shop" : "Open Shop"}
+              </CommandButton>
+            </div>
           </div>
-
-          <div className="pointer-events-auto flex items-center gap-2">
-            <button
-              onClick={() => navigate("/profile")}
-              className="rounded-2xl border border-sky-400/40 bg-sky-950/70 px-4 py-3 font-semibold text-sky-100 shadow-[0_10px_30px_rgba(2,6,23,0.28)] transition hover:bg-sky-900"
-            >
-              Profile
-            </button>
-            <button
-              onClick={() => setShopOpen((open) => !open)}
-              className="rounded-2xl bg-slate-950 px-5 py-3 font-semibold text-white shadow-[0_10px_30px_rgba(2,6,23,0.28)] transition hover:bg-slate-800"
-            >
-              {shopOpen ? "Hide Shop" : "Open Shop"}
-            </button>
-          </div>
-        </div>
-
-        <div className="pointer-events-none absolute right-4 top-20 z-10 sm:right-5 sm:top-24">
-          <div className="rounded-xl border border-white/15 bg-slate-950/70 px-3 py-2 text-right text-white shadow-[0_12px_24px_rgba(2,6,23,0.24)] backdrop-blur">
-            <p className="text-xs font-semibold text-emerald-300">{profileName}</p>
-            <p className="text-[10px] uppercase tracking-[0.2em] text-slate-300">{profileId}</p>
-          </div>
-        </div>
+        </motion.div>
 
         <div ref={gameRootRef} className="h-full w-full overflow-hidden" />
 
+        <AnimatePresence>
         {selectedPlacedBuilding ? (
-          <div className="pointer-events-none absolute inset-x-0 bottom-14 z-10 flex justify-center px-4">
-            <div className="pointer-events-auto flex max-w-[78vw] flex-wrap items-center justify-center gap-1.5 rounded-2xl border border-white/15 bg-slate-950/84 px-2.5 py-2 text-white shadow-[0_14px_28px_rgba(2,6,23,0.34)] backdrop-blur">
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 24 }}
+            transition={{ duration: 0.25 }}
+            className="pointer-events-none absolute inset-x-0 bottom-14 z-10 flex justify-center px-4"
+          >
+            <div className="pointer-events-auto flex max-w-[82vw] flex-wrap items-center justify-center gap-2 rounded-[1.4rem] border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.82)_0%,rgba(15,23,42,0.68)_100%)] px-3 py-3 text-white shadow-[0_20px_60px_rgba(2,6,23,0.28)] backdrop-blur-xl">
               <div className="min-w-[9.5rem] max-w-[11rem] pr-1">
-                <p className="text-[0.68rem] uppercase tracking-[0.28em] text-amber-300/75">
-                  Selected
-                </p>
-                <p className="text-sm font-black">{selectedPlacedBuilding.name}</p>
-                <p className="text-[11px] text-slate-400">
+                <p className="text-[0.68rem] uppercase tracking-[0.28em] text-amber-300/75">Selected</p>
+                <p className="mt-1 text-base font-black text-white">{selectedPlacedBuilding.name}</p>
+                <p className="mt-1 text-[11px] text-slate-400">
                   {isMoveMode ? "Choose a new tile to replace this building." : "Choose an action."}
                 </p>
-                <p className="mt-1 text-[11px] font-semibold text-sky-300">
+                <p className="mt-2 inline-flex rounded-full border border-sky-300/20 bg-sky-400/10 px-2.5 py-1 text-[11px] font-semibold text-sky-200">
                   Level {selectedPlacedBuilding.level ?? 1}
                 </p>
                 {selectedPlacedBuilding.isUpgrading ? (
                   <p className="mt-1 text-[11px] font-semibold text-amber-300">
                     Upgrading... {upgradeMinutes}:{String(upgradeSeconds).padStart(2, "0")}
                   </p>
-                ) : (selectedPlacedBuilding.level ?? 1) < 2 ? (
+                ) : (selectedPlacedBuilding.level ?? 1) < upgradeCap ? (
                   <p className="mt-1 text-[11px] font-semibold text-emerald-300">
                     Upgrade Cost: {upgradeCost} gold
+                  </p>
+                ) : blockedByTownHall ? (
+                  <p className="mt-1 text-[11px] font-semibold text-rose-300">
+                    Upgrade Town Hall to level {Math.min(2, (selectedPlacedBuilding.level ?? 1) + 1)} first
                   </p>
                 ) : null}
                 {selectedPlacedBuilding.type === "wood-machine" ? (
@@ -896,7 +818,7 @@ export default function GamePage() {
                   <>
                     <p className="mt-1 text-[11px] font-semibold text-amber-300">
                       Soldiers: {selectedPlacedBuilding.soldierCount ?? 0}/
-                      {selectedPlacedBuilding.maxSoldiers ?? 50}
+                      {selectedPlacedBuilding.maxSoldiers ?? 15}
                     </p>
                     <p className="mt-1 text-[11px] font-semibold text-emerald-300">
                       Kain cost: {feedCost} gold
@@ -908,6 +830,32 @@ export default function GamePage() {
                         {selectedPlacedBuilding.isHungry
                           ? "Gutom na sila"
                           : `May food pa for ${wageHours}h ${String(wageMinutes).padStart(2, "0")}m`}
+                      </p>
+                    ) : null}
+                  </>
+                ) : null}
+                {selectedPlacedBuilding.type === "battle-tank" ? (
+                  <>
+                    <p className="mt-1 text-[11px] font-semibold text-amber-300">
+                      {selectedPlacedBuilding.hasTank
+                        ? "Tank ready for battle"
+                        : `Buy Tank: ${selectedPlacedBuilding.tankCost ?? 5000} gold`}
+                    </p>
+                    <p className="mt-1 text-[11px] font-semibold text-slate-200">
+                      Tank HP {selectedPlacedBuilding.tankHealth ?? 0} • Damage {selectedPlacedBuilding.tankDamage ?? 0}
+                    </p>
+                    <p className="mt-1 text-[11px] font-semibold text-emerald-300">
+                      {selectedPlacedBuilding.hasTank
+                        ? "Upgrade para lumakas ang HP at damage"
+                        : "Building pa lang ito. Kailangan mo pang bumili ng actual tank."}
+                    </p>
+                    {!selectedPlacedBuilding.hasTank ? (
+                      <p className={`mt-1 text-[11px] font-semibold ${
+                        tankGoldShortfall > 0 ? "text-rose-300" : "text-cyan-300"
+                      }`}>
+                        {tankGoldShortfall > 0
+                          ? `Kulang ka ng ${tankGoldShortfall} gold para makabili ng tank.`
+                          : "Pwede mo nang bilhin ang actual tank para sa laban."}
                       </p>
                     ) : null}
                   </>
@@ -924,7 +872,7 @@ export default function GamePage() {
               <button
                 type="button"
                 onClick={handleMoveBuilding}
-                className="rounded-xl bg-amber-500 px-2.5 py-2 text-[11px] font-bold text-slate-950 transition hover:bg-amber-400"
+                className="rounded-2xl bg-amber-400 px-3 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-950 transition hover:-translate-y-0.5 hover:bg-amber-300"
               >
                 Move
               </button>
@@ -933,11 +881,13 @@ export default function GamePage() {
                 type="button"
                 onClick={handleUpgradeBuilding}
                 disabled={!canUpgrade}
-                className="rounded-xl bg-sky-500 px-2.5 py-2 text-[11px] font-bold text-sky-950 transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-2xl bg-sky-400 px-3 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-sky-950 transition hover:-translate-y-0.5 hover:bg-sky-300 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
               >
                 {selectedPlacedBuilding.isUpgrading
                   ? "Upgrading"
-                  : (selectedPlacedBuilding.level ?? 1) >= 2
+                  : blockedByTownHall
+                    ? "Town Hall Locked"
+                    : (selectedPlacedBuilding.level ?? 1) >= upgradeCap
                     ? "Max Level"
                     : `Upgrade (${upgradeCost})`}
               </button>
@@ -946,7 +896,7 @@ export default function GamePage() {
                 <button
                   type="button"
                   onClick={handleCancelUpgrade}
-                  className="rounded-xl bg-slate-200 px-2.5 py-2 text-[11px] font-bold text-slate-950 transition hover:bg-white"
+                  className="rounded-2xl bg-slate-200 px-3 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-950 transition hover:-translate-y-0.5 hover:bg-white"
                 >
                   Cancel Upgrade
                 </button>
@@ -957,7 +907,7 @@ export default function GamePage() {
                   type="button"
                   onClick={handleCollectGold}
                   disabled={(selectedPlacedBuilding.machineGold ?? 0) <= 0 || selectedPlacedBuilding.isUpgrading}
-                  className="rounded-xl bg-emerald-500 px-2.5 py-2 text-[11px] font-bold text-emerald-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-2xl bg-emerald-400 px-3 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-emerald-950 transition hover:-translate-y-0.5 hover:bg-emerald-300 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
                 >
                   Collect Gold
                 </button>
@@ -969,7 +919,7 @@ export default function GamePage() {
                     type="button"
                     onClick={handleHireSoldier}
                     disabled={!canHireSoldier}
-                    className="rounded-xl bg-violet-500 px-2.5 py-2 text-[11px] font-bold text-white transition hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="rounded-2xl bg-violet-500 px-3 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white transition hover:-translate-y-0.5 hover:bg-violet-400 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
                   >
                     {canHireSoldier ? "Hire Soldier" : "Max Soldiers"}
                   </button>
@@ -980,7 +930,7 @@ export default function GamePage() {
                     max={Math.max(1, selectedPlacedBuilding.soldierCount ?? 1)}
                     value={removeSoldierCount}
                     onChange={(event) => setRemoveSoldierCount(event.target.value)}
-                    className="w-12 rounded-xl border border-white/10 bg-slate-900 px-1.5 py-2 text-center text-[11px] font-bold text-white outline-none transition focus:border-rose-400"
+                    className="w-14 rounded-2xl border border-white/10 bg-slate-900/80 px-2 py-2.5 text-center text-[11px] font-bold text-white outline-none transition focus:border-rose-400"
                   />
 
                   <button
@@ -990,7 +940,7 @@ export default function GamePage() {
                       !canRemoveSoldier
                       || parsedRemoveSoldierCount > (selectedPlacedBuilding.soldierCount ?? 0)
                     }
-                    className="rounded-xl bg-rose-500 px-2.5 py-2 text-[11px] font-bold text-white transition hover:bg-rose-400 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="rounded-2xl bg-rose-500 px-3 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white transition hover:-translate-y-0.5 hover:bg-rose-400 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
                   >
                     Remove
                   </button>
@@ -999,11 +949,26 @@ export default function GamePage() {
                     type="button"
                     onClick={handleFeedSoldiers}
                     disabled={!canFeedSoldiers}
-                    className="rounded-xl bg-emerald-500 px-2.5 py-2 text-[11px] font-bold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="rounded-2xl bg-emerald-400 px-3 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-950 transition hover:-translate-y-0.5 hover:bg-emerald-300 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
                   >
                     Kain Na
                   </button>
                 </div>
+              ) : null}
+
+              {selectedPlacedBuilding.type === "battle-tank" ? (
+                <button
+                  type="button"
+                  onClick={handleBuyTank}
+                  disabled={!canBuyTank}
+                  className="rounded-2xl bg-cyan-400 px-3 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-950 transition hover:-translate-y-0.5 hover:bg-cyan-300 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
+                >
+                  {selectedPlacedBuilding.hasTank
+                    ? "Tank Ready"
+                    : tankGoldShortfall > 0
+                      ? `Need ${tankGoldShortfall} More`
+                      : `Buy Tank (${selectedPlacedBuilding.tankCost ?? 5000})`}
+                </button>
               ) : null}
 
               {selectedPlacedBuilding.type === "skyport" ? (
@@ -1012,7 +977,7 @@ export default function GamePage() {
                     type="button"
                     onClick={handleSellChopper}
                     disabled={!canSellChopper}
-                    className="rounded-xl bg-orange-500 px-2.5 py-2 text-[11px] font-bold text-slate-950 transition hover:bg-orange-400 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="rounded-2xl bg-orange-400 px-3 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-950 transition hover:-translate-y-0.5 hover:bg-orange-300 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
                   >
                     Sell Chopper
                   </button>
@@ -1021,7 +986,7 @@ export default function GamePage() {
                     type="button"
                     onClick={handleBuyChopper}
                     disabled={!canBuyChopper}
-                    className="rounded-xl bg-cyan-500 px-2.5 py-2 text-[11px] font-bold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="rounded-2xl bg-cyan-400 px-3 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-950 transition hover:-translate-y-0.5 hover:bg-cyan-300 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
                   >
                     Buy Chopper
                   </button>
@@ -1031,36 +996,42 @@ export default function GamePage() {
               <button
                 type="button"
                 onClick={handleSellBuilding}
-                className="rounded-xl bg-rose-600 px-2.5 py-2 text-[11px] font-bold text-white transition hover:bg-rose-500"
+                className="rounded-2xl bg-rose-600 px-3 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white transition hover:-translate-y-0.5 hover:bg-rose-500"
               >
                 Sell
               </button>
             </div>
-          </div>
+          </motion.div>
         ) : null}
+        </AnimatePresence>
 
-        <div className="pointer-events-none absolute bottom-8 left-4 z-10 sm:bottom-10 sm:left-5">
+        <motion.div
+          initial={{ opacity: 0, x: -16 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.45, delay: 0.12 }}
+          className="pointer-events-none absolute bottom-8 left-4 z-10 sm:bottom-10 sm:left-5"
+        >
           <button
             type="button"
             onClick={handleStartWar}
             disabled={!canStartWar}
-            className="pointer-events-auto rounded-2xl bg-rose-600 px-5 py-3 text-sm font-bold uppercase tracking-[0.18em] text-white shadow-[0_16px_36px_rgba(190,24,93,0.35)] transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-50"
+            className="pointer-events-auto rounded-[1.35rem] border border-rose-300/20 bg-[linear-gradient(135deg,rgba(225,29,72,0.92)_0%,rgba(244,63,94,0.9)_100%)] px-6 py-4 text-sm font-black uppercase tracking-[0.24em] text-white shadow-[0_22px_40px_rgba(190,24,93,0.28)] transition hover:-translate-y-0.5 hover:shadow-[0_26px_50px_rgba(190,24,93,0.36)] disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
           >
             Start War
           </button>
-        </div>
+        </motion.div>
 
         {hireModalOpen && selectedPlacedBuilding?.type === "command-center" ? (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/55 px-4">
-            <div className="w-full max-w-[17.5rem] rounded-[1.5rem] border border-white/10 bg-slate-950/95 p-2.5 text-white shadow-[0_24px_80px_rgba(2,6,23,0.55)]">
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/55 px-4 backdrop-blur-[3px]">
+            <div className="w-full max-w-[18.5rem] rounded-[1.4rem] border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.82)_0%,rgba(15,23,42,0.68)_100%)] p-3 text-white shadow-[0_20px_60px_rgba(2,6,23,0.28)] backdrop-blur-xl">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-[0.68rem] uppercase tracking-[0.3em] text-amber-300/70">
                     Command Center
                   </p>
-                  <h3 className="mt-1 text-lg font-black">Hire Soldier</h3>
+                  <h3 className="mt-1 text-lg font-black">Unit Shop</h3>
                   <p className="mt-2 text-xs text-slate-400">
-                    Pumili ng soldier na gusto mong i-hire. Isang option pa lang ang available sa ngayon.
+                    Dito ka bibili ng soldiers para sa selected Command Center.
                   </p>
                 </div>
 
@@ -1074,45 +1045,34 @@ export default function GamePage() {
               </div>
 
               <div className="mt-2.5 grid gap-2">
-                {SOLDIER_OPTIONS.map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    onClick={option.available ? handleConfirmHireSoldier : undefined}
-                    disabled={!option.available || !canHireSoldier}
-                    className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-2 text-left transition hover:border-emerald-300 hover:bg-emerald-400/15 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <div className="flex h-14 items-center justify-center rounded-xl bg-slate-900/70 p-1.5">
-                      {option.image ? (
-                        <img
-                          src={option.image}
-                          alt={option.name}
-                          className="h-full w-full object-contain"
-                          draggable="false"
-                        />
-                      ) : (
-                        <span className="text-lg font-black text-emerald-200">SOLDIER</span>
-                      )}
-                    </div>
-                    <p className="mt-2 text-sm font-bold text-white">{option.name}</p>
-                    <p className="mt-1 text-xs text-slate-300">{option.description}</p>
-                    <p className="mt-2 text-xs font-semibold text-amber-300">
-                      Wage: {option.wage} gold / 24 hrs
-                    </p>
-                    <p className="mt-1 text-xs font-semibold text-sky-300">
-                      {selectedPlacedBuilding.soldierCount ?? 0}/{selectedPlacedBuilding.maxSoldiers ?? 50} hired
-                    </p>
-                  </button>
-                ))}
+                <button
+                  type="button"
+                  onClick={handleConfirmHireSoldier}
+                  disabled={!canHireSoldier}
+                  className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-2 text-left transition hover:border-emerald-300 hover:bg-emerald-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <div className="flex h-14 items-center justify-center rounded-xl bg-slate-900/70 p-1.5">
+                    <img
+                      src="/assets/army/front/firing.png"
+                      alt="Basic Soldier"
+                      className="h-full w-full object-contain"
+                      draggable="false"
+                    />
+                  </div>
+                  <p className="mt-2 text-sm font-bold text-white">Basic Soldier</p>
+                  <p className="mt-1 text-xs text-slate-300">Starter unit para sa Command Center.</p>
+                  <p className="mt-2 text-xs font-semibold text-amber-300">
+                    Wage: 1 gold / 24 hrs
+                  </p>
+                  <p className="mt-1 text-xs font-semibold text-sky-300">
+                    {selectedPlacedBuilding.soldierCount ?? 0}/{selectedPlacedBuilding.maxSoldiers ?? 15} hired
+                  </p>
+                </button>
               </div>
 
-              {!canHireSoldier ? (
+              {!canHireSoldier && (
                 <p className="mt-4 text-sm font-semibold text-rose-300">
                   Max soldiers reached na para sa Command Center na ito.
-                </p>
-              ) : availableSoldierOption ? null : (
-                <p className="mt-4 text-sm font-semibold text-amber-300">
-                  Wala pang available soldier option sa ngayon.
                 </p>
               )}
             </div>
@@ -1120,14 +1080,29 @@ export default function GamePage() {
         ) : null}
 
         {shopOpen ? (
-          <div className="absolute inset-x-0 bottom-0 z-10 p-3 sm:p-4">
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 18 }}
+            className="absolute inset-x-0 bottom-0 z-10 p-3 sm:p-4"
+          >
             <BuildingShop
               gold={gameState.gold}
+              townHallCount={gameState.townHallCount}
+              townHallLevel={gameState.townHallLevel}
+              woodMachineCount={gameState.woodMachines}
+              woodMachineLimit={gameState.woodMachineLimit}
+              commandCenterCount={gameState.commandCenters}
+              commandCenterLimit={gameState.commandCenterLimit}
+              battleTankCount={gameState.battleTankBuildings}
+              battleTankLimit={gameState.battleTankLimit}
+              skyportCount={gameState.skyports}
+              skyportLimit={gameState.skyportLimit}
               onSelectBuilding={handleSelectBuilding}
               selectedBuilding={selectedBuilding}
               onClose={() => setShopOpen(false)}
             />
-          </div>
+          </motion.div>
         ) : null}
       </section>
     </main>

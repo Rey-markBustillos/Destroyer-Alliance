@@ -25,6 +25,13 @@ model Building {
   level             Int       @default(1)
   isUpgrading       Boolean   @default(false)
   upgradeCompleteAt DateTime?
+  machineGold       Int       @default(0)
+  lastGeneratedAt   DateTime?
+  soldierCount      Int       @default(0)
+  lastWagePaidAt    DateTime?
+  lastFedAt         DateTime?
+  hasChopper        Boolean   @default(false)
+  hasTank           Boolean   @default(false)
   userId            Int
   user              User      @relation(fields: [userId], references: [id])
 }

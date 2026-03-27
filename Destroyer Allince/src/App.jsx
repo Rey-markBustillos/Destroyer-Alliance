@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Dashboard from "./pages/Dashboard";
 import GamePage from "./pages/GamePage";
@@ -7,10 +7,14 @@ import WarPage from "./pages/WarPage";
 import Login from "./pages/login";
 import Register from "./pages/register";
 
-function App() {
+function AppRoutes() {
+  const location = useLocation();
+  const state = location.state;
+  const backgroundLocation = state?.backgroundLocation;
+
   return (
-    <BrowserRouter>
-      <Routes>
+    <>
+      <Routes location={backgroundLocation || location}>
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
@@ -49,6 +53,27 @@ function App() {
         />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
+
+      {backgroundLocation ? (
+        <Routes>
+          <Route
+            path="/profile"
+            element={(
+              <ProtectedRoute>
+                <ProfilePage />
+              </ProtectedRoute>
+            )}
+          />
+        </Routes>
+      ) : null}
+    </>
+  );
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <AppRoutes />
     </BrowserRouter>
   );
 }
