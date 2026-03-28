@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 
 import { BUILDING_LIST } from "../game/utils/buildingTypes";
@@ -7,12 +8,13 @@ export default function BuildingShop({
   onSelectBuilding,
   selectedBuilding,
   onClose,
-  townHallCount = 0,
   townHallLevel = 1,
   woodMachineCount = 0,
   woodMachineLimit = 4,
   commandCenterCount = 0,
-  commandCenterLimit = 2,
+  commandCenterLimit = 1,
+  tentCount = 0,
+  tentLimit = 4,
   battleTankCount = 0,
   battleTankLimit = 1,
   skyportCount = 0,
@@ -49,14 +51,14 @@ export default function BuildingShop({
       <div className="relative grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {BUILDING_LIST.map((building) => {
           const canAfford = gold >= building.cost;
-          const hasTownHallAlready = building.id === "town-hall" && townHallCount >= 1;
           const woodMachineCapReached = building.id === "wood-machine" && woodMachineCount >= woodMachineLimit;
           const commandCenterCapReached = building.id === "command-center" && commandCenterCount >= commandCenterLimit;
+          const tentCapReached = building.id === "tent" && tentCount >= tentLimit;
           const battleTankCapReached = building.id === "battle-tank" && battleTankCount >= battleTankLimit;
           const skyportCapReached = building.id === "skyport" && skyportCount >= skyportLimit;
-          const isLockedByRules = hasTownHallAlready
-            || woodMachineCapReached
+          const isLockedByRules = woodMachineCapReached
             || commandCenterCapReached
+            || tentCapReached
             || battleTankCapReached
             || skyportCapReached;
           const canBuy = canAfford && !isLockedByRules;
@@ -79,14 +81,7 @@ export default function BuildingShop({
               }`}
             >
               {building.shopImage ? (
-                <div className="mb-3 flex h-20 w-full items-center justify-center overflow-hidden rounded-[0.95rem] border border-white/6 bg-black/20 p-2">
-                  <img
-                    src={building.shopImage}
-                    alt={building.name}
-                    className="h-full w-full object-contain"
-                    draggable="false"
-                  />
-                </div>
+                <ShopPreviewImage building={building} />
               ) : (
                 <div
                   className="mb-3 flex h-11 w-11 items-center justify-center rounded-[0.95rem] text-xs font-black text-slate-950"
@@ -97,12 +92,12 @@ export default function BuildingShop({
               )}
               <p className="font-orbitron text-[0.95rem] font-bold text-white">{building.name}</p>
               <p className="mt-1 min-h-[2.5rem] text-[11px] leading-5 text-slate-300/80">
-                {hasTownHallAlready
-                  ? "Only 1 Town Hall"
-                  : woodMachineCapReached
-                    ? `${woodMachineCount}/${woodMachineLimit} Wood Machines`
+                {woodMachineCapReached
+                  ? `${woodMachineCount}/${woodMachineLimit} Wood Machines`
                     : commandCenterCapReached
-                      ? `${commandCenterCount}/${commandCenterLimit} Command Centers`
+                      ? "Main base already built"
+                      : tentCapReached
+                        ? `${tentCount}/${tentLimit} Soldier Tents`
                       : battleTankCapReached
                         ? `${battleTankCount}/${battleTankLimit} Battle Tanks`
                         : skyportCapReached
@@ -115,7 +110,7 @@ export default function BuildingShop({
       </div>
 
       <p className="mt-4 text-center text-xs leading-5 text-slate-300/75">
-        Town Hall is limited to 1. Command Center max is {commandCenterLimit}. Chopper Bay and Battle Tank max follow Town Hall level. Wood Machine limit starts at 4 on Town Hall level {townHallLevel}.
+        Main base is limited to 1. Soldier Tent cap is {tentLimit} at Town Hall level {townHallLevel}. Chopper Bay and Battle Tank max follow Town Hall level, and Wood Machine starts at {woodMachineLimit}.
       </p>
     </motion.div>
   );
@@ -123,4 +118,45 @@ export default function BuildingShop({
 
 function itemizeCost(cost) {
   return `${cost} gold`;
+}
+
+function ShopPreviewImage({ building }) {
+  const sources = useMemo(() => {
+    const baseSources = [building.shopImage, ...(building.fallbackShopImages ?? [])];
+    return [...new Set(baseSources.filter(Boolean))];
+  }, [building.fallbackShopImages, building.shopImage]);
+  const [sourceIndex, setSourceIndex] = useState(0);
+  const currentSource = sources[sourceIndex] ?? null;
+
+  if (!currentSource) {
+    return (
+      <div
+        className="mb-3 flex h-11 w-11 items-center justify-center rounded-[0.95rem] text-xs font-black text-slate-950"
+        style={{ backgroundColor: `#${building.color.toString(16).padStart(6, "0")}` }}
+      >
+        {building.label}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-3 flex h-20 w-full items-center justify-center overflow-hidden rounded-[0.95rem] border border-white/6 bg-black/20 p-2">
+      <img
+        src={currentSource}
+        alt={building.name}
+        className="h-full w-full object-contain"
+        style={{
+          imageRendering: "auto",
+          filter: "drop-shadow(0 8px 18px rgba(2, 6, 23, 0.22)) saturate(1.05) contrast(1.04)",
+          transform: "translateZ(0)",
+        }}
+        loading="lazy"
+        decoding="async"
+        draggable="false"
+        onError={() => {
+          setSourceIndex((index) => (index < sources.length - 1 ? index + 1 : index));
+        }}
+      />
+    </div>
+  );
 }

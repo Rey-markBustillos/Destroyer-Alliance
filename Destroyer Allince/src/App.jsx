@@ -4,6 +4,7 @@ import Dashboard from "./pages/Dashboard";
 import GamePage from "./pages/GamePage";
 import ProfilePage from "./pages/ProfilePage";
 import WarPage from "./pages/WarPage";
+import IntroStory from "./pages/IntroStory";
 import Login from "./pages/login";
 import Register from "./pages/register";
 
@@ -18,6 +19,14 @@ function AppRoutes() {
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route
+          path="/intro"
+          element={(
+            <ProtectedRoute>
+              <IntroStory />
+            </ProtectedRoute>
+          )}
+        />
         <Route
           path="/dashboard"
           element={(

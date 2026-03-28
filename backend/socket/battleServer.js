@@ -37,6 +37,10 @@ const BUILDING_WAR_CONFIG = {
 const matchmakingQueue = [];
 const battleRooms = new Map();
 const playerRoomMap = new Map();
+const onlineUsers = new Map();
+const globalChatMessages = [];
+const MAX_GLOBAL_CHAT_MESSAGES = 60;
+const GLOBAL_CHAT_ROOM = "global-chat";
 
 const getDistance = (aX, aY, bX, bY) => Math.hypot(bX - aX, bY - aY);
 
@@ -431,6 +435,23 @@ const getTokenFromHandshake = (socket) => {
   return null;
 };
 
+const getOnlineCount = () => onlineUsers.size;
+
+const buildChatMessagePayload = (message) => ({
+  id: message.id,
+  userId: message.userId,
+  playerId: message.playerId,
+  name: message.name,
+  text: message.text,
+  createdAt: message.createdAt,
+});
+
+const emitPresenceUpdate = (io) => {
+  io.emit("presence:update", {
+    onlineCount: getOnlineCount(),
+  });
+};
+
 export const createBattleSocketServer = (httpServer) => {
   const io = new Server(httpServer, {
     cors: {
@@ -455,6 +476,8 @@ export const createBattleSocketServer = (httpServer) => {
         },
         select: {
           id: true,
+          name: true,
+          playerId: true,
           email: true,
         },
       });
@@ -472,10 +495,23 @@ export const createBattleSocketServer = (httpServer) => {
   });
 
   io.on("connection", (socket) => {
+    socket.join(GLOBAL_CHAT_ROOM);
+    const existingSockets = onlineUsers.get(socket.user.id) ?? new Set();
+    existingSockets.add(socket.id);
+    onlineUsers.set(socket.user.id, existingSockets);
+
     socket.emit("socket:ready", {
       userId: socket.user.id,
-      name: socket.user.email,
+      name: socket.user.name || socket.user.email,
+      playerId: socket.user.playerId || `PLYR-${String(socket.user.id).padStart(6, "0")}`,
     });
+    socket.emit("presence:update", {
+      onlineCount: getOnlineCount(),
+    });
+    socket.emit("chat:history", {
+      messages: globalChatMessages.map(buildChatMessagePayload),
+    });
+    emitPresenceUpdate(io);
 
     socket.on("queue:join", (payload = {}) => {
       const existingRoom = getRoomBySocket(socket);
@@ -524,7 +560,43 @@ export const createBattleSocketServer = (httpServer) => {
       finishRoom(io, room, opponent?.userId ?? null, "player-left");
     });
 
+    socket.on("chat:send", (payload = {}) => {
+      const text = typeof payload?.text === "string" ? payload.text.trim() : "";
+
+      if (!text) {
+        return;
+      }
+
+      const message = {
+        id: `${socket.user.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        userId: socket.user.id,
+        playerId: socket.user.playerId || `PLYR-${String(socket.user.id).padStart(6, "0")}`,
+        name: socket.user.name || socket.user.email || `Commander ${socket.user.id}`,
+        text: text.slice(0, 240),
+        createdAt: Date.now(),
+      };
+
+      globalChatMessages.push(message);
+      if (globalChatMessages.length > MAX_GLOBAL_CHAT_MESSAGES) {
+        globalChatMessages.splice(0, globalChatMessages.length - MAX_GLOBAL_CHAT_MESSAGES);
+      }
+
+      io.to(GLOBAL_CHAT_ROOM).emit("chat:message", buildChatMessagePayload(message));
+    });
+
     socket.on("disconnect", () => {
+      const sockets = onlineUsers.get(socket.user.id);
+      if (sockets) {
+        sockets.delete(socket.id);
+
+        if (sockets.size === 0) {
+          onlineUsers.delete(socket.user.id);
+        } else {
+          onlineUsers.set(socket.user.id, sockets);
+        }
+      }
+
+      emitPresenceUpdate(io);
       removeFromQueue(socket.id, socket.user.id);
 
       const room = getRoomBySocket(socket);

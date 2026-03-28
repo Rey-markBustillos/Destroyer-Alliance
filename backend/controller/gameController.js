@@ -1,4 +1,5 @@
 import prisma from "../prismaClient.js";
+import { buildRankPayload, getRankName, getWarPointReward } from "../utils/rankSystem.js";
 
 const DEFAULT_GOLD = 1200;
 
@@ -23,6 +24,7 @@ const serializeBuilding = (building) => ({
   machineGold: building.machineGold ?? 0,
   lastGeneratedAt: serializeTimestamp(building.lastGeneratedAt),
   soldierCount: building.soldierCount ?? 0,
+  isSleeping: Boolean(building.isSleeping),
   lastWagePaidAt: serializeTimestamp(building.lastWagePaidAt),
   lastFedAt: serializeTimestamp(building.lastFedAt),
   hasChopper: Boolean(building.hasChopper),
@@ -60,6 +62,7 @@ const normalizeBuildingPayload = (building) => {
     machineGold,
     lastGeneratedAt: parseOptionalDate(building?.lastGeneratedAt),
     soldierCount,
+    isSleeping: Boolean(building?.isSleeping) && soldierCount > 0,
     lastWagePaidAt: parseOptionalDate(building?.lastWagePaidAt),
     lastFedAt: parseOptionalDate(building?.lastFedAt),
     hasChopper: Boolean(building?.hasChopper),
@@ -368,6 +371,7 @@ export const applyWarResolution = async (req, res) => {
   try {
     const targetUserId = Number(req.body?.targetUserId);
     const requestedLoot = Math.max(0, Math.floor(Number(req.body?.loot ?? 0) || 0));
+    const destructionPercent = Math.max(0, Math.floor(Number(req.body?.destructionPercent ?? 0) || 0));
     const defenderLosses = typeof req.body?.defenderLosses === "object" && req.body?.defenderLosses
       ? req.body.defenderLosses
       : null;
@@ -405,10 +409,22 @@ export const applyWarResolution = async (req, res) => {
 
     const maxLoot = Math.max(0, Math.floor((target.gold ?? 0) * 0.2));
     const transferredLoot = Math.min(requestedLoot, maxLoot);
+    const awardedWarPoints = getWarPointReward(destructionPercent);
     let attackerGold = 0;
     let targetGold = 0;
+    let attackerWarPoints = 0;
+    let attackerRankName = getRankName(0);
 
     await prisma.$transaction(async (tx) => {
+      const attacker = await tx.user.findUnique({
+        where: {
+          id: req.user.id,
+        },
+        select: {
+          warPoints: true,
+        },
+      });
+
       for (const building of target.buildings) {
         const rawLoss = defenderLosses[String(building.id)] ?? defenderLosses[building.id] ?? 0;
         const loss = Math.max(0, Math.floor(Number(rawLoss) || 0));
@@ -447,17 +463,33 @@ export const applyWarResolution = async (req, res) => {
           gold: {
             increment: transferredLoot,
           },
+          warPoints: {
+            increment: awardedWarPoints,
+          },
+          rankName: getRankName((attacker?.warPoints ?? 0) + awardedWarPoints),
         },
         select: {
           gold: true,
+          warPoints: true,
+          rankName: true,
         },
       });
 
       attackerGold = updatedAttacker.gold ?? 0;
+      attackerWarPoints = updatedAttacker.warPoints ?? 0;
+      attackerRankName = updatedAttacker.rankName || getRankName(updatedAttacker.warPoints ?? 0);
       targetGold = updatedTarget.gold ?? 0;
     });
 
-    res.json({ success: true, transferredLoot, attackerGold, targetGold });
+    res.json({
+      success: true,
+      transferredLoot,
+      attackerGold,
+      targetGold,
+      awardedWarPoints,
+      ...buildRankPayload(attackerWarPoints),
+      rankName: attackerRankName,
+    });
   } catch (error) {
     console.error("applyWarResolution error:", error);
     res.status(500).json({ message: "Unable to save battle defender losses" });

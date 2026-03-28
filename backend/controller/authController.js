@@ -1,6 +1,7 @@
 import prisma from "../prismaClient.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { buildRankPayload, getRankName } from "../utils/rankSystem.js";
 
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
@@ -10,6 +11,16 @@ const generateToken = (id) => {
 
 const buildPlayerId = (id) => `PLYR-${String(id).padStart(6, "0")}`;
 const RENAME_COST = 5000;
+
+const serializeUserProfile = (user) => ({
+  id: user.id,
+  name: user.name,
+  playerId: user.playerId,
+  email: user.email,
+  gold: user.gold,
+  ...buildRankPayload(user.warPoints ?? 0),
+  rankName: user.rankName || getRankName(user.warPoints ?? 0),
+});
 
 const ensurePlayerId = async (user) => {
   if (user?.playerId) {
@@ -50,11 +61,7 @@ export const registerUser = async (req, res) => {
     const safeUser = await ensurePlayerId(user);
 
     res.json({
-      id: safeUser.id,
-      name: safeUser.name,
-      playerId: safeUser.playerId,
-      email: safeUser.email,
-      gold: safeUser.gold,
+      ...serializeUserProfile(safeUser),
       token: generateToken(safeUser.id),
     });
   } catch (error) {
@@ -83,11 +90,7 @@ export const loginUser = async (req, res) => {
     }
 
     res.json({
-      id: user.id,
-      name: user.name,
-      playerId: user.playerId,
-      email: user.email,
-      gold: user.gold,
+      ...serializeUserProfile(user),
       token: generateToken(user.id),
     });
   } catch (error) {
@@ -107,6 +110,8 @@ export const getProfile = async (req, res) => {
         playerId: true,
         email: true,
         gold: true,
+        warPoints: true,
+        rankName: true,
       },
     });
 
@@ -115,7 +120,7 @@ export const getProfile = async (req, res) => {
     }
 
     if (user.playerId) {
-      return res.json(user);
+      return res.json(serializeUserProfile(user));
     }
 
     const patchedUser = await prisma.user.update({
@@ -127,10 +132,12 @@ export const getProfile = async (req, res) => {
         playerId: true,
         email: true,
         gold: true,
+        warPoints: true,
+        rankName: true,
       },
     });
 
-    res.json(patchedUser);
+    res.json(serializeUserProfile(patchedUser));
   } catch (error) {
     console.error("getProfile failed:", error);
     res.status(500).json({ message: "Unable to load profile." });
@@ -157,6 +164,8 @@ export const updateProfileName = async (req, res) => {
         playerId: true,
         email: true,
         gold: true,
+        warPoints: true,
+        rankName: true,
       },
     });
 
@@ -186,16 +195,75 @@ export const updateProfileName = async (req, res) => {
         playerId: true,
         email: true,
         gold: true,
+        warPoints: true,
+        rankName: true,
       },
     });
 
     res.json({
-      ...updatedUser,
+      ...serializeUserProfile(updatedUser),
       renameCost: RENAME_COST,
       message: "Player name updated successfully.",
     });
   } catch (error) {
     console.error("updateProfileName failed:", error);
     res.status(500).json({ message: "Unable to update player name." });
+  }
+};
+
+export const getLeaderboard = async (req, res) => {
+  try {
+    const users = await prisma.user.findMany({
+      orderBy: [
+        { warPoints: "desc" },
+        { gold: "desc" },
+        { id: "asc" },
+      ],
+      select: {
+        id: true,
+        name: true,
+        playerId: true,
+        warPoints: true,
+        rankName: true,
+        buildings: {
+          select: {
+            type: true,
+            soldierCount: true,
+            hasTank: true,
+            hasChopper: true,
+          },
+        },
+      },
+    });
+
+    const leaderboard = users.map((user, index) => {
+      const buildings = Array.isArray(user.buildings) ? user.buildings : [];
+      const soldiers = buildings.reduce(
+        (total, building) => total + Math.max(0, Number(building?.soldierCount ?? 0) || 0),
+        0
+      );
+      const tanks = buildings.filter((building) => building?.type === "battle-tank" && building?.hasTank).length;
+      const choppers = buildings.filter((building) => building?.type === "skyport" && building?.hasChopper).length;
+
+      return {
+        rank: index + 1,
+        id: user.id,
+        name: user.name || `Commander ${user.id}`,
+        playerId: user.playerId || buildPlayerId(user.id),
+        warPoints: user.warPoints ?? 0,
+        rankName: user.rankName || getRankName(user.warPoints ?? 0),
+        soldiers,
+        tanks,
+        choppers,
+      };
+    });
+
+    res.json({
+      leaderboard,
+      currentPlayerRank: leaderboard.find((entry) => entry.id === req.user.id)?.rank ?? null,
+    });
+  } catch (error) {
+    console.error("getLeaderboard failed:", error);
+    res.status(500).json({ message: "Unable to load leaderboard." });
   }
 };

@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 
 import { login } from "../services/auth";
-import { saveSession } from "../services/session";
+import { markWelcomeBackPending, saveSession } from "../services/session";
 
 const cinematicEase = [0.22, 1, 0.36, 1];
 
@@ -120,6 +120,7 @@ export default function Login() {
     try {
       const session = await login({ email, password });
       saveSession(session);
+      markWelcomeBackPending();
       setTimeout(() => {
         navigate("/game");
       }, 1900);

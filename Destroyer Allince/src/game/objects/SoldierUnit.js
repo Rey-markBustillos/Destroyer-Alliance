@@ -1,6 +1,7 @@
 import Phaser from "phaser";
+import { configureHdSprite, createSoftShadow } from "../utils/renderQuality";
 
-const SOLDIER_SPEED = 0.08;
+const SOLDIER_SPEED = 0.045;
 
 const getDirectionFromDelta = (dx, dy) => {
   if (Math.abs(dx) > Math.abs(dy)) {
@@ -37,13 +38,25 @@ export default class SoldierUnit extends Phaser.GameObjects.Container {
     this.moveTween = null;
     this.walkFrameIndex = 0;
     this.hungryLabel = null;
+    this.shadow = createSoftShadow(scene, {
+      x: 0,
+      y: 7,
+      width: 18,
+      height: 8,
+      alpha: 0.14,
+    });
+    this.add(this.shadow);
 
     this.sprite = scene.add.image(0, 0, WALK_TEXTURES.front[0]);
     this.sprite.setOrigin(0.5, 1);
-    this.sprite.setDisplaySize(14, 22);
+    configureHdSprite(this.sprite, {
+      scene,
+      maxWidth: 20,
+      maxHeight: 30,
+    });
     this.add(this.sprite);
 
-    this.hungryLabel = scene.add.text(0, -26, "Gutom na ako", {
+    this.hungryLabel = scene.add.text(0, -34, "Gutom na ako", {
       fontFamily: "Verdana",
       fontSize: "8px",
       fontStyle: "bold",
@@ -62,10 +75,12 @@ export default class SoldierUnit extends Phaser.GameObjects.Container {
       this.behaviorEvent?.remove(false);
       this.frameEvent?.remove(false);
       this.moveTween?.remove();
+      this.shadow?.destroy();
       this.hungryLabel?.destroy();
       this.behaviorEvent = null;
       this.frameEvent = null;
       this.moveTween = null;
+      this.shadow = null;
       this.hungryLabel = null;
     });
   }
@@ -143,6 +158,7 @@ export default class SoldierUnit extends Phaser.GameObjects.Container {
     this.stopFrameAnimation();
     this.currentDirection = direction;
     this.sprite.setTexture(WALK_TEXTURES[direction][0]);
+    configureHdSprite(this.sprite, { scene: this.scene, maxWidth: 20, maxHeight: 30 });
   }
 
   playWalk(direction = this.currentDirection) {
@@ -150,12 +166,14 @@ export default class SoldierUnit extends Phaser.GameObjects.Container {
     this.currentDirection = direction;
     this.walkFrameIndex = 0;
     this.sprite.setTexture(WALK_TEXTURES[direction][0]);
+    configureHdSprite(this.sprite, { scene: this.scene, maxWidth: 20, maxHeight: 30 });
     this.frameEvent = this.scene.time.addEvent({
       delay: 180,
       loop: true,
       callback: () => {
         this.walkFrameIndex = (this.walkFrameIndex + 1) % WALK_TEXTURES[this.currentDirection].length;
         this.sprite.setTexture(WALK_TEXTURES[this.currentDirection][this.walkFrameIndex]);
+        configureHdSprite(this.sprite, { scene: this.scene, maxWidth: 20, maxHeight: 30 });
       },
     });
   }
@@ -164,6 +182,7 @@ export default class SoldierUnit extends Phaser.GameObjects.Container {
     this.stopFrameAnimation();
     this.currentDirection = direction;
     this.sprite.setTexture(FIRING_TEXTURES[direction]);
+    configureHdSprite(this.sprite, { scene: this.scene, maxWidth: 20, maxHeight: 30 });
   }
 
   stopFrameAnimation() {

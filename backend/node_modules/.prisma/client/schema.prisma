@@ -14,6 +14,8 @@ model User {
   email     String     @unique
   password  String
   gold      Int        @default(1200)
+  warPoints Int        @default(0)
+  rankName  String     @default("Recruit")
   buildings Building[]
 }
 
@@ -28,6 +30,7 @@ model Building {
   machineGold       Int       @default(0)
   lastGeneratedAt   DateTime?
   soldierCount      Int       @default(0)
+  isSleeping        Boolean   @default(false)
   lastWagePaidAt    DateTime?
   lastFedAt         DateTime?
   hasChopper        Boolean   @default(false)

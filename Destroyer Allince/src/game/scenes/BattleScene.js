@@ -2,6 +2,11 @@ import Phaser from "phaser";
 
 import Building from "../objects/Building";
 import { BUILDING_LIST } from "../utils/buildingTypes";
+import {
+  configureHdSprite,
+  createAmbientWorldLighting,
+  createSoftShadow,
+} from "../utils/renderQuality";
 
 const TILE_WIDTH = 64;
 const TILE_HEIGHT = 32;
@@ -13,6 +18,20 @@ const BATTLE_CAMERA_PADDING_Y = 220;
 const RAID_PREVIEW_READY_DELAY_MS = 1800;
 const RAID_TIME_LIMIT_MS = 180000;
 const RAID_DEPLOY_INTERVAL_MS = 180;
+const AIR_DEFENSE_TARGET_PRIORITY = ["rocket", "jet", "helicopter"];
+const DEPLOYABLE_MIN_ROW = MAP_ROWS - 3;
+const SOLDIER_WALK_TEXTURES = {
+  front: ["soldier-front-walk-1", "soldier-front-walk-2"],
+  back: ["soldier-back-walk-1", "soldier-back-walk-2"],
+  left: ["soldier-left-walk-1", "soldier-left-walk-2"],
+  right: ["soldier-right-walk-1", "soldier-right-walk-2"],
+};
+const SOLDIER_FIRING_TEXTURES = {
+  front: "soldier-front-firing",
+  back: "soldier-back-firing",
+  left: "soldier-left-firing",
+  right: "soldier-right-firing",
+};
 
 const darkenColor = (hex, amount = 16) => {
   const color = Phaser.Display.Color.ValueToColor(hex);
@@ -26,7 +45,7 @@ const distanceBetween = Phaser.Math.Distance.Between;
 const UNIT_CONFIG = {
   soldier: {
     maxHealth: 80,
-    speed: 52,
+    speed: 38,
     range: 108,
     detectRange: 172,
     damage: 14,
@@ -39,7 +58,7 @@ const UNIT_CONFIG = {
     speed: 30,
     range: 124,
     detectRange: 188,
-    damage: 34,
+    damage: 80,
     cooldownMs: 1320,
     preferredTargets: ["tower", "building", "wall", "guard"],
     lootScale: 1.35,
@@ -68,15 +87,21 @@ const UNIT_CONFIG = {
 
 const STRUCTURE_LOOT = {
   "town-hall": 340,
-  "command-center": 180,
+  "command-center": 340,
   "wood-machine": 120,
   skyport: 150,
+  "air-defense": 220,
+  tent: 180,
   tower: 85,
   wall: 10,
   storage: 140,
 };
 
 const structureSortValue = (entry) => {
+  if (entry.kind === "air-defense") {
+    return 5;
+  }
+
   if (entry.kind === "tower") {
     return 4;
   }
@@ -104,6 +129,41 @@ const getUnitPriority = (unitType, candidate) => {
   return matchIndex === -1 ? priorities.length + 1 : matchIndex;
 };
 
+const canUnitTarget = (unit, candidate) => {
+  if (!unit || !candidate) {
+    return false;
+  }
+
+  if (unit.type === "tank" && candidate.type === "helicopter") {
+    return false;
+  }
+
+  return true;
+};
+
+const isFlyingUnit = (entry) => ["rocket", "jet", "helicopter"].includes(entry?.type);
+
+const getAirDefenseTargetPriority = (target) => {
+  const matchIndex = AIR_DEFENSE_TARGET_PRIORITY.indexOf(target?.type);
+  return matchIndex === -1 ? AIR_DEFENSE_TARGET_PRIORITY.length + 1 : matchIndex;
+};
+
+const getAirDefenseProfile = (level = 1) => {
+  const resolvedLevel = Math.max(1, Number(level ?? 1) || 1);
+
+  return {
+    detectionRadius: 340 + ((resolvedLevel - 1) * 60),
+    missileRange: 250 + ((resolvedLevel - 1) * 40),
+    gunRange: 150 + ((resolvedLevel - 1) * 24),
+    missileDamage: 56 + ((resolvedLevel - 1) * 18),
+    gunDamage: 9 + ((resolvedLevel - 1) * 4),
+    missileCooldownMs: 10000,
+    gunCooldownMs: Math.max(140, 220 - ((resolvedLevel - 1) * 40)),
+    gunHeatLimit: 7 + ((resolvedLevel - 1) * 2),
+    missileLaunchers: 1 + (resolvedLevel >= 2 ? 1 : 0),
+  };
+};
+
 export default class BattleScene extends Phaser.Scene {
   constructor(runtimeOptions = {}) {
     super("GameScene");
@@ -125,17 +185,26 @@ export default class BattleScene extends Phaser.Scene {
       cameraScrollX: 0,
       cameraScrollY: 0,
     };
+    this.lastDeployAt = 0;
     this.worldBounds = null;
 
     this.groundLayer = this.add.layer();
+    this.ambientLayer = this.add.layer();
     this.structureLayer = this.add.layer();
     this.unitLayer = this.add.layer();
     this.effectLayer = this.add.layer();
     this.overlayLayer = this.add.layer();
+    this.groundLayer.setDepth(-40);
+    this.ambientLayer.setDepth(-10);
+    this.structureLayer.setDepth(20);
+    this.unitLayer.setDepth(24);
+    this.effectLayer.setDepth(32);
+    this.overlayLayer.setDepth(40);
 
     this.computeBoardMetrics();
     this.drawBoard();
     this.createCamera();
+    this.bindInput();
     this.resetRaidState();
     this.game.events.emit("game-scene-ready");
   }
@@ -147,6 +216,12 @@ export default class BattleScene extends Phaser.Scene {
       army: { soldiers: 0, tanks: 0, tankUnits: [], helicopters: 0 },
       structures: [],
       attackers: [],
+      reserves: {
+        soldiers: 0,
+        tankUnits: [],
+        helicopters: 0,
+      },
+      selectedDeploymentType: "soldier",
       defenders: [],
       projectiles: [],
       effects: [],
@@ -262,9 +337,20 @@ export default class BattleScene extends Phaser.Scene {
       const boardCenter = this.gridToWorld((this.iso.cols - 1) / 2, (this.iso.rows - 1) / 2);
       const base = this.add.image(boardCenter.x, boardCenter.y + this.iso.tileHeight * 2.2, "base");
       base.setOrigin(0.5, 0.5);
-      base.setDisplaySize(this.iso.cols * this.iso.tileWidth * 1.5, this.iso.rows * this.iso.tileHeight * 2.9);
+      configureHdSprite(base, {
+        scene: this,
+        maxWidth: this.iso.cols * this.iso.tileWidth * 1.5,
+        maxHeight: this.iso.rows * this.iso.tileHeight * 2.9,
+      });
+      base.setTint(0xf8fafc);
       base.setDepth(-30);
       this.groundLayer.add(base);
+      createAmbientWorldLighting(this, this.ambientLayer, {
+        centerX: boardCenter.x,
+        centerY: boardCenter.y + this.iso.tileHeight * 2.05,
+        width: this.iso.cols * this.iso.tileWidth * 1.65,
+        height: this.iso.rows * this.iso.tileHeight * 2.95,
+      });
       return;
     }
 
@@ -293,7 +379,7 @@ export default class BattleScene extends Phaser.Scene {
 
   createCamera() {
     const camera = this.cameras.main;
-    camera.setBackgroundColor("#3f5a31");
+    camera.setBackgroundColor("rgba(2, 6, 23, 0)");
     camera.setBounds(
       this.worldBounds.minX,
       this.worldBounds.minY,
@@ -302,7 +388,25 @@ export default class BattleScene extends Phaser.Scene {
     );
     camera.centerOn(this.iso.originX, this.iso.originY + this.iso.rows * this.iso.tileHeight / 2);
     camera.setZoom(INITIAL_ZOOM);
-    camera.roundPixels = true;
+    camera.roundPixels = false;
+  }
+
+  bindInput() {
+    this.input.on("pointerdown", (pointer) => {
+      if (this.raid?.phase !== "active") {
+        return;
+      }
+
+      this.handleBattlefieldDeploy(pointer.worldX, pointer.worldY);
+    });
+
+    this.input.on("pointerup", (pointer) => {
+      if (this.raid?.phase !== "active") {
+        return;
+      }
+
+      this.handleBattlefieldDeploy(pointer.worldX, pointer.worldY);
+    });
   }
 
   clearRaidVisuals() {
@@ -310,6 +414,7 @@ export default class BattleScene extends Phaser.Scene {
       entry?.display?.destroy?.();
       entry?.healthBar?.destroy?.();
       entry?.shadow?.destroy?.();
+      entry?.radarPulse?.destroy?.();
     };
 
     this.raid?.structures?.forEach(destroyDisplay);
@@ -336,6 +441,18 @@ export default class BattleScene extends Phaser.Scene {
         : [],
       helicopters: Math.max(0, Number(army?.helicopters ?? 0) || 0),
     };
+    this.raid.reserves = {
+      soldiers: Math.max(0, Number(army?.soldiers ?? 0) || 0),
+      tankUnits: Array.isArray(army?.tankUnits)
+        ? army.tankUnits.map((tank, index) => ({
+          id: tank?.id ?? `tank-${index}`,
+          health: Math.max(1, Number(tank?.health ?? UNIT_CONFIG.tank.maxHealth) || UNIT_CONFIG.tank.maxHealth),
+          damage: Math.max(1, Number(tank?.damage ?? UNIT_CONFIG.tank.damage) || UNIT_CONFIG.tank.damage),
+        }))
+        : [],
+      helicopters: Math.max(0, Number(army?.helicopters ?? 0) || 0),
+    };
+    this.raid.selectedDeploymentType = this.getFirstAvailableDeploymentType();
     this.raid.maxLoot = Math.max(0, Number(target?.loot ?? 0) || 0);
     this.raid.phase = target ? "scouting" : "idle";
 
@@ -369,7 +486,9 @@ export default class BattleScene extends Phaser.Scene {
       }
 
       const world = this.gridToWorld(entry.x, entry.y);
-      const display = new Building(this, world.x, world.y, buildingType);
+      const display = new Building(this, world.x, world.y, buildingType, {
+        animatePlacement: false,
+      });
       display.row = Number(entry.y);
       display.col = Number(entry.x);
       display.persistedId = entry.id ?? null;
@@ -386,7 +505,7 @@ export default class BattleScene extends Phaser.Scene {
       const structure = {
         id: String(entry.id ?? `${entry.type}-${entry.x}-${entry.y}`),
         sourceId: entry.id ?? null,
-        kind: "building",
+        kind: entry.type === "air-defense" ? "air-defense" : "building",
         type: entry.type,
         row: Number(entry.y),
         col: Number(entry.x),
@@ -402,6 +521,26 @@ export default class BattleScene extends Phaser.Scene {
         destroyed: false,
       };
 
+      if (entry.type === "air-defense") {
+        const airDefenseProfile = getAirDefenseProfile(entry.level);
+        structure.attackRange = airDefenseProfile.missileRange;
+        structure.gunRange = airDefenseProfile.gunRange;
+        structure.detectionRadius = airDefenseProfile.detectionRadius;
+        structure.missileDamage = airDefenseProfile.missileDamage;
+        structure.gunDamage = airDefenseProfile.gunDamage;
+        structure.missileCooldownMs = airDefenseProfile.missileCooldownMs;
+        structure.gunCooldownMs = airDefenseProfile.gunCooldownMs;
+        structure.gunHeatLimit = airDefenseProfile.gunHeatLimit;
+        structure.missileLaunchers = airDefenseProfile.missileLaunchers;
+        structure.lastAttackAt = 0;
+        structure.lastGunShotAt = 0;
+        structure.gunHeat = 0;
+        structure.lockTargetId = null;
+        structure.lockStacks = 0;
+        structure.lastKnownTargetAt = 0;
+        structure.radarPulse = this.createRadarPulse(structure.x, structure.y - 24);
+      }
+
       this.overlayLayer.add(structure.healthBar);
       this.raid.structures.push(structure);
     });
@@ -413,8 +552,11 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   spawnBaseDefenders() {
+    const hasTentDefenders = this.raid.structures.some(
+      (entry) => !entry.destroyed && entry.type === "tent"
+    );
     const commandCenters = this.raid.structures.filter(
-      (entry) => !entry.destroyed && entry.type === "command-center"
+      (entry) => !entry.destroyed && (entry.type === "tent" || (!hasTentDefenders && entry.type === "command-center"))
     );
     const tankBays = this.raid.structures.filter(
       (entry) => !entry.destroyed && entry.type === "battle-tank"
@@ -561,6 +703,59 @@ export default class BattleScene extends Phaser.Scene {
     return graphics;
   }
 
+  getRemainingReserveCount() {
+    return Math.max(0, Number(this.raid?.reserves?.soldiers ?? 0) || 0)
+      + (Array.isArray(this.raid?.reserves?.tankUnits) ? this.raid.reserves.tankUnits.length : 0)
+      + Math.max(0, Number(this.raid?.reserves?.helicopters ?? 0) || 0);
+  }
+
+  getFirstAvailableDeploymentType() {
+    if ((this.raid?.reserves?.soldiers ?? 0) > 0) {
+      return "soldier";
+    }
+
+    if ((this.raid?.reserves?.tankUnits?.length ?? 0) > 0) {
+      return "tank";
+    }
+
+    if ((this.raid?.reserves?.helicopters ?? 0) > 0) {
+      return "helicopter";
+    }
+
+    return "soldier";
+  }
+
+  setDeploymentType(type = "soldier") {
+    if (!["soldier", "tank", "helicopter"].includes(type)) {
+      return;
+    }
+
+    this.raid.selectedDeploymentType = type;
+    this.emitRaidState(true);
+  }
+
+  createRadarPulse(x, y) {
+    const pulse = this.add.circle(x, y, 20, 0x38bdf8, 0.08);
+    pulse.setStrokeStyle(2, 0x7dd3fc, 0.24);
+    pulse.setDepth(140);
+    this.effectLayer.add(pulse);
+
+    this.tweens.add({
+      targets: pulse,
+      scale: 2.6,
+      alpha: 0.02,
+      duration: 1200,
+      repeat: -1,
+      ease: "Sine.easeOut",
+      onRepeat: () => {
+        pulse.setScale(1);
+        pulse.setAlpha(0.08);
+      },
+    });
+
+    return pulse;
+  }
+
   drawHealthBar(graphics, x, y, current, max, colors = { fill: 0x22c55e, back: 0x0f172a }) {
     graphics.clear();
 
@@ -583,12 +778,23 @@ export default class BattleScene extends Phaser.Scene {
     this.raid.structures.forEach((entry) => {
       if (entry.destroyed) {
         entry.healthBar?.setVisible(false);
+        entry.radarPulse?.setVisible(false);
         return;
       }
 
-      const offset = entry.kind === "tower" ? -76 : entry.kind === "wall" ? -30 : -96;
+      if (entry.radarPulse) {
+        entry.radarPulse.setPosition(entry.x, entry.y - 24);
+      }
+
+      const offset = entry.kind === "air-defense"
+        ? -86
+        : entry.kind === "tower"
+          ? -76
+          : entry.kind === "wall"
+            ? -30
+            : -96;
       this.drawHealthBar(entry.healthBar, entry.x, entry.y + offset, entry.health, entry.maxHealth, {
-        fill: entry.kind === "tower" ? 0xf97316 : 0x22c55e,
+        fill: entry.kind === "air-defense" ? 0x38bdf8 : entry.kind === "tower" ? 0xf97316 : 0x22c55e,
         back: 0x111827,
       });
     });
@@ -599,14 +805,24 @@ export default class BattleScene extends Phaser.Scene {
     const resolvedHealth = Math.max(1, Number(options?.statOverrides?.health ?? config.maxHealth) || config.maxHealth);
     const resolvedDamage = Math.max(1, Number(options?.statOverrides?.damage ?? config.damage) || config.damage);
     const display = this.add.container(x, y);
-    const shadow = this.add.ellipse(0, 6, type === "tank" ? 30 : 20, 10, 0x020617, 0.28);
+    const shadow = createSoftShadow(this, {
+      x: 0,
+      y: 7,
+      width: type === "tank" ? 30 : 20,
+      height: 10,
+      alpha: type === "helicopter" ? 0.11 : 0.16,
+    });
     display.add(shadow);
 
     if (type === "soldier" || type === "guard") {
-      const texture = type === "guard" ? "soldier-back-walk-1" : "soldier-front-walk-1";
+      const texture = type === "guard" ? SOLDIER_WALK_TEXTURES.back[0] : SOLDIER_WALK_TEXTURES.front[0];
       const sprite = this.add.image(0, 0, texture);
       sprite.setOrigin(0.5, 1);
-      sprite.setDisplaySize(20, 30);
+      configureHdSprite(sprite, {
+        scene: this,
+        maxWidth: 26,
+        maxHeight: 38,
+      });
       sprite.setTint(type === "guard" ? 0xffc0c0 : 0xffffff);
       display.add(sprite);
     } else if (type === "tank") {
@@ -641,6 +857,7 @@ export default class BattleScene extends Phaser.Scene {
       y,
       display,
       shadow,
+      sprite: display.list?.find?.((child) => child.texture) ?? null,
       healthBar: this.createHealthBar(36),
       health: resolvedHealth,
       maxHealth: resolvedHealth,
@@ -653,10 +870,15 @@ export default class BattleScene extends Phaser.Scene {
       isDefender: Boolean(options.isDefender),
       lootScale: config.lootScale ?? 1,
       direction: "front",
+      visualState: "idle",
+      walkFrameIndex: 0,
+      walkFrameElapsed: 0,
+      firingUntil: 0,
       detectRange: config.detectRange ?? (config.range + 48),
       focusTargetId: null,
     };
 
+    this.updateUnitVisual(unit, 0);
     this.overlayLayer.add(unit.healthBar);
     return unit;
   }
@@ -679,54 +901,15 @@ export default class BattleScene extends Phaser.Scene {
     this.raid.summary = null;
     this.raid.startedAt = this.time.now;
     this.raid.phase = "active";
-    this.spawnAttackWave();
+    this.raid.reserves = {
+      soldiers: this.raid.army.soldiers,
+      tankUnits: Array.isArray(this.raid.army.tankUnits) ? [...this.raid.army.tankUnits] : [],
+      helicopters: this.raid.army.helicopters,
+    };
+    this.raid.selectedDeploymentType = this.getFirstAvailableDeploymentType();
     this.spawnBaseDefenders();
     this.centerCameraOnVillage(560, 1.02);
     this.emitRaidState(true);
-  }
-
-  spawnAttackWave() {
-    const row = MAP_ROWS - 1.1;
-    const tankUnits = Array.isArray(this.raid.army.tankUnits) ? this.raid.army.tankUnits : [];
-    const units = [
-      ...Array.from({ length: this.raid.army.soldiers }, (_, index) => ({ type: "soldier", id: `soldier-${index}` })),
-      ...tankUnits.map((tank, index) => ({
-        type: "tank",
-        id: tank?.id ?? `tank-${index}`,
-        statOverrides: {
-          health: tank?.health,
-          damage: tank?.damage,
-        },
-      })),
-      ...Array.from({ length: this.raid.army.helicopters }, (_, index) => ({ type: "helicopter", id: `helicopter-${index}` })),
-    ];
-
-    if (!units.length) {
-      this.finishRaid("defeat", "No troops were available to deploy.");
-      return;
-    }
-
-    units.forEach((unitConfig, index) => {
-      this.time.delayedCall(index * RAID_DEPLOY_INTERVAL_MS, () => {
-        if (this.raid.phase !== "active") {
-          return;
-        }
-
-        const col = 1 + (index % 8) * 0.62;
-        const laneOffset = Math.floor(index / 8) * 0.38;
-        const { x, y } = this.gridToWorld(col + laneOffset, row + (index % 2) * 0.18);
-        const attacker = this.createUnit(
-          unitConfig.type,
-          x,
-          y,
-          `${unitConfig.type}-${unitConfig.id}-${Date.now()}`,
-          { statOverrides: unitConfig.statOverrides }
-        );
-        this.raid.attackers.push(attacker);
-        this.createSmokeEffect(x, y + 4, 0.45);
-        this.emitRaidState(true);
-      });
-    });
   }
 
   update(_time, delta) {
@@ -742,8 +925,60 @@ export default class BattleScene extends Phaser.Scene {
     this.updateEffects(dt);
     this.updateStructureHealthBars();
     this.updateUnitHealthBars();
+    this.updateUnitVisuals(delta);
     this.updateRaidProgress();
     this.emitRaidState();
+  }
+
+  updateUnitVisual(unit, deltaMs = 0) {
+    if (!unit?.sprite || (unit.type !== "soldier" && unit.type !== "guard")) {
+      return;
+    }
+
+    const direction = unit.direction ?? "front";
+    const isFiring = this.time.now < Number(unit.firingUntil ?? 0);
+    const walkTextures = SOLDIER_WALK_TEXTURES[direction] ?? SOLDIER_WALK_TEXTURES.front;
+    const firingTexture = SOLDIER_FIRING_TEXTURES[direction] ?? SOLDIER_FIRING_TEXTURES.front;
+
+    if (isFiring) {
+      if (unit.visualState !== "firing" || unit.sprite.texture?.key !== firingTexture) {
+        unit.visualState = "firing";
+        unit.sprite.setTexture(firingTexture);
+        configureHdSprite(unit.sprite, {
+          scene: this,
+          maxWidth: 26,
+          maxHeight: 38,
+        });
+        unit.sprite.setTint(unit.type === "guard" ? 0xffc0c0 : 0xffffff);
+      }
+      return;
+    }
+
+    unit.walkFrameElapsed = Number(unit.walkFrameElapsed ?? 0) + deltaMs;
+    if (deltaMs > 0 && unit.walkFrameElapsed >= 180) {
+      unit.walkFrameElapsed = 0;
+      unit.walkFrameIndex = (Number(unit.walkFrameIndex ?? 0) + 1) % walkTextures.length;
+    }
+
+    const nextTexture = walkTextures[Number(unit.walkFrameIndex ?? 0) % walkTextures.length];
+    if (unit.visualState !== "walk" || unit.sprite.texture?.key !== nextTexture) {
+      unit.visualState = "walk";
+      unit.sprite.setTexture(nextTexture);
+      configureHdSprite(unit.sprite, {
+        scene: this,
+        maxWidth: 26,
+        maxHeight: 38,
+      });
+      unit.sprite.setTint(unit.type === "guard" ? 0xffc0c0 : 0xffffff);
+    }
+  }
+
+  updateUnitVisuals(deltaMs) {
+    [...this.raid.attackers, ...this.raid.defenders].forEach((unit) => {
+      if (!unit?.destroyed) {
+        this.updateUnitVisual(unit, deltaMs);
+      }
+    });
   }
 
   updateAttackers(dt) {
@@ -795,7 +1030,16 @@ export default class BattleScene extends Phaser.Scene {
     const livingAttackers = this.raid.attackers.filter((entry) => !entry.destroyed);
 
     this.raid.structures.forEach((entry) => {
-      if (entry.destroyed || entry.kind !== "tower" || !livingAttackers.length) {
+      if (entry.destroyed || !livingAttackers.length) {
+        return;
+      }
+
+      if (entry.kind === "air-defense") {
+        this.updateAirDefense(entry, livingAttackers);
+        return;
+      }
+
+      if (entry.kind !== "tower") {
         return;
       }
 
@@ -823,6 +1067,103 @@ export default class BattleScene extends Phaser.Scene {
     });
   }
 
+  updateAirDefense(structure, livingAttackers) {
+    const flyingTargets = livingAttackers.filter((unit) => {
+      const distance = distanceBetween(structure.x, structure.y, unit.x, unit.y);
+      return isFlyingUnit(unit) && distance <= structure.detectionRadius;
+    });
+
+    if (!flyingTargets.length) {
+      structure.gunHeat = Math.max(0, (structure.gunHeat ?? 0) - 0.18);
+      structure.lockTargetId = null;
+      structure.lockStacks = 0;
+      return;
+    }
+
+    const target = [...flyingTargets].sort((left, right) => {
+      const priorityDiff = getAirDefenseTargetPriority(left) - getAirDefenseTargetPriority(right);
+
+      if (priorityDiff !== 0) {
+        return priorityDiff;
+      }
+
+      return distanceBetween(structure.x, structure.y, left.x, left.y)
+        - distanceBetween(structure.x, structure.y, right.x, right.y);
+    })[0];
+
+    if (!target) {
+      return;
+    }
+
+    if (structure.lockTargetId === target.id) {
+      structure.lockStacks = Math.min(4, (structure.lockStacks ?? 0) + 1);
+    } else {
+      structure.lockTargetId = target.id;
+      structure.lockStacks = 1;
+    }
+
+    const targetDistance = distanceBetween(structure.x, structure.y, target.x, target.y);
+    const lockBonus = 1 + ((structure.lockStacks ?? 0) * 0.08);
+
+    this.createLaserIndicator(structure.x, structure.y - 42, target.x, target.y - 16, 0x38bdf8, 90);
+
+    if (
+      targetDistance <= structure.attackRange
+      && this.time.now - (structure.lastAttackAt ?? 0) >= structure.missileCooldownMs
+    ) {
+      structure.lastAttackAt = this.time.now;
+
+      Array.from({ length: structure.missileLaunchers ?? 1 }).forEach((_, launcherIndex) => {
+        this.time.delayedCall(launcherIndex * 140, () => {
+          if (this.raid.phase !== "active" || structure.destroyed || target.destroyed) {
+            return;
+          }
+
+          this.spawnProjectile(
+            structure.x + (launcherIndex === 0 ? -12 : 12),
+            structure.y - 44,
+            target,
+            260,
+            0xf97316,
+            5,
+            () => {
+              this.damageUnit(target, structure.missileDamage * lockBonus, structure);
+            },
+            { kind: "missile", smokeTrail: true, blastScale: 0.4 }
+          );
+        });
+      });
+
+      this.flashDisplay(structure.display, 0x7dd3fc);
+      return;
+    }
+
+    if (
+      targetDistance <= structure.gunRange
+      && (structure.gunHeat ?? 0) < structure.gunHeatLimit
+      && this.time.now - (structure.lastGunShotAt ?? 0) >= structure.gunCooldownMs
+    ) {
+      structure.lastGunShotAt = this.time.now;
+      structure.gunHeat = Math.min(structure.gunHeatLimit, (structure.gunHeat ?? 0) + 1);
+      this.spawnProjectile(
+        structure.x,
+        structure.y - 40,
+        target,
+        340,
+        0x93c5fd,
+        2,
+        () => {
+          this.damageUnit(target, structure.gunDamage * lockBonus, structure);
+        },
+        { kind: "gun", blastScale: 0.18 }
+      );
+      this.flashDisplay(structure.display, 0xe0f2fe);
+      return;
+    }
+
+    structure.gunHeat = Math.max(0, (structure.gunHeat ?? 0) - 0.08);
+  }
+
   updateProjectiles(dt) {
     this.raid.projectiles = this.raid.projectiles.filter((entry) => {
       if (!entry.target || entry.target.destroyed) {
@@ -838,9 +1179,19 @@ export default class BattleScene extends Phaser.Scene {
       entry.y += (dy / distance) * step;
       entry.display.setPosition(entry.x, entry.y);
 
+      if (entry.smokeTrail) {
+        entry.lastTrailAt = (entry.lastTrailAt ?? 0) + dt;
+
+        if (entry.lastTrailAt >= 0.04) {
+          entry.lastTrailAt = 0;
+          this.createSmokeEffect(entry.x, entry.y, 0.14);
+          this.createExplosion(entry.x, entry.y, 0xf97316, 0.08);
+        }
+      }
+
       if (distance <= 10) {
         entry.onHit?.();
-        this.createExplosion(entry.x, entry.y, entry.color, 0.3);
+        this.createExplosion(entry.x, entry.y, entry.color, entry.blastScale ?? 0.3);
         entry.display?.destroy?.();
         return false;
       }
@@ -871,6 +1222,101 @@ export default class BattleScene extends Phaser.Scene {
       entry.display?.destroy?.();
       return false;
     });
+  }
+
+  handleBattlefieldDeploy(worldX, worldY) {
+    if (this.time.now - this.lastDeployAt < 120) {
+      return;
+    }
+
+    const tile = this.getNearestDeployTile(worldX, worldY);
+
+    if (!tile) {
+      return;
+    }
+
+    this.lastDeployAt = this.time.now;
+
+    const type = this.raid.selectedDeploymentType ?? this.getFirstAvailableDeploymentType();
+
+    if (type === "soldier" && (this.raid.reserves.soldiers ?? 0) > 0) {
+      this.raid.reserves.soldiers -= 1;
+      this.deployAttackerUnit("soldier", tile.col + 0.2, tile.row + 0.1);
+    } else if (type === "tank" && (this.raid.reserves.tankUnits?.length ?? 0) > 0) {
+      const tank = this.raid.reserves.tankUnits.shift();
+      this.deployAttackerUnit("tank", tile.col + 0.2, tile.row + 0.1, {
+        health: tank?.health,
+        damage: tank?.damage,
+      });
+    } else if (type === "helicopter" && (this.raid.reserves.helicopters ?? 0) > 0) {
+      this.raid.reserves.helicopters -= 1;
+      this.deployAttackerUnit("helicopter", tile.col + 0.2, tile.row - 0.05);
+    } else {
+      this.raid.selectedDeploymentType = this.getFirstAvailableDeploymentType();
+      this.emitRaidState(true);
+      return;
+    }
+
+    if (
+      type === this.raid.selectedDeploymentType
+      && ((type === "soldier" && (this.raid.reserves.soldiers ?? 0) <= 0)
+      || (type === "tank" && (this.raid.reserves.tankUnits?.length ?? 0) <= 0)
+      || (type === "helicopter" && (this.raid.reserves.helicopters ?? 0) <= 0))
+    ) {
+      this.raid.selectedDeploymentType = this.getFirstAvailableDeploymentType();
+    }
+
+    this.emitRaidState(true);
+  }
+
+  getNearestDeployTile(worldX, worldY) {
+    const rawTile = this.worldToGrid(worldX, worldY);
+
+    if (!rawTile) {
+      return null;
+    }
+
+    const baseRow = clamp(Number(rawTile.row ?? DEPLOYABLE_MIN_ROW), DEPLOYABLE_MIN_ROW, this.iso.rows - 1);
+    const baseCol = clamp(Number(rawTile.col ?? 0), 0, this.iso.cols - 1);
+    const candidateOffsets = [
+      { row: 0, col: 0 },
+      { row: 0, col: -1 },
+      { row: 0, col: 1 },
+      { row: -1, col: 0 },
+      { row: -1, col: -1 },
+      { row: -1, col: 1 },
+      { row: 1, col: 0 },
+      { row: 0, col: -2 },
+      { row: 0, col: 2 },
+    ];
+
+    for (const offset of candidateOffsets) {
+      const row = clamp(baseRow + offset.row, DEPLOYABLE_MIN_ROW, this.iso.rows - 1);
+      const col = clamp(baseCol + offset.col, 0, this.iso.cols - 1);
+      const world = this.gridToWorld(col + 0.2, row + 0.1);
+      const occupied = this.raid.attackers.some(
+        (entry) => !entry.destroyed && distanceBetween(entry.x, entry.y, world.x, world.y) < 22
+      );
+
+      if (!occupied) {
+        return { row, col };
+      }
+    }
+
+    return null;
+  }
+
+  deployAttackerUnit(type, col, row, statOverrides = null) {
+    const { x, y } = this.gridToWorld(col, row);
+    const attacker = this.createUnit(
+      type,
+      x,
+      y,
+      `${type}-manual-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      { statOverrides }
+    );
+    this.raid.attackers.push(attacker);
+    this.createSmokeEffect(x, y + 4, type === "tank" ? 0.5 : 0.36);
   }
 
   advanceUnit(unit, target, dt) {
@@ -912,6 +1358,11 @@ export default class BattleScene extends Phaser.Scene {
     const color = unit.type === "tank" ? 0xf59e0b : unit.type === "helicopter" ? 0x86efac : 0xe2e8f0;
     const width = unit.type === "tank" ? 4 : 2;
     const speed = unit.type === "tank" ? 170 : 260;
+    if (unit.type === "soldier" || unit.type === "guard") {
+      unit.firingUntil = this.time.now + 170;
+      unit.visualState = "firing";
+      this.updateUnitVisual(unit, 0);
+    }
     this.spawnProjectile(unit.x, unit.y - (unit.type === "tank" ? 18 : 24), target, speed, color, width, () => {
       if (target.kind) {
         this.damageStructure(target, unit.damage, unit);
@@ -922,11 +1373,38 @@ export default class BattleScene extends Phaser.Scene {
     this.flashDisplay(unit.display, color);
   }
 
-  spawnProjectile(x, y, target, speed, color, width, onHit) {
+  spawnProjectile(x, y, target, speed, color, width, onHit, options = {}) {
     const display = this.add.circle(x, y, width, color, 0.95);
     display.setDepth(9000);
     this.effectLayer.add(display);
-    this.raid.projectiles.push({ x, y, target, speed, color, display, onHit });
+    this.raid.projectiles.push({
+      x,
+      y,
+      target,
+      speed,
+      color,
+      display,
+      onHit,
+      kind: options.kind ?? "default",
+      smokeTrail: Boolean(options.smokeTrail),
+      blastScale: options.blastScale ?? 0.3,
+      lastTrailAt: 0,
+    });
+  }
+
+  createLaserIndicator(x1, y1, x2, y2, color = 0x38bdf8, duration = 100) {
+    const laser = this.add.graphics();
+    laser.setDepth(9055);
+    laser.lineStyle(2, color, 0.65);
+    laser.beginPath();
+    laser.moveTo(x1, y1);
+    laser.lineTo(x2, y2);
+    laser.strokePath();
+    this.effectLayer.add(laser);
+
+    this.time.delayedCall(duration, () => {
+      laser.destroy();
+    });
   }
 
   flashDisplay(display, color) {
@@ -954,8 +1432,18 @@ export default class BattleScene extends Phaser.Scene {
       return;
     }
 
-    structure.health = Math.max(0, structure.health - amount);
-    this.createFloatingText(`-${Math.round(amount)}`, structure.x, structure.y - 64, "#fecaca");
+    let resolvedAmount = amount;
+
+    if (structure.type === "air-defense") {
+      if (attacker?.type === "helicopter") {
+        resolvedAmount *= 0.65;
+      } else if (attacker?.type === "soldier" || attacker?.type === "tank") {
+        resolvedAmount *= 1.22;
+      }
+    }
+
+    structure.health = Math.max(0, structure.health - resolvedAmount);
+    this.createFloatingText(`-${Math.round(resolvedAmount)}`, structure.x, structure.y - 64, "#fecaca");
     this.createSmokeEffect(structure.x, structure.y - 20, 0.28);
 
     if (structure.health > 0) {
@@ -972,6 +1460,7 @@ export default class BattleScene extends Phaser.Scene {
       onComplete: () => {
         structure.display?.setVisible(false);
         structure.healthBar?.setVisible(false);
+        structure.radarPulse?.destroy?.();
       },
     });
 
@@ -1091,6 +1580,10 @@ export default class BattleScene extends Phaser.Scene {
     let selectedPriority = Number.POSITIVE_INFINITY;
 
     targets.forEach((candidate) => {
+      if (!canUnitTarget(unit, candidate)) {
+        return;
+      }
+
       const priority = getUnitPriority(unit.type, candidate);
       const distance = distanceBetween(unit.x, unit.y, candidate.x, candidate.y);
 
@@ -1106,7 +1599,9 @@ export default class BattleScene extends Phaser.Scene {
 
   getFocusedUnitTarget(unit, candidates) {
     const focusedTarget = unit.focusTargetId
-      ? candidates.find((candidate) => candidate.id === unit.focusTargetId && !candidate.destroyed) ?? null
+      ? candidates.find(
+        (candidate) => candidate.id === unit.focusTargetId && !candidate.destroyed && canUnitTarget(unit, candidate)
+      ) ?? null
       : null;
 
     if (focusedTarget) {
@@ -1118,7 +1613,9 @@ export default class BattleScene extends Phaser.Scene {
 
   getAttackerPriorityTarget(unit, defenders, structures) {
     const focusedTarget = unit.focusTargetId
-      ? defenders.find((candidate) => candidate.id === unit.focusTargetId && !candidate.destroyed) ?? null
+      ? defenders.find(
+        (candidate) => candidate.id === unit.focusTargetId && !candidate.destroyed && canUnitTarget(unit, candidate)
+      ) ?? null
       : null;
 
     if (focusedTarget) {
@@ -1126,7 +1623,9 @@ export default class BattleScene extends Phaser.Scene {
     }
 
     const detectedDefenders = defenders.filter(
-      (candidate) => distanceBetween(unit.x, unit.y, candidate.x, candidate.y) <= unit.detectRange
+      (candidate) =>
+        canUnitTarget(unit, candidate)
+        && distanceBetween(unit.x, unit.y, candidate.x, candidate.y) <= unit.detectRange
     );
 
     if (detectedDefenders.length > 0) {
@@ -1141,7 +1640,7 @@ export default class BattleScene extends Phaser.Scene {
       return null;
     }
 
-    return this.raid.structures.find((entry) => entry.type === "town-hall")
+    return this.raid.structures.find((entry) => entry.type === "command-center")
       ?? [...this.raid.structures].sort((left, right) => {
         if (right.maxHealth !== left.maxHealth) {
           return right.maxHealth - left.maxHealth;
@@ -1164,7 +1663,7 @@ export default class BattleScene extends Phaser.Scene {
       return;
     }
 
-    if (!remainingAttackers.length) {
+    if (!remainingAttackers.length && this.getRemainingReserveCount() <= 0) {
       this.finishRaid("defeat", "Your strike force was wiped out.");
       return;
     }
@@ -1210,10 +1709,16 @@ export default class BattleScene extends Phaser.Scene {
       destructionPercent: this.raid.destructionPercent,
       loot: this.raid.loot,
       army: this.raid.army,
+      reserves: {
+        soldiers: this.raid.reserves?.soldiers ?? 0,
+        tanks: this.raid.reserves?.tankUnits?.length ?? 0,
+        helicopters: this.raid.reserves?.helicopters ?? 0,
+      },
+      selectedDeploymentType: this.raid.selectedDeploymentType ?? "soldier",
       target: this.raid.target,
       attackersRemaining: this.raid.attackers.filter((entry) => !entry.destroyed).length,
       defendersRemaining: this.raid.defenders.filter((entry) => !entry.destroyed).length
-        + this.raid.structures.filter((entry) => !entry.destroyed && entry.kind === "tower").length,
+        + this.raid.structures.filter((entry) => !entry.destroyed && ["tower", "air-defense"].includes(entry.kind)).length,
       summary: this.raid.summary,
     });
   }
@@ -1221,10 +1726,12 @@ export default class BattleScene extends Phaser.Scene {
   getStructureMaxHealth(type, level = 1) {
     const base = {
       "town-hall": 520,
-      "command-center": 290,
+      "command-center": 520,
       "wood-machine": 180,
       skyport: 240,
       "battle-tank": 240,
+      "air-defense": 320,
+      tent: 290,
     }[type] ?? 160;
 
     return base + Math.max(0, Number(level ?? 1) - 1) * 80;

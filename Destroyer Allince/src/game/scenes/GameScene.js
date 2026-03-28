@@ -3,15 +3,21 @@ import Phaser from "phaser";
 import Building from "../objects/Building";
 import SoldierUnit from "../objects/SoldierUnit";
 import { BUILDING_LIST, getBuildingUpgradeCost } from "../utils/buildingTypes";
+import {
+  configureHdSprite,
+  createAmbientWorldLighting,
+} from "../utils/renderQuality";
 
 const TILE_WIDTH = 64;
 const TILE_HEIGHT = 32;
 const MAP_ROWS = 15;
 const MAP_COLS = 15;
 const STARTING_GOLD = 1200;
-const INITIAL_ZOOM = 1.45;
+const TARGET_CAMERA_VIEW_TILES = 16;
+const INITIAL_ZOOM = 1.2;
 const MIN_ZOOM = INITIAL_ZOOM;
 const MAX_ZOOM = 1.8;
+const MAX_ZOOM = 2.2;
 const ZOOM_STEP = 0.1;
 const WOOD_MACHINE_TICK_MS = 180000;
 const WOOD_MACHINE_GOLD_PER_TICK = 10;
@@ -23,7 +29,9 @@ const BUILDING_UPGRADE_DURATION_MS = 1800000;
 const BUILDING_MAX_LEVEL = 2;
 const WOOD_MACHINE_BASE_LIMIT = 4;
 const WOOD_MACHINE_LIMIT_PER_TOWN_HALL_LEVEL = 2;
-const COMMAND_CENTER_BASE_SOLDIER_LIMIT = 15;
+const TENT_BASE_LIMIT = 4;
+const TENT_LIMIT_PER_TOWN_HALL_LEVEL = 4;
+const COMMAND_CENTER_BASE_SOLDIER_LIMIT = 5;
 const COMMAND_CENTER_SOLDIER_LIMIT_PER_LEVEL = 5;
 const SOLDIER_HUNGER_WARNING_MS = 18000000;
 const SOLDIER_STARVATION_MS = 86400000;
@@ -34,8 +42,10 @@ const SKYPORT_CHOPPER_SELL_VALUE = 4000;
 const BATTLE_TANK_PURCHASE_COST = 5000;
 const TANK_BASE_HEALTH = 260;
 const TANK_HEALTH_PER_LEVEL = 120;
-const TANK_BASE_DAMAGE = 34;
+const TANK_BASE_DAMAGE = 80;
 const TANK_DAMAGE_PER_LEVEL = 18;
+const BUILDING_SELECTION_DEBUG = false;
+const CAMERA_WORLD_PADDING = 64;
 const BUILDABLE_GRASS_MASK = Array.from({ length: MAP_ROWS }, (_, row) => (
   row === 0 || row === MAP_ROWS - 1
     ? [3, MAP_COLS - 4]
@@ -70,6 +80,17 @@ const lightenColor = (hex, amount = 16) => {
   return color.color;
 };
 
+const getTenByTenViewZoom = (scene) => {
+  const viewportWidth = Number(scene?.scale?.width ?? 1280) || 1280;
+  const viewportHeight = Number(scene?.scale?.height ?? 720) || 720;
+  const visibleGridWidth = TARGET_CAMERA_VIEW_TILES * TILE_WIDTH;
+  const visibleGridHeight = TARGET_CAMERA_VIEW_TILES * TILE_HEIGHT;
+  const widthZoom = viewportWidth / visibleGridWidth;
+  const heightZoom = viewportHeight / visibleGridHeight;
+
+  return Math.min(widthZoom, heightZoom) * 0.88;
+};
+
 export default class GameScene extends Phaser.Scene {
   constructor(runtimeOptions = {}) {
     super("GameScene");
@@ -93,6 +114,7 @@ export default class GameScene extends Phaser.Scene {
     this.placedBuildings = [];
     this.soldierUnits = [];
     this.enemyUnits = [];
+    this.grid = [];
     this.occupiedTiles = new Map();
     this.warDeployments = new Map();
     this.warState = {
@@ -112,12 +134,17 @@ export default class GameScene extends Phaser.Scene {
     };
 
     this.createWorldLayers();
+    this.initializePlacementGrid();
     this.computeBoardMetrics();
     this.drawBoard();
     this.drawForestRing();
     this.createHoverIndicator();
     this.createPlacementIndicator();
     this.createCamera();
+    this.scale.on("resize", this.handleResize, this);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.scale.off("resize", this.handleResize, this);
+    });
     this.bindInput();
     if (!this.isWarMode) {
       this.startResourceProduction();
@@ -130,12 +157,64 @@ export default class GameScene extends Phaser.Scene {
     this.game.events.emit("game-scene-ready");
   }
 
+  handleResize() {
+    if (!this.groundLayer || !this.structureLayer) {
+      return;
+    }
+
+    const camera = this.cameras.main;
+    const currentZoom = Phaser.Math.Clamp(
+      Number(camera?.zoom ?? getTenByTenViewZoom(this)) || getTenByTenViewZoom(this),
+      MIN_ZOOM,
+      MAX_ZOOM
+    );
+
+    this.computeBoardMetrics();
+    this.refreshBoardVisuals();
+    this.repositionPlacedBuildings();
+    this.repositionWarDeployments();
+
+    camera.setBounds(
+      this.worldBounds.minX,
+      this.worldBounds.minY,
+      this.worldBounds.width,
+      this.worldBounds.height
+    );
+    camera.setZoom(currentZoom);
+    camera.centerOn(
+      this.worldBounds.minX + (this.worldBounds.width / 2),
+      this.worldBounds.minY + (this.worldBounds.height / 2)
+    );
+
+    if (this.hoverTile) {
+      const hoverPoint = this.gridToWorld(this.hoverTile.col, this.hoverTile.row);
+      this.updateHoverAtWorldPoint(hoverPoint.x, hoverPoint.y);
+    } else {
+      this.hoverIndicator?.clear();
+      this.placementIndicator?.clear();
+    }
+  }
+
   createWorldLayers() {
     this.groundLayer = this.add.layer();
     this.decorLayer = this.add.layer();
+    this.ambientLayer = this.add.layer();
     this.structureLayer = this.add.layer();
     this.warUnitLayer = this.add.layer();
     this.overlayLayer = this.add.layer();
+    this.groundLayer.setDepth(-40);
+    this.decorLayer.setDepth(-20);
+    this.ambientLayer.setDepth(-10);
+    this.structureLayer.setDepth(20);
+    this.warUnitLayer.setDepth(24);
+    this.overlayLayer.setDepth(40);
+  }
+
+  initializePlacementGrid() {
+    this.grid = Array.from(
+      { length: this.iso.rows },
+      () => Array.from({ length: this.iso.cols }, () => null)
+    );
   }
 
   computeBoardMetrics() {
@@ -166,15 +245,15 @@ export default class GameScene extends Phaser.Scene {
 
     const worldMinX = Math.min(...centeredCorners.map(({ x }) => x - halfW));
     const worldMaxX = Math.max(...centeredCorners.map(({ x }) => x + halfW));
-    const worldMinY = Math.min(...centeredCorners.map(({ y }) => y - halfH)) - 320;
-    const worldMaxY = Math.max(...centeredCorners.map(({ y }) => y + halfH)) + 320;
+    const worldMinY = Math.min(...centeredCorners.map(({ y }) => y - halfH)) - CAMERA_WORLD_PADDING;
+    const worldMaxY = Math.max(...centeredCorners.map(({ y }) => y + halfH)) + CAMERA_WORLD_PADDING;
 
     this.worldBounds = {
-      minX: worldMinX - 320,
-      maxX: worldMaxX + 320,
+      minX: worldMinX - CAMERA_WORLD_PADDING,
+      maxX: worldMaxX + CAMERA_WORLD_PADDING,
       minY: worldMinY,
       maxY: worldMaxY,
-      width: worldMaxX - worldMinX + 640,
+      width: worldMaxX - worldMinX + (CAMERA_WORLD_PADDING * 2),
       height: worldMaxY - worldMinY,
     };
   }
@@ -189,12 +268,16 @@ export default class GameScene extends Phaser.Scene {
   worldToGrid(worldX, worldY) {
     const localX = worldX - this.iso.originX;
     const localY = worldY - this.iso.originY;
-    const x = (localX / (this.iso.tileWidth / 2) + localY / (this.iso.tileHeight / 2)) / 2;
-    const y = (localY / (this.iso.tileHeight / 2) - localX / (this.iso.tileWidth / 2)) / 2;
+    const x = Math.floor(
+      (localX / (this.iso.tileWidth / 2) + localY / (this.iso.tileHeight / 2)) / 2
+    );
+    const y = Math.floor(
+      (localY / (this.iso.tileHeight / 2) - localX / (this.iso.tileWidth / 2)) / 2
+    );
 
     return {
-      row: Math.round(y),
-      col: Math.round(x),
+      row: y,
+      col: x,
     };
   }
 
@@ -252,7 +335,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   getTownHallLevel() {
-    return this.getTownHall()?.level ?? 1;
+    return this.getCommandCenter()?.level ?? 1;
   }
 
   getWoodMachineLimit() {
@@ -260,8 +343,13 @@ export default class GameScene extends Phaser.Scene {
       + (Math.max(1, this.getTownHallLevel()) - 1) * WOOD_MACHINE_LIMIT_PER_TOWN_HALL_LEVEL;
   }
 
+  getTentLimit() {
+    return TENT_BASE_LIMIT
+      + (Math.max(1, this.getTownHallLevel()) - 1) * TENT_LIMIT_PER_TOWN_HALL_LEVEL;
+  }
+
   getCommandCenterLimit() {
-    return 2;
+    return 1;
   }
 
   getSkyportLimit() {
@@ -279,10 +367,6 @@ export default class GameScene extends Phaser.Scene {
       return true;
     }
 
-    if (typeId === "town-hall") {
-      return !this.getTownHall();
-    }
-
     if (typeId === "wood-machine") {
       const woodMachineCount = this.placedBuildings.filter((building) => this.isWoodMachine(building)).length;
       return woodMachineCount < this.getWoodMachineLimit();
@@ -291,6 +375,11 @@ export default class GameScene extends Phaser.Scene {
     if (typeId === "command-center") {
       const commandCenterCount = this.placedBuildings.filter((building) => this.isCommandCenter(building)).length;
       return commandCenterCount < this.getCommandCenterLimit();
+    }
+
+    if (typeId === "tent") {
+      const tentCount = this.placedBuildings.filter((building) => building.buildingType?.id === "tent").length;
+      return tentCount < this.getTentLimit();
     }
 
     if (typeId === "skyport") {
@@ -377,6 +466,25 @@ export default class GameScene extends Phaser.Scene {
     ];
   }
 
+  isPointInsideTileDiamond(worldX, worldY, row, col) {
+    if (!this.isInsideGrid(row, col)) {
+      return false;
+    }
+
+    const { x, y } = this.gridToWorld(col, row);
+    const diamond = new Phaser.Geom.Polygon(this.createDiamondPoints(x, y));
+
+    return Phaser.Geom.Polygon.Contains(diamond, worldX, worldY);
+  }
+
+  getTileDistanceScore(worldX, worldY, row, col) {
+    const { x, y } = this.gridToWorld(col, row);
+    const halfW = this.iso.tileWidth / 2;
+    const halfH = this.iso.tileHeight / 2;
+
+    return Math.abs(worldX - x) / halfW + Math.abs(worldY - y) / halfH;
+  }
+
   drawBoard() {
     if (this.textures.exists("base")) {
       const boardCenter = this.gridToWorld(
@@ -390,12 +498,28 @@ export default class GameScene extends Phaser.Scene {
       );
 
       village.setOrigin(0.5, 0.5);
-      village.setDisplaySize(
-        this.iso.cols * this.iso.tileWidth * 1.45,
-        this.iso.rows * this.iso.tileHeight * 2.8
-      );
+      configureHdSprite(village, {
+        scene: this,
+        maxWidth: this.iso.cols * this.iso.tileWidth * 1.45,
+        maxHeight: this.iso.rows * this.iso.tileHeight * 2.8,
+      });
+      village.setTint(0xf8fafc);
       village.setDepth(-50);
       this.groundLayer.add(village);
+      this.worldBounds = {
+        minX: village.x - village.displayWidth / 2 - CAMERA_WORLD_PADDING,
+        maxX: village.x + village.displayWidth / 2 + CAMERA_WORLD_PADDING,
+        minY: village.y - village.displayHeight / 2 - CAMERA_WORLD_PADDING,
+        maxY: village.y + village.displayHeight / 2 + CAMERA_WORLD_PADDING,
+        width: village.displayWidth + (CAMERA_WORLD_PADDING * 2),
+        height: village.displayHeight + (CAMERA_WORLD_PADDING * 2),
+      };
+      createAmbientWorldLighting(this, this.ambientLayer, {
+        centerX: boardCenter.x,
+        centerY: boardCenter.y + this.iso.tileHeight * 2.05,
+        width: this.iso.cols * this.iso.tileWidth * 1.6,
+        height: this.iso.rows * this.iso.tileHeight * 2.9,
+      });
       return;
     }
 
@@ -455,6 +579,12 @@ export default class GameScene extends Phaser.Scene {
     return;
   }
 
+  refreshBoardVisuals() {
+    this.groundLayer?.removeAll(true);
+    this.ambientLayer?.removeAll(true);
+    this.drawBoard();
+  }
+
   createHoverIndicator() {
     this.hoverIndicator = this.add.graphics();
     this.hoverIndicator.setDepth(999);
@@ -470,16 +600,47 @@ export default class GameScene extends Phaser.Scene {
 
   createCamera() {
     const camera = this.cameras.main;
-    camera.setBackgroundColor("#44553a");
+    const defaultZoom = Phaser.Math.Clamp(getTenByTenViewZoom(this), INITIAL_ZOOM, MAX_ZOOM);
+    camera.setBackgroundColor("rgba(2, 6, 23, 0)");
     camera.setBounds(
       this.worldBounds.minX,
       this.worldBounds.minY,
       this.worldBounds.width,
       this.worldBounds.height
     );
-    camera.centerOn(this.iso.originX, this.iso.originY + this.iso.rows * this.iso.tileHeight / 2);
-    camera.setZoom(INITIAL_ZOOM);
-    camera.roundPixels = true;
+    camera.centerOn(
+      this.worldBounds.minX + (this.worldBounds.width / 2),
+      this.worldBounds.minY + (this.worldBounds.height / 2)
+    );
+    camera.setZoom(defaultZoom);
+    camera.roundPixels = false;
+  }
+
+  repositionPlacedBuildings() {
+    this.placedBuildings.forEach((building) => {
+      const footprint = this.getFootprint(building.buildingType);
+      const { x, y } = this.gridToWorld(
+        building.col + (footprint.cols - 1) / 2,
+        building.row + (footprint.rows - 1) / 2
+      );
+
+      building.setPosition(x, y);
+      building.setDepth(300 + building.row + building.col + footprint.rows + footprint.cols);
+
+      if (this.isTent(building)) {
+        this.syncCommandCenterSoldiers(building);
+      }
+    });
+  }
+
+  repositionWarDeployments() {
+    this.warDeployments?.forEach((sprite) => {
+      const row = Number(sprite.deploymentRow ?? 0);
+      const col = Number(sprite.deploymentCol ?? 0);
+      const position = this.gridToWorld(col, row);
+      sprite.setPosition(position.x, position.y);
+      sprite.setDepth(460 + row + col);
+    });
   }
 
   getCameraState() {
@@ -499,7 +660,7 @@ export default class GameScene extends Phaser.Scene {
 
     const camera = this.cameras.main;
     const zoom = Phaser.Math.Clamp(
-      Number(cameraState.zoom ?? INITIAL_ZOOM) || INITIAL_ZOOM,
+      Number(cameraState?.zoom ?? getTenByTenViewZoom(this)) || getTenByTenViewZoom(this),
       MIN_ZOOM,
       MAX_ZOOM
     );
@@ -535,6 +696,8 @@ export default class GameScene extends Phaser.Scene {
   }
 
   bindInput() {
+    this.input.setTopOnly(true);
+
     this.input.on("pointermove", (pointer) => {
       if (pointer.isDown) {
         this.handleCameraDrag(pointer);
@@ -561,6 +724,15 @@ export default class GameScene extends Phaser.Scene {
         if (this.isWarMode) {
           this.handleWarTileClick(pointer.worldX, pointer.worldY);
           return;
+        }
+
+        if (!this.selectedBuildingType && !this.movingBuilding) {
+          const clickedBuilding = this.getTopBuildingAtWorldPoint(pointer.worldX, pointer.worldY);
+
+          if (clickedBuilding) {
+            this.selectPlacedBuilding(clickedBuilding);
+            return;
+          }
         }
 
         this.handleTileClick(pointer.worldX, pointer.worldY);
@@ -664,13 +836,122 @@ export default class GameScene extends Phaser.Scene {
   }
 
   getNearestTile(worldX, worldY) {
-    const { row, col } = this.worldToGrid(worldX, worldY);
+    const baseTile = this.worldToGrid(worldX, worldY);
+    const candidates = [];
 
-    if (!this.isInsideGrid(row, col)) {
+    for (let rowOffset = -1; rowOffset <= 1; rowOffset += 1) {
+      for (let colOffset = -1; colOffset <= 1; colOffset += 1) {
+        const row = baseTile.row + rowOffset;
+        const col = baseTile.col + colOffset;
+
+        if (!this.isInsideGrid(row, col)) {
+          continue;
+        }
+
+        candidates.push({
+          row,
+          col,
+          containsPoint: this.isPointInsideTileDiamond(worldX, worldY, row, col),
+          distanceScore: this.getTileDistanceScore(worldX, worldY, row, col),
+        });
+      }
+    }
+
+    if (candidates.length === 0) {
       return null;
     }
 
-    return { row, col };
+    candidates.sort((left, right) => {
+      if (left.containsPoint !== right.containsPoint) {
+        return left.containsPoint ? -1 : 1;
+      }
+
+      if (left.distanceScore !== right.distanceScore) {
+        return left.distanceScore - right.distanceScore;
+      }
+
+      return (left.row + left.col) - (right.row + right.col);
+    });
+
+    const bestTile = candidates[0];
+
+    return {
+      row: bestTile.row,
+      col: bestTile.col,
+    };
+  }
+
+  getBuildingsOccupyingTile(row, col) {
+    return this.placedBuildings.filter((building) => {
+      if (!building?.active || building.visible === false) {
+        return false;
+      }
+
+      const footprint = this.getFootprint(building.buildingType);
+
+      return (
+        row >= building.row
+        && row < building.row + footprint.rows
+        && col >= building.col
+        && col < building.col + footprint.cols
+      );
+    });
+  }
+
+  isPointInsideBuildingSelectionBounds(building, worldX, worldY) {
+    if (!building) {
+      return false;
+    }
+
+    const footprint = this.getFootprint(building.buildingType);
+    const hitWidth = this.iso.tileWidth * footprint.cols;
+    const hitHeight = this.iso.tileHeight * footprint.rows;
+    const minX = building.x - hitWidth / 2;
+    const maxX = building.x + hitWidth / 2;
+    const minY = building.y - hitHeight;
+    const maxY = building.y + this.iso.tileHeight * 0.35;
+
+    return worldX >= minX && worldX <= maxX && worldY >= minY && worldY <= maxY;
+  }
+
+  getTopBuildingAtWorldPoint(worldX, worldY) {
+    const tile = this.getNearestTile(worldX, worldY);
+
+    if (!tile) {
+      return null;
+    }
+
+    const candidates = this.getBuildingsOccupyingTile(tile.row, tile.col)
+      .sort((left, right) => {
+        const depthDelta = (right.depth ?? (right.col + right.row)) - (left.depth ?? (left.col + left.row));
+
+        if (depthDelta !== 0) {
+          return depthDelta;
+        }
+
+        return Phaser.Math.Distance.Between(worldX, worldY, left.x, left.y)
+          - Phaser.Math.Distance.Between(worldX, worldY, right.x, right.y);
+      });
+
+    if (candidates.length === 0) {
+      return null;
+    }
+
+    const boundedCandidate = candidates.find((building) =>
+      this.isPointInsideBuildingSelectionBounds(building, worldX, worldY)
+    );
+    const selectedBuilding = boundedCandidate ?? candidates[0];
+
+    if (BUILDING_SELECTION_DEBUG) {
+      console.debug("Building selection", {
+        gridRow: tile.row,
+        gridCol: tile.col,
+        selectedBuildingId: selectedBuilding?.persistedId ?? null,
+        selectedBuildingType: selectedBuilding?.buildingType?.id ?? null,
+      });
+    }
+
+    return selectedBuilding;
   }
 
   isTileOccupied(row, col, buildingType = null, ignoredBuilding = null) {
@@ -678,9 +959,8 @@ export default class GameScene extends Phaser.Scene {
 
     for (let rowOffset = 0; rowOffset < footprint.rows; rowOffset += 1) {
       for (let colOffset = 0; colOffset < footprint.cols; colOffset += 1) {
-        const occupiedBuilding = this.occupiedTiles.get(
-          this.getTileKey(row + rowOffset, col + colOffset)
-        );
+        const occupiedBuilding = this.grid?.[row + rowOffset]?.[col + colOffset]
+          ?? this.occupiedTiles.get(this.getTileKey(row + rowOffset, col + colOffset));
 
         if (occupiedBuilding && occupiedBuilding !== ignoredBuilding) {
           return true;
@@ -732,6 +1012,7 @@ export default class GameScene extends Phaser.Scene {
       emitPlacedEvent = true,
       resourceState = {},
       ignoreBuildLimit = false,
+      animatePlacement = true,
     } = options;
 
     if (!ignoreBuildLimit && !this.canAddBuildingType(buildingType)) {
@@ -743,7 +1024,9 @@ export default class GameScene extends Phaser.Scene {
       col + (footprint.cols - 1) / 2,
       row + (footprint.rows - 1) / 2
     );
-    const building = new Building(this, x, y, buildingType);
+    const building = new Building(this, x, y, buildingType, {
+      animatePlacement,
+    });
 
     building.row = row;
     building.col = col;
@@ -751,6 +1034,7 @@ export default class GameScene extends Phaser.Scene {
     building.machineGold = Number(resourceState.machineGold ?? 0);
     building.lastGeneratedAt = Number(resourceState.lastGeneratedAt ?? Date.now());
     building.soldierCount = Math.max(0, Number(resourceState.soldierCount ?? 0) || 0);
+    building.isSleeping = Boolean(resourceState.isSleeping ?? false);
     building.lastWagePaidAt = Number(resourceState.lastWagePaidAt ?? Date.now());
     building.lastFedAt = Number(resourceState.lastFedAt ?? Date.now());
     building.hasChopper = Boolean(resourceState.hasChopper ?? false);
@@ -762,39 +1046,25 @@ export default class GameScene extends Phaser.Scene {
     );
     building.setSkyportState?.(building.hasChopper);
     building.setBattleTankState?.(building.hasTank);
+    building.setSleepState?.(building.isSleeping);
     building.setMachineGoldDisplay(
       building.machineGold,
       this.getBuildingMaxGold(building)
     );
     building.setDepth(300 + row + col + footprint.rows + footprint.cols);
 
-    if (!this.isWarMode) {
-      building.on("pointerup", (pointer, _localX, _localY, event) => {
-        event.stopPropagation();
-
-        if (!this.pointerDrag.moved) {
-          this.selectPlacedBuilding(building);
-        }
-      });
-    } else {
+    if (this.isWarMode) {
       building.disableInteractive();
     }
 
     this.structureLayer.add(building);
     this.placedBuildings.push(building);
 
-    if (this.isCommandCenter(building)) {
+    if (this.isTent(building)) {
       this.syncCommandCenterSoldiers(building);
     }
 
-    for (let rowOffset = 0; rowOffset < footprint.rows; rowOffset += 1) {
-      for (let colOffset = 0; colOffset < footprint.cols; colOffset += 1) {
-        this.occupiedTiles.set(
-          this.getTileKey(row + rowOffset, col + colOffset),
-          building
-        );
-      }
-    }
+    this.setBuildingTiles(building, true);
 
     if (deductCost) {
       this.setGoldState(this.gold - (buildingType.cost ?? 0));
@@ -815,13 +1085,23 @@ export default class GameScene extends Phaser.Scene {
   }
 
   loadPersistedBuildings(buildings = []) {
+    const hasSavedCommandCenter = buildings.some((entry) => {
+      const typeId = String(entry?.type ?? "");
+      return typeId === "command-center";
+    });
+
     buildings.forEach((entry) => {
       const row = Number(entry.row ?? entry.y ?? 0);
       const col = Number(entry.col ?? entry.x ?? 0);
+      const normalizedTypeId = entry?.type === "town-hall"
+        ? (hasSavedCommandCenter ? null : "command-center")
+        : entry?.type;
       const buildingType =
-        typeof entry.type === "string"
-          ? BUILDING_LIST.find((item) => item.id === entry.type)
-          : entry.type;
+        normalizedTypeId == null
+          ? null
+          : typeof normalizedTypeId === "string"
+            ? BUILDING_LIST.find((item) => item.id === normalizedTypeId)
+            : normalizedTypeId;
 
       if (
         !this.canPlaceFootprint(row, col, buildingType) ||
@@ -839,6 +1119,7 @@ export default class GameScene extends Phaser.Scene {
         deductCost: false,
         emitPlacedEvent: false,
         ignoreBuildLimit: true,
+        animatePlacement: false,
         resourceState: {
           level: entry.level ?? 1,
           isUpgrading: entry.isUpgrading ?? false,
@@ -846,6 +1127,7 @@ export default class GameScene extends Phaser.Scene {
           machineGold: entry.machineGold ?? 0,
           lastGeneratedAt: entry.lastGeneratedAt ?? Date.now(),
           soldierCount: entry.soldierCount ?? 0,
+          isSleeping: entry.isSleeping ?? false,
           lastWagePaidAt: entry.lastWagePaidAt ?? Date.now(),
           lastFedAt: entry.lastFedAt ?? Date.now(),
           hasChopper: entry.hasChopper ?? false,
@@ -863,44 +1145,137 @@ export default class GameScene extends Phaser.Scene {
     this.clearWarDeployments();
     this.placedBuildings?.forEach((building) => building.destroy());
     this.placedBuildings = [];
+    this.initializePlacementGrid();
     this.occupiedTiles?.clear();
   }
 
   getTownHall() {
-    return this.placedBuildings.find((building) => this.isTownHall(building)) ?? null;
+    return this.getCommandCenter();
+  }
+
+  getCommandCenter() {
+    return this.placedBuildings.find((building) => this.isCommandCenter(building)) ?? null;
   }
 
   ensureTownHall(options = {}) {
+    return this.ensureCommandCenter(options);
+  }
+
+  ensureCommandCenter(options = {}) {
     const { emitPlacedEvent = false } = options;
-    const existingTownHall = this.getTownHall();
+    const existingCommandCenter = this.getCommandCenter();
 
-    if (existingTownHall) {
-      return existingTownHall;
+    if (existingCommandCenter) {
+      return existingCommandCenter;
     }
 
-    const townHallType = BUILDING_LIST.find((item) => item.id === "town-hall");
+    const commandCenterType = BUILDING_LIST.find((item) => item.id === "command-center");
 
-    if (!townHallType) {
+    if (!commandCenterType) {
       return null;
     }
 
-    const defaultRow = 4;
-    const defaultCol = 4;
+    const fallbackSpots = [
+      { row: 4, col: 7 },
+      { row: 6, col: 7 },
+      { row: 7, col: 4 },
+      { row: 3, col: 7 },
+      { row: 7, col: 6 },
+    ];
 
-    if (
-      !this.canPlaceFootprint(defaultRow, defaultCol, townHallType) ||
-      this.isTileOccupied(defaultRow, defaultCol, townHallType)
-    ) {
+    const targetSpot = fallbackSpots.find(
+      ({ row, col }) =>
+        this.canPlaceFootprint(row, col, commandCenterType)
+        && !this.isTileOccupied(row, col, commandCenterType)
+    );
+
+    if (!targetSpot) {
       return null;
     }
 
-    this.placeBuilding(defaultRow, defaultCol, townHallType, {
+    this.placeBuilding(targetSpot.row, targetSpot.col, commandCenterType, {
       deductCost: false,
       emitPlacedEvent,
       ignoreBuildLimit: true,
     });
 
-    return this.getTownHall();
+    return this.getCommandCenter();
+  }
+
+  ensureTent(options = {}) {
+    const { emitPlacedEvent = false } = options;
+    const existingTent = this.placedBuildings.find((building) => this.isTent(building));
+
+    if (existingTent) {
+      return existingTent;
+    }
+
+    const tentType = BUILDING_LIST.find((item) => item.id === "tent");
+
+    if (!tentType) {
+      return null;
+    }
+
+    const fallbackSpots = [
+      { row: 6, col: 9 },
+      { row: 7, col: 8 },
+      { row: 5, col: 9 },
+      { row: 8, col: 7 },
+    ];
+
+    const targetSpot = fallbackSpots.find(
+      ({ row, col }) =>
+        this.canPlaceFootprint(row, col, tentType)
+        && !this.isTileOccupied(row, col, tentType)
+    );
+
+    if (!targetSpot) {
+      return null;
+    }
+
+    return this.placeBuilding(targetSpot.row, targetSpot.col, tentType, {
+      deductCost: false,
+      emitPlacedEvent,
+      ignoreBuildLimit: true,
+    });
+  }
+
+  ensureWoodMachine(options = {}) {
+    const { emitPlacedEvent = false } = options;
+    const existingWoodMachine = this.placedBuildings.find((building) => this.isWoodMachine(building));
+
+    if (existingWoodMachine) {
+      return existingWoodMachine;
+    }
+
+    const woodMachineType = BUILDING_LIST.find((item) => item.id === "wood-machine");
+
+    if (!woodMachineType) {
+      return null;
+    }
+
+    const fallbackSpots = [
+      { row: 6, col: 5 },
+      { row: 7, col: 5 },
+      { row: 5, col: 5 },
+      { row: 8, col: 5 },
+    ];
+
+    const targetSpot = fallbackSpots.find(
+      ({ row, col }) =>
+        this.canPlaceFootprint(row, col, woodMachineType)
+        && !this.isTileOccupied(row, col, woodMachineType)
+    );
+
+    if (!targetSpot) {
+      return null;
+    }
+
+    return this.placeBuilding(targetSpot.row, targetSpot.col, woodMachineType, {
+      deductCost: false,
+      emitPlacedEvent,
+      ignoreBuildLimit: true,
+    });
   }
 
   initializeFromSnapshot({ gold = this.gold, buildings = [], camera = null } = {}) {
@@ -908,6 +1283,9 @@ export default class GameScene extends Phaser.Scene {
     this.setGoldState(gold, { emitChangeEvent: false });
     this.loadPersistedBuildings(buildings);
     this.ensureTownHall({ emitPlacedEvent: false });
+    this.ensureCommandCenter({ emitPlacedEvent: false });
+    this.ensureTent({ emitPlacedEvent: false });
+    this.ensureWoodMachine({ emitPlacedEvent: false });
     this.applyCameraState(camera);
     this.emitGameState();
   }
@@ -997,7 +1375,13 @@ export default class GameScene extends Phaser.Scene {
       if (!existingSprite) {
         const sprite = this.add.image(position.x, position.y, textureKey);
         sprite.setOrigin(0.5, 1);
-        sprite.setDisplaySize(18, 28);
+        configureHdSprite(sprite, {
+          scene: this,
+          maxWidth: 18,
+          maxHeight: 28,
+        });
+        sprite.deploymentRow = Number(deployment.row ?? 0);
+        sprite.deploymentCol = Number(deployment.col ?? 0);
         sprite.setDepth(460 + Number(deployment.row ?? 0) + Number(deployment.col ?? 0));
         this.warUnitLayer.add(sprite);
         this.warDeployments.set(deploymentId, sprite);
@@ -1006,6 +1390,13 @@ export default class GameScene extends Phaser.Scene {
 
       existingSprite.setPosition(position.x, position.y);
       existingSprite.setTexture(textureKey);
+      configureHdSprite(existingSprite, {
+        scene: this,
+        maxWidth: 18,
+        maxHeight: 28,
+      });
+      existingSprite.deploymentRow = Number(deployment.row ?? 0);
+      existingSprite.deploymentCol = Number(deployment.col ?? 0);
       existingSprite.setDepth(460 + Number(deployment.row ?? 0) + Number(deployment.col ?? 0));
     });
 
@@ -1054,6 +1445,7 @@ export default class GameScene extends Phaser.Scene {
         machineGold: building.machineGold ?? 0,
         lastGeneratedAt: building.lastGeneratedAt ?? Date.now(),
         soldierCount: building.soldierCount ?? 0,
+        isSleeping: building.isSleeping ?? false,
         lastWagePaidAt: building.lastWagePaidAt ?? Date.now(),
         lastFedAt: building.lastFedAt ?? Date.now(),
         hasChopper: building.hasChopper ?? false,
@@ -1087,6 +1479,7 @@ export default class GameScene extends Phaser.Scene {
     const fullWoodMachines = woodMachines.filter(
       (building) => (building.machineGold ?? 0) >= this.getBuildingMaxGold(building)
     ).length;
+    const tents = this.placedBuildings.filter((building) => building.buildingType?.id === "tent").length;
     const totalMachineGold = woodMachines.reduce(
       (total, building) => total + (building.machineGold ?? 0),
       0
@@ -1131,10 +1524,12 @@ export default class GameScene extends Phaser.Scene {
       skyports,
       skyportLimit: this.getSkyportLimit(),
       woodMachines: woodMachines.length,
+      tents,
       fullWoodMachines,
       townHallLevel: this.getTownHallLevel(),
       townHallCount: this.getTownHall() ? 1 : 0,
       woodMachineLimit: this.getWoodMachineLimit(),
+      tentLimit: this.getTentLimit(),
     });
   }
 
@@ -1155,12 +1550,23 @@ export default class GameScene extends Phaser.Scene {
 
     for (let rowOffset = 0; rowOffset < footprint.rows; rowOffset += 1) {
       for (let colOffset = 0; colOffset < footprint.cols; colOffset += 1) {
-        const tileKey = this.getTileKey(building.row + rowOffset, building.col + colOffset);
+        const targetRow = building.row + rowOffset;
+        const targetCol = building.col + colOffset;
+        const tileKey = this.getTileKey(targetRow, targetCol);
 
         if (register) {
+          if (this.grid?.[targetRow]) {
+            this.grid[targetRow][targetCol] = building;
+          }
           this.occupiedTiles.set(tileKey, building);
-        } else if (this.occupiedTiles.get(tileKey) === building) {
-          this.occupiedTiles.delete(tileKey);
+        } else {
+          if (this.grid?.[targetRow]?.[targetCol] === building) {
+            this.grid[targetRow][targetCol] = null;
+          }
+
+          if (this.occupiedTiles.get(tileKey) === building) {
+            this.occupiedTiles.delete(tileKey);
+          }
         }
       }
     }
@@ -1174,12 +1580,20 @@ export default class GameScene extends Phaser.Scene {
     return typeId === "command-center";
   }
 
+  isTent(buildingOrType) {
+    const typeId = typeof buildingOrType === "string"
+      ? buildingOrType
+      : buildingOrType?.buildingType?.id ?? buildingOrType?.id;
+
+    return typeId === "tent";
+  }
+
   isTownHall(buildingOrType) {
     const typeId = typeof buildingOrType === "string"
       ? buildingOrType
       : buildingOrType?.buildingType?.id ?? buildingOrType?.id;
 
-    return typeId === "town-hall";
+    return typeId === "town-hall" || typeId === "command-center";
   }
 
   isBattleTank(buildingOrType) {
@@ -1191,7 +1605,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   getCommandCenterSoldierLimit(building) {
-    if (!this.isCommandCenter(building)) {
+    if (!this.isTent(building)) {
       return 0;
     }
 
@@ -1212,7 +1626,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   getNextCommandCenterWageAt(building) {
-    if (!this.isCommandCenter(building) || (building?.soldierCount ?? 0) <= 0) {
+    if (!this.isTent(building) || (building?.soldierCount ?? 0) <= 0) {
       return null;
     }
 
@@ -1220,7 +1634,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   isCommandCenterHungry(building) {
-    if (!this.isCommandCenter(building) || (building?.soldierCount ?? 0) <= 0) {
+    if (!this.isTent(building) || (building?.soldierCount ?? 0) <= 0) {
       return false;
     }
 
@@ -1230,6 +1644,50 @@ export default class GameScene extends Phaser.Scene {
 
   getSoldiersForCommandCenter(commandCenter) {
     return this.soldierUnits.filter((unit) => unit.commandCenter === commandCenter);
+  }
+
+  getTentBuildings() {
+    return this.placedBuildings.filter((building) => this.isTent(building));
+  }
+
+  getTotalTentSoldiers() {
+    return this.getTentBuildings().reduce(
+      (total, building) => total + Math.max(0, Number(building?.soldierCount ?? 0) || 0),
+      0
+    );
+  }
+
+  getTotalTentCapacity() {
+    return this.getTentBuildings().reduce(
+      (total, building) => total + this.getCommandCenterSoldierLimit(building),
+      0
+    );
+  }
+
+  areAllTentSoldiersSleeping() {
+    const occupiedTents = this.getTentBuildings().filter((building) => (building?.soldierCount ?? 0) > 0);
+
+    if (occupiedTents.length === 0) {
+      return false;
+    }
+
+    return occupiedTents.every((building) => Boolean(building.isSleeping));
+  }
+
+  isAnyTentHungry() {
+    return this.getTentBuildings().some((building) => this.isCommandCenterHungry(building));
+  }
+
+  getNextTentWageAt() {
+    const wageTimes = this.getTentBuildings()
+      .map((building) => this.getNextCommandCenterWageAt(building))
+      .filter((value) => Number.isFinite(value));
+
+    if (!wageTimes.length) {
+      return null;
+    }
+
+    return Math.min(...wageTimes);
   }
 
   getSoldierHomePoint(commandCenter, index = 0) {
@@ -1267,7 +1725,8 @@ export default class GameScene extends Phaser.Scene {
       }))
       .filter(({ row, col }) => this.isInsideGrid(row, col))
       .filter(({ row, col }) => {
-        const occupied = this.occupiedTiles.get(this.getTileKey(row, col));
+        const occupied = this.grid?.[row]?.[col]
+          ?? this.occupiedTiles.get(this.getTileKey(row, col));
         return !occupied || occupied === commandCenter;
       });
 
@@ -1280,20 +1739,21 @@ export default class GameScene extends Phaser.Scene {
   }
 
   syncCommandCenterSoldiers(commandCenter) {
-    if (!this.isCommandCenter(commandCenter)) {
+    if (!this.isTent(commandCenter)) {
       return;
     }
 
     const desiredCount = Math.max(0, Number(commandCenter.soldierCount ?? 0) || 0);
+    const visibleCount = commandCenter.isSleeping ? 0 : desiredCount;
     const currentUnits = this.getSoldiersForCommandCenter(commandCenter);
 
-    while (currentUnits.length > desiredCount) {
+    while (currentUnits.length > visibleCount) {
       const unit = currentUnits.pop();
       this.soldierUnits = this.soldierUnits.filter((entry) => entry !== unit);
       unit?.destroy();
     }
 
-    while (currentUnits.length < desiredCount) {
+    while (currentUnits.length < visibleCount) {
       const unit = new SoldierUnit(this, commandCenter, currentUnits.length);
       this.structureLayer.add(unit);
       this.soldierUnits.push(unit);
@@ -1334,6 +1794,28 @@ export default class GameScene extends Phaser.Scene {
   }
 
   getPlacedBuildingSelectionPayload(building) {
+    const maxHp = this.getStructureMaxHealth(building);
+    const currentHp = Math.max(
+      0,
+      Number(building.currentHealth ?? building.health ?? maxHp) || maxHp
+    );
+    const isMainBase = this.isCommandCenter(building);
+    const soldierCount = isMainBase
+      ? this.getTotalTentSoldiers()
+      : (building.soldierCount ?? 0);
+    const maxSoldiers = isMainBase
+      ? this.getTotalTentCapacity()
+      : this.getCommandCenterSoldierLimit(building);
+    const isSleeping = isMainBase
+      ? this.areAllTentSoldiersSleeping()
+      : Boolean(building.isSleeping ?? false);
+    const nextWageAt = isMainBase
+      ? this.getNextTentWageAt()
+      : this.getNextCommandCenterWageAt(building);
+    const isHungry = isMainBase
+      ? this.isAnyTentHungry()
+      : this.isCommandCenterHungry(building);
+
     return {
       id: building.persistedId,
       type: building.buildingType.id,
@@ -1345,10 +1827,11 @@ export default class GameScene extends Phaser.Scene {
       upgradeCompleteAt: building.upgradeCompleteAt ?? null,
       machineGold: building.machineGold ?? 0,
       maxGold: this.getBuildingMaxGold(building),
-      soldierCount: building.soldierCount ?? 0,
-      maxSoldiers: this.getCommandCenterSoldierLimit(building),
-      nextWageAt: this.getNextCommandCenterWageAt(building),
-      isHungry: this.isCommandCenterHungry(building),
+      soldierCount,
+      isSleeping,
+      maxSoldiers,
+      nextWageAt,
+      isHungry,
       hasTank: building.hasTank ?? false,
       tankCost: this.isBattleTank(building) ? BATTLE_TANK_PURCHASE_COST : 0,
       tankHealth: this.isBattleTank(building) ? this.getBattleTankStats(building).health : 0,
@@ -1356,6 +1839,9 @@ export default class GameScene extends Phaser.Scene {
       hasChopper: building.hasChopper ?? false,
       chopperCost: this.getSkyportChopperCost(building),
       chopperSellValue: this.isSkyport(building) ? SKYPORT_CHOPPER_SELL_VALUE : 0,
+      currentHp,
+      maxHp,
+      hpPercent: maxHp > 0 ? Math.round((currentHp / maxHp) * 100) : 0,
     };
   }
 
@@ -1368,6 +1854,7 @@ export default class GameScene extends Phaser.Scene {
       maxGold: this.getBuildingMaxGold(building),
       lastGeneratedAt: building.lastGeneratedAt ?? Date.now(),
       soldierCount: building.soldierCount ?? 0,
+      isSleeping: building.isSleeping ?? false,
       maxSoldiers: this.getCommandCenterSoldierLimit(building),
       lastWagePaidAt: building.lastWagePaidAt ?? Date.now(),
       lastFedAt: building.lastFedAt ?? Date.now(),
@@ -1390,6 +1877,40 @@ export default class GameScene extends Phaser.Scene {
       health: TANK_BASE_HEALTH + ((level - 1) * TANK_HEALTH_PER_LEVEL),
       damage: TANK_BASE_DAMAGE + ((level - 1) * TANK_DAMAGE_PER_LEVEL),
     };
+  }
+
+  getStructureMaxHealth(building) {
+    const type = building?.buildingType?.id ?? building?.type;
+    const level = Math.max(1, Number(building?.level ?? 1) || 1);
+    const base = {
+      "town-hall": 520,
+      "command-center": 520,
+      "wood-machine": 180,
+      skyport: 240,
+      "battle-tank": 240,
+      "air-defense": 260,
+      tent: 290,
+    }[type] ?? 160;
+
+    return base + ((level - 1) * 80);
+  }
+
+  findPlacedBuilding(target = null) {
+    if (!target) {
+      return null;
+    }
+
+    return this.placedBuildings.find((building) => {
+      if (target.id != null && building.persistedId != null && String(building.persistedId) === String(target.id)) {
+        return true;
+      }
+
+      return (
+        (target.type == null || building.buildingType?.id === target.type)
+        && Number(building.row) === Number(target.row)
+        && Number(building.col) === Number(target.col)
+      );
+    }) ?? null;
   }
 
   buyTankAtSelectedBuilding() {
@@ -1489,22 +2010,27 @@ export default class GameScene extends Phaser.Scene {
     this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
   }
 
-  hireSoldierAtSelectedBuilding() {
-    if (!this.selectedPlacedBuilding || !this.isCommandCenter(this.selectedPlacedBuilding)) {
-      return;
+  hireSoldierAtSelectedBuilding(targetBuilding = null) {
+    const building = this.findPlacedBuilding(targetBuilding) ?? this.selectedPlacedBuilding;
+
+    if (!building || !this.isTent(building)) {
+      return null;
     }
 
-    const building = this.selectedPlacedBuilding;
+    this.selectedPlacedBuilding = building;
     const currentSoldiers = building.soldierCount ?? 0;
     const maxSoldiers = this.getCommandCenterSoldierLimit(building);
 
     if (currentSoldiers >= maxSoldiers) {
-      return;
+      return this.getPlacedBuildingSelectionPayload(building);
     }
 
+    const now = Date.now();
     building.soldierCount = currentSoldiers + 1;
-    building.lastWagePaidAt = Number(building.lastWagePaidAt ?? Date.now());
-    building.lastFedAt = Number(building.lastFedAt ?? Date.now());
+    building.isSleeping = false;
+    building.lastWagePaidAt = now;
+    building.lastFedAt = now;
+    building.setSleepState?.(false);
     this.syncCommandCenterSoldiers(building);
 
     this.events.emit("structure-army-updated", {
@@ -1515,11 +2041,48 @@ export default class GameScene extends Phaser.Scene {
       col: building.col,
       ...this.getBuildingPersistenceState(building),
     });
-    this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
+    const payload = this.getPlacedBuildingSelectionPayload(building);
+    this.events.emit("placed-building-selected", payload);
+    return payload;
+  }
+
+  recruitSoldierAcrossTents() {
+    if (!this.selectedPlacedBuilding || !this.isCommandCenter(this.selectedPlacedBuilding)) {
+      return null;
+    }
+
+    const targetTent = this.getTentBuildings()
+      .filter((building) => (building.soldierCount ?? 0) < this.getCommandCenterSoldierLimit(building))
+      .sort((left, right) => (left.row + left.col) - (right.row + right.col))[0];
+
+    if (!targetTent) {
+      return this.getPlacedBuildingSelectionPayload(this.selectedPlacedBuilding);
+    }
+
+    const now = Date.now();
+    targetTent.soldierCount = Math.max(0, Number(targetTent.soldierCount ?? 0) || 0) + 1;
+    targetTent.isSleeping = false;
+    targetTent.lastWagePaidAt = now;
+    targetTent.lastFedAt = now;
+    targetTent.setSleepState?.(false);
+    this.syncCommandCenterSoldiers(targetTent);
+
+    this.events.emit("structure-army-updated", {
+      structure: targetTent,
+      id: targetTent.persistedId,
+      type: targetTent.buildingType.id,
+      row: targetTent.row,
+      col: targetTent.col,
+      ...this.getBuildingPersistenceState(targetTent),
+    });
+
+    const payload = this.getPlacedBuildingSelectionPayload(this.selectedPlacedBuilding);
+    this.events.emit("placed-building-selected", payload);
+    return payload;
   }
 
   feedSelectedCommandCenterSoldiers() {
-    if (!this.selectedPlacedBuilding || !this.isCommandCenter(this.selectedPlacedBuilding)) {
+    if (!this.selectedPlacedBuilding || !this.isTent(this.selectedPlacedBuilding)) {
       return;
     }
 
@@ -1547,7 +2110,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   removeSoldiersAtSelectedBuilding(count = 1) {
-    if (!this.selectedPlacedBuilding || !this.isCommandCenter(this.selectedPlacedBuilding)) {
+    if (!this.selectedPlacedBuilding || !this.isTent(this.selectedPlacedBuilding)) {
       return;
     }
 
@@ -1560,6 +2123,10 @@ export default class GameScene extends Phaser.Scene {
     }
 
     building.soldierCount = Math.max(0, currentSoldiers - removeCount);
+    if (building.soldierCount <= 0) {
+      building.isSleeping = false;
+      building.setSleepState?.(false);
+    }
     this.syncCommandCenterSoldiers(building);
 
     this.events.emit("structure-army-updated", {
@@ -1571,6 +2138,96 @@ export default class GameScene extends Phaser.Scene {
       ...this.getBuildingPersistenceState(building),
     });
     this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
+  }
+
+  feedAllTentSoldiers() {
+    if (!this.selectedPlacedBuilding || !this.isCommandCenter(this.selectedPlacedBuilding)) {
+      return;
+    }
+
+    const tents = this.getTentBuildings().filter((building) => (building.soldierCount ?? 0) > 0);
+    const totalSoldiers = tents.reduce(
+      (total, building) => total + Math.max(0, Number(building.soldierCount ?? 0) || 0),
+      0
+    );
+    const totalFeedCost = totalSoldiers * SOLDIER_FEED_COST_PER_UNIT;
+
+    if (totalSoldiers <= 0 || this.gold < totalFeedCost) {
+      return;
+    }
+
+    const now = Date.now();
+    tents.forEach((tent) => {
+      tent.lastFedAt = now;
+      this.syncCommandCenterSoldiers(tent);
+      this.events.emit("structure-army-updated", {
+        structure: tent,
+        id: tent.persistedId,
+        type: tent.buildingType.id,
+        row: tent.row,
+        col: tent.col,
+        ...this.getBuildingPersistenceState(tent),
+      });
+    });
+
+    this.setGoldState(this.gold - totalFeedCost);
+    this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(this.selectedPlacedBuilding));
+  }
+
+  toggleSelectedCommandCenterSleep() {
+    if (!this.selectedPlacedBuilding || !this.isTent(this.selectedPlacedBuilding)) {
+      return;
+    }
+
+    const building = this.selectedPlacedBuilding;
+
+    if ((building.soldierCount ?? 0) <= 0) {
+      building.isSleeping = false;
+    } else {
+      building.isSleeping = !Boolean(building.isSleeping);
+    }
+
+    building.setSleepState?.(building.isSleeping);
+    this.syncCommandCenterSoldiers(building);
+
+    this.events.emit("structure-army-updated", {
+      structure: building,
+      id: building.persistedId,
+      type: building.buildingType.id,
+      row: building.row,
+      col: building.col,
+      ...this.getBuildingPersistenceState(building),
+    });
+    this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
+  }
+
+  toggleAllTentSleep() {
+    if (!this.selectedPlacedBuilding || !this.isCommandCenter(this.selectedPlacedBuilding)) {
+      return;
+    }
+
+    const shouldSleep = !this.areAllTentSoldiersSleeping();
+
+    this.getTentBuildings().forEach((tent) => {
+      if ((tent.soldierCount ?? 0) <= 0) {
+        tent.isSleeping = false;
+      } else {
+        tent.isSleeping = shouldSleep;
+      }
+
+      tent.setSleepState?.(tent.isSleeping);
+      this.syncCommandCenterSoldiers(tent);
+      this.events.emit("structure-army-updated", {
+        structure: tent,
+        id: tent.persistedId,
+        type: tent.buildingType.id,
+        row: tent.row,
+        col: tent.col,
+        ...this.getBuildingPersistenceState(tent),
+      });
+    });
+
+    this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(this.selectedPlacedBuilding));
   }
 
   selectPlacedBuilding(building) {
@@ -1610,10 +2267,13 @@ export default class GameScene extends Phaser.Scene {
 
     this.movingBuilding = this.selectedPlacedBuilding;
     this.selectedBuildingType = this.selectedPlacedBuilding.buildingType;
+    this.selectedPlacedBuilding = null;
+    this.events.emit("placed-building-selected", null);
+    this.events.emit("structure-selection-cleared");
     this.events.emit("placed-building-moving", {
-      id: this.selectedPlacedBuilding.persistedId,
-      type: this.selectedPlacedBuilding.buildingType.id,
-      name: this.selectedPlacedBuilding.buildingType.name,
+      id: this.movingBuilding.persistedId,
+      type: this.movingBuilding.buildingType.id,
+      name: this.movingBuilding.buildingType.name,
     });
 
     if (this.hoverTile) {
@@ -1642,7 +2302,9 @@ export default class GameScene extends Phaser.Scene {
     building.setDepth(300 + row + col + footprint.rows + footprint.cols);
     this.setBuildingTiles(building, true);
     this.selectedPlacedBuilding = building;
-    this.syncCommandCenterSoldiers(building);
+    if (this.isTent(building)) {
+      this.syncCommandCenterSoldiers(building);
+    }
     this.events.emit("structure-moved", {
       structure: building,
       type: building.buildingType.id,
@@ -1663,7 +2325,8 @@ export default class GameScene extends Phaser.Scene {
       return;
     }
 
-    const occupiedBuilding = this.occupiedTiles.get(this.getTileKey(tile.row, tile.col));
+    const occupiedBuilding = this.grid?.[tile.row]?.[tile.col]
+      ?? this.occupiedTiles.get(this.getTileKey(tile.row, tile.col));
 
     if (occupiedBuilding) {
       return;
@@ -1681,7 +2344,14 @@ export default class GameScene extends Phaser.Scene {
     }
 
     const building = this.selectedPlacedBuilding;
-    this.removeCommandCenterSoldiers(building);
+
+    if (this.isCommandCenter(building)) {
+      return;
+    }
+
+    if (this.isTent(building)) {
+      this.removeCommandCenterSoldiers(building);
+    }
     this.setBuildingTiles(building, false);
     this.placedBuildings = this.placedBuildings.filter((entry) => entry !== building);
     building.destroy();
@@ -1727,6 +2397,52 @@ export default class GameScene extends Phaser.Scene {
       isFull: false,
     });
     this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
+  }
+
+  collectAllWoodMachineGold() {
+    const woodMachines = this.placedBuildings.filter((building) => this.isWoodMachine(building));
+
+    if (woodMachines.length === 0) {
+      return;
+    }
+
+    let collectedGold = 0;
+    const now = Date.now();
+
+    woodMachines.forEach((building) => {
+      const buildingGold = Number(building.machineGold ?? 0);
+
+      if (buildingGold <= 0) {
+        return;
+      }
+
+      collectedGold += buildingGold;
+      building.machineGold = 0;
+      building.lastGeneratedAt = now;
+      building.setMachineGoldDisplay(0, this.getBuildingMaxGold(building));
+      this.events.emit("structure-resource-updated", {
+        structure: building,
+        id: building.persistedId,
+        type: building.buildingType.id,
+        row: building.row,
+        col: building.col,
+        ...this.getBuildingPersistenceState(building),
+        isFull: false,
+      });
+    });
+
+    if (collectedGold <= 0) {
+      return;
+    }
+
+    this.setGoldState(this.gold + collectedGold);
+
+    if (this.selectedPlacedBuilding && this.isWoodMachine(this.selectedPlacedBuilding)) {
+      this.events.emit(
+        "placed-building-selected",
+        this.getPlacedBuildingSelectionPayload(this.selectedPlacedBuilding)
+      );
+    }
   }
 
   collectTownHallGold(building) {
@@ -1854,10 +2570,6 @@ export default class GameScene extends Phaser.Scene {
       return (building?.level ?? 1) >= 2
         ? TOWN_HALL_MAX_GOLD * 2
         : TOWN_HALL_MAX_GOLD;
-    }
-
-    if (this.isCommandCenter(building)) {
-      return 0;
     }
 
     return 0;
@@ -2009,7 +2721,7 @@ export default class GameScene extends Phaser.Scene {
     const now = Date.now();
 
     this.placedBuildings.forEach((building) => {
-      if (!this.isCommandCenter(building) || (building.soldierCount ?? 0) <= 0) {
+      if (!this.isTent(building) || (building.soldierCount ?? 0) <= 0) {
         return;
       }
 

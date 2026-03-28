@@ -5,12 +5,17 @@ import { createGame, destroyGame } from "../game/main";
 import { applyWarResolution, fetchWarTarget, syncGameSnapshot } from "../services/game";
 import { getBattleRecords, saveBattleRecord } from "../services/battleRecordStorage";
 import { getGameSnapshot, saveGameSnapshot } from "../services/gameStorage";
-import { getSession } from "../services/session";
+import { getSession, saveSession } from "../services/session";
 
 const deriveArmyFromSnapshot = (snapshot) => {
   const buildings = Array.isArray(snapshot?.buildings) ? snapshot.buildings : [];
+  const hasTentArmy = buildings.some((building) => building?.type === "tent");
   const soldiers = buildings.reduce(
-    (total, building) => total + (building?.type === "command-center" ? Math.max(0, Number(building?.soldierCount ?? 0) || 0) : 0),
+    (total, building) => total + (
+      (building?.type === "tent" || (!hasTentArmy && building?.type === "command-center"))
+        ? Math.max(0, Number(building?.soldierCount ?? 0) || 0)
+        : 0
+    ),
     0
   );
   const tankUnits = buildings
@@ -18,7 +23,7 @@ const deriveArmyFromSnapshot = (snapshot) => {
     .map((building, index) => ({
       id: building?.id ?? `tank-${index}`,
       health: 260 + ((Math.max(1, Number(building?.level ?? 1) || 1) - 1) * 120),
-      damage: 34 + ((Math.max(1, Number(building?.level ?? 1) || 1) - 1) * 18),
+      damage: 80 + ((Math.max(1, Number(building?.level ?? 1) || 1) - 1) * 18),
     }));
   const helicopters = buildings.filter((building) => building?.type === "skyport" && building?.hasChopper).length;
 
@@ -35,6 +40,28 @@ const getTotalTroops = (army) =>
   + Math.max(0, Number(army?.tanks ?? 0) || 0)
   + Math.max(0, Number(army?.helicopters ?? 0) || 0);
 
+const getWarPointsEarned = (destructionPercent) => {
+  const percent = Math.max(0, Number(destructionPercent ?? 0) || 0);
+
+  if (percent >= 100) {
+    return 40;
+  }
+
+  if (percent >= 75) {
+    return 30;
+  }
+
+  if (percent >= 50) {
+    return 20;
+  }
+
+  if (percent >= 25) {
+    return 10;
+  }
+
+  return 0;
+};
+
 const applyRaidLossesToSnapshot = (snapshot, summary) => {
   if (!snapshot || !summary) {
     return snapshot;
@@ -48,10 +75,11 @@ const applyRaidLossesToSnapshot = (snapshot, summary) => {
     tanks: Math.max(0, Number(summary?.survivors?.tanks ?? 0) || 0),
     helicopters: Math.max(0, Number(summary?.survivors?.helicopters ?? 0) || 0),
   };
+  const hasTentArmy = nextBuildings.some((building) => building?.type === "tent");
 
   let remainingSoldiers = survivors.soldiers;
   nextBuildings.forEach((building) => {
-    if (building?.type !== "command-center") {
+    if (building?.type !== "tent" && !(!hasTentArmy && building?.type === "command-center")) {
       return;
     }
 
@@ -107,6 +135,11 @@ const applyRaidLossesToSnapshot = (snapshot, summary) => {
 
 export default function WarPage() {
   const navigate = useNavigate();
+  const emptyReserves = {
+    soldiers: 0,
+    tanks: 0,
+    helicopters: 0,
+  };
   const gameRootRef = useRef(null);
   const gameRef = useRef(null);
   const battleSceneRef = useRef(null);
@@ -133,6 +166,12 @@ export default function WarPage() {
     loot: 0,
     attackersRemaining: 0,
     defendersRemaining: 0,
+    reserves: {
+      soldiers: 0,
+      tanks: 0,
+      helicopters: 0,
+    },
+    selectedDeploymentType: "soldier",
     summary: null,
   });
 
@@ -200,6 +239,7 @@ export default function WarPage() {
               targetUserId: targetRef.current.id,
               defenderLosses: nextState.summary.defenderLosses,
               loot: nextState.summary.loot,
+              destructionPercent: nextState.summary.destructionPercent,
             }, session.token).catch((error) => {
               console.error("Unable to save enemy defender losses:", error);
             }).then((result) => {
@@ -215,6 +255,16 @@ export default function WarPage() {
               snapshotRef.current = savedSnapshot;
               setSnapshot(savedSnapshot);
 
+              saveSession({
+                ...(getSession() ?? {}),
+                gold: result.attackerGold,
+                warPoints: typeof result.warPoints === "number" ? result.warPoints : getSession()?.warPoints,
+                rankName: result.rankName ?? getSession()?.rankName,
+                rankDescription: result.rankDescription ?? getSession()?.rankDescription,
+                nextRankName: result.nextRankName ?? getSession()?.nextRankName,
+                nextRankPoints: result.nextRankPoints ?? getSession()?.nextRankPoints,
+              });
+
               setTarget((currentTarget) => {
                 if (!currentTarget || currentTarget.id !== targetRef.current?.id) {
                   return currentTarget;
@@ -223,7 +273,9 @@ export default function WarPage() {
                 const defenderLosses = nextState.summary?.defenderLosses ?? {};
                 const nextBuildings = Array.isArray(currentTarget.buildings)
                   ? currentTarget.buildings.map((building) => {
-                    if (building?.type !== "command-center") {
+                    const hasTentArmy = currentTarget.buildings?.some((entry) => entry?.type === "tent");
+
+                    if (building?.type !== "tent" && !(!hasTentArmy && building?.type === "command-center")) {
                       return building;
                     }
 
@@ -301,6 +353,10 @@ export default function WarPage() {
   }, [session]);
 
   useEffect(() => {
+    if (raidState.phase === "active" || raidState.phase === "finished" || raidState.summary) {
+      return;
+    }
+
     const nextSignature = JSON.stringify({
       targetId: target?.id ?? null,
       army,
@@ -315,7 +371,7 @@ export default function WarPage() {
       target,
       army,
     });
-  }, [target, army]);
+  }, [target, army, raidState.phase, raidState.summary]);
 
   const resetRaidPanel = () => {
     savedSummaryRef.current = "";
@@ -327,13 +383,16 @@ export default function WarPage() {
       loot: 0,
       attackersRemaining: 0,
       defendersRemaining: 0,
+      reserves: emptyReserves,
+      selectedDeploymentType: "soldier",
       summary: null,
     });
   };
 
-  const resolveTarget = useCallback(async (playerId = "") => {
+  const resolveTarget = useCallback(async () => {
     const token = session?.token ?? null;
     const currentTotalTroops = getTotalTroops(army);
+    const previousTargetId = targetRef.current?.id ?? null;
 
     if (!token) {
       setLookupState("error");
@@ -353,22 +412,49 @@ export default function WarPage() {
     resetRaidPanel();
 
     try {
-      const result = await fetchWarTarget(token, playerId);
+      let result = null;
+
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        const candidate = await fetchWarTarget(token);
+
+        if (!candidate) {
+          continue;
+        }
+
+        result = candidate;
+
+        if (!previousTargetId || candidate.id !== previousTargetId) {
+          break;
+        }
+      }
+
+      if (!result) {
+        throw new Error("Unable to find another village or base.");
+      }
+
       setTarget(result);
       setLookupState("ready");
     } catch (error) {
       setTarget(null);
       setLookupState("error");
-      setLookupError(error.response?.data?.message || "Unable to find an enemy base.");
+      setLookupError(error.response?.data?.message || "Unable to find another village or base.");
     }
   }, [session, army]);
 
   const handleFindMatch = useCallback(async () => {
-    await resolveTarget("");
+    await resolveTarget();
   }, [resolveTarget]);
 
   const handleStartAttack = () => {
     battleSceneRef.current?.startRaidAttack();
+  };
+
+  const handleSelectDeploymentType = (type) => {
+    battleSceneRef.current?.setDeploymentType?.(type);
+    setRaidState((current) => ({
+      ...current,
+      selectedDeploymentType: type,
+    }));
   };
 
   const handleBackToBase = () => {
@@ -379,6 +465,7 @@ export default function WarPage() {
   const canAttack = totalTroops > 0 && target && raidState.phase === "ready";
   const canFindMatch = lookupState !== "loading" && raidState.phase !== "active";
   const summary = raidState.summary;
+  const earnedWarPoints = getWarPointsEarned(summary?.destructionPercent);
   const playerName = session?.name || session?.email?.split("@")[0] || "Commander";
   const playerId = session?.playerId || (session?.id ? `PLYR-${String(session.id).padStart(6, "0")}` : "UNKNOWN");
 
@@ -428,6 +515,7 @@ export default function WarPage() {
                   <p className="text-[0.65rem] uppercase tracking-[0.3em] text-cyan-300/70">Enemy</p>
                   <p className="mt-1 text-base font-black text-cyan-100">{target.name}</p>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{target.playerId}</p>
+                  <p className="mt-1 text-[11px] font-semibold text-amber-200">Lootable: {target.loot ?? 0}</p>
                 </div>
               </>
             ) : null}
@@ -453,7 +541,7 @@ export default function WarPage() {
             disabled={!canFindMatch}
             className="rounded-xl bg-emerald-400 px-3 py-2.5 text-xs font-black uppercase tracking-[0.16em] text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {lookupState === "loading" ? "Searching..." : "Find Match"}
+            {lookupState === "loading" ? "Searching..." : "Search Another Village"}
           </button>
           <button
             type="button"
@@ -467,13 +555,13 @@ export default function WarPage() {
             <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Status</p>
             <p className="mt-1 text-sm font-black text-white">
               {raidState.phase === "active"
-                ? "Assault in progress"
+                ? "Deploy units on the battlefield"
                 : raidState.phase === "ready"
-                  ? "Enemy base locked"
+                  ? "Village located"
                   : raidState.phase === "finished"
                     ? "Raid complete"
                     : lookupState === "loading"
-                      ? "Searching enemy"
+                      ? "Searching village or base"
                       : "Waiting for orders"}
             </p>
             {lookupError ? <p className="mt-1 text-[11px] text-rose-300">{lookupError}</p> : null}
@@ -484,6 +572,7 @@ export default function WarPage() {
               <p className="mt-1 text-base font-black text-white">{target.name}</p>
               <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-300">{target.playerId}</p>
               <p className="mt-1 text-[11px] text-slate-300">HQ Lv.{target.townHallLevel ?? 1}</p>
+              <p className="mt-1 text-[11px] font-semibold text-emerald-300">Available Loot: {target.loot ?? 0}</p>
             </div>
           ) : null}
         </div>
@@ -549,6 +638,47 @@ export default function WarPage() {
                 <p className="mt-1 text-xl font-black text-emerald-100">{army.helicopters}</p>
               </div>
             </div>
+
+            {raidState.phase === "active" ? (
+              <div className="flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleSelectDeploymentType("soldier")}
+                  disabled={(raidState.reserves?.soldiers ?? 0) <= 0}
+                  className={`rounded-xl px-3 py-2 text-xs font-black uppercase tracking-[0.16em] transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                    raidState.selectedDeploymentType === "soldier"
+                      ? "bg-sky-300 text-slate-950"
+                      : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                  }`}
+                >
+                  Soldier ({raidState.reserves?.soldiers ?? 0})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSelectDeploymentType("tank")}
+                  disabled={(raidState.reserves?.tanks ?? 0) <= 0}
+                  className={`rounded-xl px-3 py-2 text-xs font-black uppercase tracking-[0.16em] transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                    raidState.selectedDeploymentType === "tank"
+                      ? "bg-amber-300 text-slate-950"
+                      : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                  }`}
+                >
+                  Tank ({raidState.reserves?.tanks ?? 0})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSelectDeploymentType("helicopter")}
+                  disabled={(raidState.reserves?.helicopters ?? 0) <= 0}
+                  className={`rounded-xl px-3 py-2 text-xs font-black uppercase tracking-[0.16em] transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                    raidState.selectedDeploymentType === "helicopter"
+                      ? "bg-emerald-300 text-slate-950"
+                      : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                  }`}
+                >
+                  Chopper ({raidState.reserves?.helicopters ?? 0})
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
@@ -558,9 +688,14 @@ export default function WarPage() {
           <div className="pointer-events-auto w-full max-w-xl rounded-[2rem] border border-white/10 bg-slate-950/90 p-6 text-white shadow-[0_24px_90px_rgba(2,6,23,0.55)] backdrop-blur">
             <p className="text-xs uppercase tracking-[0.3em] text-amber-300/80">Battle Result</p>
             <h2 className={`mt-3 text-4xl font-black ${summary.outcome === "victory" ? "text-emerald-300" : "text-rose-300"}`}>
-              {summary.outcome === "victory" ? "Victory" : "Defeat"}
+              {summary.outcome === "victory" ? "Victory" : "You Lose"}
             </h2>
             <p className="mt-2 text-sm text-slate-300">{summary.reason}</p>
+            <p className={`mt-3 text-base font-black ${summary.outcome === "victory" ? "text-emerald-200" : "text-rose-200"}`}>
+              {summary.outcome === "victory"
+                ? `You gained ${earnedWarPoints} War Points and ${summary.loot} loot.`
+                : `You earned ${earnedWarPoints} War Points and got ${summary.loot} loot.`}
+            </p>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-3">
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -568,14 +703,21 @@ export default function WarPage() {
                 <p className="mt-1 text-2xl font-black text-amber-200">{summary.destructionPercent}%</p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Loot</p>
+                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Loot Gained</p>
                 <p className="mt-1 text-2xl font-black text-emerald-200">{summary.loot}</p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Troops Left</p>
-                <p className="mt-1 text-2xl font-black text-sky-200">{summary.remainingTroops}</p>
+                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">War Points</p>
+                <p className="mt-1 text-2xl font-black text-sky-200">+{earnedWarPoints}</p>
               </div>
             </div>
+
+            <p className="mt-4 text-sm font-semibold text-slate-300">
+              Troops Left: <span className="text-sky-200">{summary.remainingTroops}</span>
+            </p>
+            <p className="mt-1 text-sm font-semibold text-yellow-200">
+              War Points Earned: +{earnedWarPoints}
+            </p>
 
             <div className="mt-6 flex flex-wrap gap-3">
               <button
@@ -590,7 +732,7 @@ export default function WarPage() {
                 onClick={handleFindMatch}
                 className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-black uppercase tracking-[0.16em] text-white transition hover:bg-white/10"
               >
-                Find Another Match
+                Search Another Base
               </button>
             </div>
           </div>

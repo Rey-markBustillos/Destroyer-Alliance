@@ -7,15 +7,17 @@ import BattleScene from "./scenes/BattleScene";
 import UIScene from "./scenes/UIScene";
 import { GAME_HEIGHT, GAME_WIDTH } from "./utils/config";
 import { GAME_RENDER_CONFIG } from "./tilemap/layoutConfig";
+import { applyCanvasQuality } from "./utils/renderQuality";
 
 const phaserConfig = {
 	type: Phaser.AUTO,
 	width: GAME_WIDTH,
 	height: GAME_HEIGHT,
 	parent: undefined,
-	backgroundColor: "#020617",
-	antialias: false,
-	antialiasGL: false,
+	transparent: true,
+	backgroundColor: "rgba(0,0,0,0)",
+	antialias: true,
+	antialiasGL: true,
 	pixelArt: GAME_RENDER_CONFIG.pixelArt,
 	roundPixels: GAME_RENDER_CONFIG.roundPixels,
 	resolution: GAME_RENDER_CONFIG.resolution,
@@ -27,9 +29,10 @@ const phaserConfig = {
 		},
 	},
 	scale: {
-		mode: Phaser.Scale.FIT,
-		autoCenter: Phaser.Scale.CENTER_BOTH,
+		mode: Phaser.Scale.RESIZE,
+		autoCenter: Phaser.Scale.NO_CENTER,
 	},
+	autoRound: false,
 };
 
 export const createGame = (parentElement, options = {}) => {
@@ -44,11 +47,14 @@ export const createGame = (parentElement, options = {}) => {
 		? [BootScene, PreloadScene, gameScene]
 		: [BootScene, PreloadScene, gameScene, UIScene];
 
-	return new Phaser.Game({
+	const game = new Phaser.Game({
 		...phaserConfig,
 		parent: parentElement,
 		scene: scenes,
 	});
+
+	applyCanvasQuality(game);
+	return game;
 };
 
 export const destroyGame = (gameInstance) => {

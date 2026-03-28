@@ -26,6 +26,16 @@ export const fetchProfile = async (token) => {
   return data;
 };
 
+export const fetchLeaderboard = async (token) => {
+  const { data } = await authApi.get("/leaderboard", {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  return data;
+};
+
 export const updateProfileName = async (token, name) => {
   const { data } = await authApi.patch("/profile/name", { name }, {
     headers: {

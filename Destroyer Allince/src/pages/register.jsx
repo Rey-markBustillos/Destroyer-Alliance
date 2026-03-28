@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 
 import { register } from "../services/auth";
-import { saveSession } from "../services/session";
+import { markIntroPending, saveSession } from "../services/session";
 
 const cinematicEase = [0.22, 1, 0.36, 1];
 const cardEase = [0.65, 0.05, 0.36, 1];
@@ -162,8 +162,9 @@ export default function Register() {
     try {
       const session = await register({ name, email, password });
       saveSession(session);
+      markIntroPending();
       setTimeout(() => {
-        navigate("/game");
+        navigate("/intro", { replace: true, state: { justRegistered: true } });
       }, 1900);
     } catch (requestError) {
       setError(requestError.response?.data?.message || "Registration failed.");

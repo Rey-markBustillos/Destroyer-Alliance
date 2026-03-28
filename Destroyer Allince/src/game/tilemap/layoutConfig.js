@@ -1,3 +1,5 @@
+import { MAX_RENDER_DEVICE_PIXEL_RATIO } from "../utils/renderQuality";
+
 export const TILESET_META = {
   key: "tiles",
   mapKey: "level1",
@@ -20,7 +22,7 @@ export const TILEMAP_LAYER_NAMES = {
 };
 
 export const GAME_RENDER_CONFIG = {
-  pixelArt: true,
-  roundPixels: true,
-  resolution: Math.min(window.devicePixelRatio || 1, 2),
+  pixelArt: false,
+  roundPixels: false,
+  resolution: Math.min(window.devicePixelRatio || 1, MAX_RENDER_DEVICE_PIXEL_RATIO),
 };

@@ -1,4 +1,9 @@
 import Phaser from "phaser";
+import {
+  configureHdSprite,
+  createSoftShadow,
+  getTextureSourceSize,
+} from "../utils/renderQuality";
 
 const darken = (hex, amount = 28) => {
   const color = Phaser.Display.Color.ValueToColor(hex);
@@ -10,6 +15,16 @@ const lighten = (hex, amount = 18) => {
   const color = Phaser.Display.Color.ValueToColor(hex);
   color.lighten(amount);
   return color.color;
+};
+
+const BUILDING_TEXTURE_FALLBACKS = ["command-center", "machine-wood", "town"];
+
+const getBestTextureKey = (scene, preferredKey, fallbackKeys = BUILDING_TEXTURE_FALLBACKS) => {
+  if (preferredKey && scene.textures.exists(preferredKey)) {
+    return preferredKey;
+  }
+
+  return fallbackKeys.find((key) => scene.textures.exists(key)) ?? null;
 };
 
 const drawDiamond = (graphics, centerX, centerY, halfW, halfH, fillColor, strokeColor, alpha = 1) => {
@@ -29,6 +44,8 @@ const drawDiamond = (graphics, centerX, centerY, halfW, halfH, fillColor, stroke
 const createFootprintHitArea = (footprintRows, footprintCols, tileHalfW, tileHalfH) => {
   const diamonds = [];
   const verticalOffset = ((footprintRows + footprintCols - 2) * tileHalfH) / 2;
+  const hitHalfW = tileHalfW;
+  const hitHalfH = tileHalfH;
 
   for (let row = 0; row < footprintRows; row += 1) {
     for (let col = 0; col < footprintCols; col += 1) {
@@ -36,10 +53,10 @@ const createFootprintHitArea = (footprintRows, footprintCols, tileHalfW, tileHal
       const centerY = (col + row) * tileHalfH - verticalOffset;
 
       diamonds.push(new Phaser.Geom.Polygon([
-        new Phaser.Geom.Point(centerX, centerY - tileHalfH),
-        new Phaser.Geom.Point(centerX + tileHalfW, centerY),
-        new Phaser.Geom.Point(centerX, centerY + tileHalfH),
-        new Phaser.Geom.Point(centerX - tileHalfW, centerY),
+        new Phaser.Geom.Point(centerX, centerY - hitHalfH),
+        new Phaser.Geom.Point(centerX + hitHalfW, centerY),
+        new Phaser.Geom.Point(centerX, centerY + hitHalfH),
+        new Phaser.Geom.Point(centerX - hitHalfW, centerY),
       ]));
     }
   }
@@ -52,10 +69,32 @@ const createFootprintHitArea = (footprintRows, footprintCols, tileHalfW, tileHal
   };
 };
 
+const getLevelLabelOffsetY = (buildingTypeId, roofY) => {
+  switch (buildingTypeId) {
+    case "command-center":
+      return -6;
+    case "skyport":
+      return -10;
+    case "battle-tank":
+      return -2;
+    case "air-defense":
+      return -8;
+    case "tent":
+      return -4;
+    case "wood-machine":
+      return -8;
+    case "town-hall":
+      return -82;
+    default:
+      return roofY + 6;
+  }
+};
+
 export default class Building extends Phaser.GameObjects.Container {
-  constructor(scene, x, y, buildingType) {
+  constructor(scene, x, y, buildingType, options = {}) {
     super(scene, x, y);
     scene.add.existing(this);
+    const { animatePlacement = true } = options;
 
     this.buildingType = buildingType;
     this.isStructure = true;
@@ -73,6 +112,10 @@ export default class Building extends Phaser.GameObjects.Container {
     this.builderFrameIndex = 0;
     this.builderBaseX = 0;
     this.builderBaseY = 0;
+    this.spriteShadow = null;
+    this.sleepLabel = null;
+    this.sleepTween = null;
+    this.sleepLoopEvent = null;
     this.level = 1;
     this.isUpgrading = false;
     this.upgradeCompleteAt = null;
@@ -91,24 +134,84 @@ export default class Building extends Phaser.GameObjects.Container {
     const halfW = baseWidth / 2;
     const halfH = baseHeight / 2;
     const roofY = -bodyHeight;
-    if (buildingType.id === "town-hall" && scene.textures.exists("town")) {
-      const cropX = 48;
-      const cropY = 22;
-      const cropWidth = 412;
-      const cropHeight = 380;
-      const townWidth = footprintWidth * 1.2;
-      const townHeight = townWidth * (cropHeight / cropWidth);
-      const townSprite = scene.add.image(0, 12, "town");
+    const addSpriteShadow = (
+      width = footprintWidth * 0.8,
+      height = footprintHeight * 0.48,
+      yOffset = footprintHeight / 2 + 5
+    ) => {
+      const shadow = createSoftShadow(scene, {
+        x: 0,
+        y: yOffset,
+        width,
+        height,
+        alpha: 0.14,
+      });
+      this.spriteShadow = shadow;
+      this.visualContainer.add(shadow);
+    };
+    const addQualitySprite = ({
+      textureKey,
+      fallbackKeys = buildingType.fallbackTextureKeys ?? BUILDING_TEXTURE_FALLBACKS,
+      x: spriteX = 0,
+      y: spriteY = footprintHeight / 2 + 18,
+      maxWidth = footprintWidth * 1.1,
+      maxHeight = footprintWidth * 1.1,
+      crop = null,
+      shadowWidth = footprintWidth * 0.82,
+      shadowHeight = footprintHeight * 0.52,
+      shadowY = footprintHeight / 2 + 5,
+    }) => {
+      const resolvedTextureKey = getBestTextureKey(scene, textureKey, fallbackKeys);
 
-      townSprite.setOrigin(0.5, 1);
-      townSprite.setCrop(cropX, cropY, cropWidth, cropHeight);
-      townSprite.setDisplaySize(townWidth, townHeight);
-      this.visualContainer.add(townSprite);
+      if (!resolvedTextureKey) {
+        return null;
+      }
+
+      addSpriteShadow(shadowWidth, shadowHeight, shadowY);
+      const sprite = scene.add.image(spriteX, spriteY, resolvedTextureKey);
+      sprite.setOrigin(0.5, 1);
+      sprite.setAlpha(0.995);
+
+      if (crop) {
+        sprite.setCrop(crop.x, crop.y, crop.width, crop.height);
+        configureHdSprite(sprite, {
+          scene,
+          maxWidth,
+          maxHeight,
+          sourceWidth: crop.width,
+          sourceHeight: crop.height,
+        });
+      } else {
+        const sourceSize = getTextureSourceSize(scene, resolvedTextureKey);
+        configureHdSprite(sprite, {
+          scene,
+          maxWidth,
+          maxHeight,
+          sourceWidth: sourceSize.width,
+          sourceHeight: sourceSize.height,
+        });
+      }
+
+      this.visualContainer.add(sprite);
+      return sprite;
+    };
+    if (buildingType.id === "town-hall") {
+      addQualitySprite({
+        textureKey: "town",
+        y: 34,
+        maxWidth: footprintWidth * 1.2,
+        maxHeight: footprintWidth * 1.55,
+        crop: { x: 48, y: 22, width: 412, height: 380 },
+        shadowWidth: footprintWidth * 0.9,
+        shadowHeight: footprintHeight * 0.66,
+        shadowY: footprintHeight / 2 + 7,
+      });
 
       if (scene.textures.exists("goldcoin")) {
         this.resourceIcon = scene.add.image(0, -56, "goldcoin");
         this.resourceIcon.setOrigin(0.5, 0.5);
         this.resourceIcon.setDisplaySize(24, 24);
+        configureHdSprite(this.resourceIcon, { scene, maxWidth: 24, maxHeight: 24 });
         this.resourceIcon.setVisible(false);
         this.resourceIcon.setInteractive({ useHandCursor: true });
         this.resourceIcon.on("pointerup", (_pointer, _localX, _localY, event) => {
@@ -120,54 +223,85 @@ export default class Building extends Phaser.GameObjects.Container {
         });
         this.visualContainer.add(this.resourceIcon);
       }
-    } else if (buildingType.id === "command-center" && scene.textures.exists("command-center")) {
-      const cropX = 11;
-      const cropY = 4;
-      const cropWidth = 124;
-      const cropHeight = 129;
-      const commandCenterWidth = footprintWidth * 1.24;
-      const commandCenterHeight = commandCenterWidth * (cropHeight / cropWidth);
-      const commandCenterSprite = scene.add.image(0, footprintHeight / 2 + 4, "command-center");
+    } else if (buildingType.id === "command-center") {
+      addQualitySprite({
+        textureKey: "command-center",
+        y: footprintHeight / 2 + 18,
+        maxWidth: footprintWidth * 1.24,
+        maxHeight: footprintWidth * 1.28,
+        crop: { x: 11, y: 4, width: 124, height: 129 },
+        shadowWidth: footprintWidth * 0.76,
+        shadowHeight: footprintHeight * 0.5,
+      });
 
-      commandCenterSprite.setOrigin(0.5, 1);
-      commandCenterSprite.setCrop(cropX, cropY, cropWidth, cropHeight);
-      commandCenterSprite.setDisplaySize(commandCenterWidth, commandCenterHeight);
-      this.visualContainer.add(commandCenterSprite);
-    } else if (
-      buildingType.id === "skyport"
-      && scene.textures.exists("skyport-empty")
-      && scene.textures.exists("skyport-bought")
-    ) {
-      const skyportWidth = footprintWidth * 0.82;
-      const skyportHeight = skyportWidth;
-      const skyportSprite = scene.add.image(0, footprintHeight / 2 + 8, "skyport-empty");
+      if (scene.textures.exists("goldcoin")) {
+        this.resourceIcon = scene.add.image(0, -34, "goldcoin");
+        this.resourceIcon.setOrigin(0.5, 0.5);
+        this.resourceIcon.setDisplaySize(22, 22);
+        configureHdSprite(this.resourceIcon, { scene, maxWidth: 22, maxHeight: 22 });
+        this.resourceIcon.setVisible(false);
+        this.resourceIcon.setInteractive({ useHandCursor: true });
+        this.resourceIcon.on("pointerup", (_pointer, _localX, _localY, event) => {
+          event.stopPropagation();
 
-      skyportSprite.setOrigin(0.5, 1);
-      skyportSprite.setDisplaySize(skyportWidth, skyportHeight);
+          if (!scene.pointerDrag?.moved && this.machineGold > 0) {
+            scene.collectTownHallGold?.(this);
+          }
+        });
+        this.visualContainer.add(this.resourceIcon);
+      }
+    } else if (buildingType.id === "skyport") {
+      const skyportSprite = addQualitySprite({
+        textureKey: "skyport-empty",
+        fallbackKeys: ["skyport-shop", ...BUILDING_TEXTURE_FALLBACKS],
+        y: footprintHeight / 2 + 20,
+        maxWidth: footprintWidth * 0.88,
+        maxHeight: footprintWidth * 0.88,
+        shadowWidth: footprintWidth * 0.84,
+        shadowHeight: footprintHeight * 0.52,
+      });
       this.skyportSprite = skyportSprite;
-      this.visualContainer.add(skyportSprite);
-    } else if (buildingType.id === "battle-tank" && scene.textures.exists("tank-shop")) {
-      const tankWidth = footprintWidth * 1.05;
-      const tankHeight = tankWidth * 0.9;
-      const tankSprite = scene.add.image(0, footprintHeight / 2 + 12, "tank-owned");
-
-      tankSprite.setOrigin(0.5, 1);
-      tankSprite.setDisplaySize(tankWidth, tankHeight);
+    } else if (buildingType.id === "battle-tank") {
+      const tankSprite = addQualitySprite({
+        textureKey: "tank-owned",
+        fallbackKeys: ["tank-shop", ...BUILDING_TEXTURE_FALLBACKS],
+        y: footprintHeight / 2 + 28,
+        maxWidth: footprintWidth * 1.56,
+        maxHeight: footprintWidth * 1.24,
+        shadowWidth: footprintWidth * 1.14,
+        shadowHeight: footprintHeight * 0.68,
+        shadowY: footprintHeight / 2 + 7,
+      });
       this.battleTankSprite = tankSprite;
-      this.visualContainer.add(tankSprite);
-    } else if (buildingType.id === "wood-machine" && scene.textures.exists("machine-wood")) {
-      const cropX = 64;
-      const cropY = 0;
-      const cropWidth = 513;
-      const cropHeight = 364;
-      const machineWidth = footprintWidth * 1.18;
-      const machineHeight = machineWidth * (cropHeight / cropWidth);
-      const machineSprite = scene.add.image(0, footprintHeight / 2 + 6, "machine-wood");
-
-      machineSprite.setOrigin(0.5, 1);
-      machineSprite.setCrop(cropX, cropY, cropWidth, cropHeight);
-      machineSprite.setDisplaySize(machineWidth, machineHeight);
-      this.visualContainer.add(machineSprite);
+    } else if (buildingType.id === "air-defense") {
+      addQualitySprite({
+        textureKey: "air-defense",
+        y: footprintHeight / 2 + 24,
+        maxWidth: footprintWidth * 1.42,
+        maxHeight: footprintWidth * 1.38,
+        shadowWidth: footprintWidth * 1.02,
+        shadowHeight: footprintHeight * 0.62,
+        shadowY: footprintHeight / 2 + 7,
+      });
+    } else if (buildingType.id === "tent") {
+      addQualitySprite({
+        textureKey: "tent",
+        y: footprintHeight / 2 + 18,
+        maxWidth: footprintWidth * 1.08,
+        maxHeight: footprintWidth * 0.84,
+        shadowWidth: footprintWidth * 0.82,
+        shadowHeight: footprintHeight * 0.46,
+        shadowY: footprintHeight / 2 + 6,
+      });
+    } else if (buildingType.id === "wood-machine") {
+      const machineSprite = addQualitySprite({
+        textureKey: "machine-wood",
+        y: footprintHeight / 2 + 16,
+        maxWidth: footprintWidth * 0.94,
+        maxHeight: footprintWidth * 0.68,
+        crop: { x: 64, y: 0, width: 513, height: 364 },
+      });
+      const machineHeight = machineSprite?.displayHeight ?? Math.max(34, footprintWidth * 0.84);
 
       this.resourceLabel = scene.add.text(0, -machineHeight + 18, "0", {
         fontFamily: "Verdana",
@@ -286,7 +420,7 @@ export default class Building extends Phaser.GameObjects.Container {
       this.add(this.builderSprite);
     }
 
-    this.levelLabel = scene.add.text(0, roofY - 8, "Lv.1", {
+    this.levelLabel = scene.add.text(0, getLevelLabelOffsetY(buildingType.id, roofY), "Lv.1", {
       fontFamily: "Verdana",
       fontSize: "12px",
       fontStyle: "bold",
@@ -297,12 +431,7 @@ export default class Building extends Phaser.GameObjects.Container {
     });
     this.levelLabel.setOrigin(0.5, 0.5);
 
-    if (buildingType.id === "command-center") {
-      this.levelLabel.setY(-14);
-    }
-
     if (buildingType.id === "town-hall") {
-      this.levelLabel.setY(-82);
       this.levelLabel.setVisible(false);
     }
 
@@ -336,7 +465,19 @@ export default class Building extends Phaser.GameObjects.Container {
       this.builderTween = null;
       this.builderFrameEvent?.remove(false);
       this.builderFrameEvent = null;
+      this.spriteShadow?.destroy();
+      this.spriteShadow = null;
+      this.sleepTween?.remove();
+      this.sleepTween = null;
+      this.sleepLoopEvent?.remove(false);
+      this.sleepLoopEvent = null;
+      this.sleepLabel?.destroy();
+      this.sleepLabel = null;
     });
+
+    if (animatePlacement) {
+      this.playPlacementAnimation();
+    }
   }
 
   setLevel(level = 1) {
@@ -399,7 +540,7 @@ export default class Building extends Phaser.GameObjects.Container {
   }
 
   setMachineGoldDisplay(machineGold = 0, maxGold = 250) {
-    if (this.buildingType?.id === "town-hall") {
+    if (this.buildingType?.id === "town-hall" || this.buildingType?.id === "command-center") {
       if (this.resourceIcon) {
         this.resourceIcon.setVisible(machineGold > 0);
       }
@@ -415,6 +556,19 @@ export default class Building extends Phaser.GameObjects.Container {
     );
   }
 
+  setSleepState(isSleeping = false) {
+    if (this.buildingType?.id !== "tent") {
+      return;
+    }
+
+    if (isSleeping) {
+      this.startSleepEffect();
+      return;
+    }
+
+    this.stopSleepEffect();
+  }
+
   setSkyportState(hasChopper = false) {
     this.hasChopper = Boolean(hasChopper);
 
@@ -422,7 +576,15 @@ export default class Building extends Phaser.GameObjects.Container {
       return;
     }
 
-    this.skyportSprite.setTexture(this.hasChopper ? "skyport-bought" : "skyport-empty");
+    const nextTextureKey = getBestTextureKey(
+      this.scene,
+      this.hasChopper ? "skyport-bought" : "skyport-empty",
+      ["skyport-shop", ...BUILDING_TEXTURE_FALLBACKS]
+    );
+
+    if (nextTextureKey) {
+      this.skyportSprite.setTexture(nextTextureKey);
+    }
   }
 
   setBattleTankState(hasTank = false) {
@@ -432,7 +594,15 @@ export default class Building extends Phaser.GameObjects.Container {
       return;
     }
 
-    this.battleTankSprite.setTexture(this.hasTank ? "tank-shop" : "tank-owned");
+    const nextTextureKey = getBestTextureKey(
+      this.scene,
+      this.hasTank ? "tank-shop" : "tank-owned",
+      ["tank-shop", "tank-owned", ...BUILDING_TEXTURE_FALLBACKS]
+    );
+
+    if (nextTextureKey) {
+      this.battleTankSprite.setTexture(nextTextureKey);
+    }
   }
 
   setBattleHealth(health = null, maxHealth = null) {
@@ -449,5 +619,92 @@ export default class Building extends Phaser.GameObjects.Container {
       `${Math.max(0, Math.round(health))}/${Math.max(0, Math.round(maxHealth))}`
     );
     this.battleHealthLabel.setVisible(true);
+  }
+
+  playPlacementAnimation() {
+    this.visualContainer.setScale(0.84);
+    this.visualContainer.setAlpha(0);
+    this.visualContainer.setY(18);
+    if (this.spriteShadow) {
+      this.spriteShadow.setAlpha(0);
+      this.spriteShadow.setScale(0.84, 0.74);
+    }
+
+    this.scene.tweens.add({
+      targets: this.visualContainer,
+      scaleX: 1,
+      scaleY: 1,
+      alpha: 1,
+      y: 0,
+      duration: 240,
+      ease: "Back.easeOut",
+    });
+    if (this.spriteShadow) {
+      this.scene.tweens.add({
+        targets: this.spriteShadow,
+        alpha: 1,
+        scaleX: 1,
+        scaleY: 0.88,
+        duration: 240,
+        ease: "Sine.easeOut",
+      });
+    }
+  }
+
+  startSleepEffect() {
+    if (this.sleepLoopEvent) {
+      return;
+    }
+
+    const spawnSleepLabel = () => {
+      this.sleepLabel?.destroy();
+      this.sleepTween?.remove();
+
+      this.sleepLabel = this.scene.add.text(0, -34, "zzzzz", {
+        fontFamily: "Verdana",
+        fontSize: "14px",
+        fontStyle: "bold",
+        color: "#e0f2fe",
+        stroke: "#082f49",
+        strokeThickness: 4,
+      });
+      this.sleepLabel.setOrigin(0.5, 0.5);
+      this.sleepLabel.setAlpha(0);
+      this.add(this.sleepLabel);
+
+      this.sleepTween = this.scene.tweens.add({
+        targets: this.sleepLabel,
+        y: -56,
+        alpha: 1,
+        duration: 900,
+        ease: "Sine.easeOut",
+        yoyo: false,
+        onComplete: () => {
+          if (!this.active) {
+            return;
+          }
+
+          this.sleepLabel?.destroy();
+          this.sleepLabel = null;
+          this.sleepTween = null;
+        },
+      });
+    };
+
+    spawnSleepLabel();
+    this.sleepLoopEvent = this.scene.time.addEvent({
+      delay: 1300,
+      loop: true,
+      callback: spawnSleepLabel,
+    });
+  }
+
+  stopSleepEffect() {
+    this.sleepLoopEvent?.remove(false);
+    this.sleepLoopEvent = null;
+    this.sleepTween?.remove();
+    this.sleepTween = null;
+    this.sleepLabel?.destroy();
+    this.sleepLabel = null;
   }
 }
