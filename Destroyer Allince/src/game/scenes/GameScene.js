@@ -359,6 +359,10 @@ export default class GameScene extends Phaser.Scene {
     return Math.max(1, this.getTownHallLevel());
   }
 
+  getAirDefenseLimit() {
+    return this.getTownHallLevel() >= 2 ? 1 : 0;
+  }
+
   canAddBuildingType(buildingType, movingBuilding = null) {
     const typeId = buildingType?.id ?? buildingType?.buildingType?.id ?? buildingType;
 
@@ -389,6 +393,13 @@ export default class GameScene extends Phaser.Scene {
     if (typeId === "battle-tank") {
       const battleTankCount = this.placedBuildings.filter((building) => this.isBattleTank(building)).length;
       return battleTankCount < this.getBattleTankLimit();
+    }
+
+    if (typeId === "air-defense") {
+      const airDefenseCount = this.placedBuildings.filter(
+        (building) => building.buildingType?.id === "air-defense"
+      ).length;
+      return airDefenseCount < this.getAirDefenseLimit();
     }
 
     return true;
@@ -1506,6 +1517,9 @@ export default class GameScene extends Phaser.Scene {
     const skyports = this.placedBuildings.filter((building) =>
       this.isSkyport(building)
     ).length;
+    const airDefenseBuildings = this.placedBuildings.filter((building) =>
+      building.buildingType?.id === "air-defense"
+    ).length;
 
     this.events.emit("game-state-update", {
       gold: this.gold,
@@ -1522,6 +1536,8 @@ export default class GameScene extends Phaser.Scene {
       battleTankLimit: this.getBattleTankLimit(),
       skyports,
       skyportLimit: this.getSkyportLimit(),
+      airDefenseBuildings,
+      airDefenseLimit: this.getAirDefenseLimit(),
       woodMachines: woodMachines.length,
       tents,
       fullWoodMachines,
@@ -1670,7 +1686,7 @@ export default class GameScene extends Phaser.Scene {
       return false;
     }
 
-    return occupiedTents.every((building) => Boolean(building.isSleeping));
+    return occupiedTents.every((building) => building.isSleeping === true);
   }
 
   isAnyTentHungry() {
@@ -2183,7 +2199,7 @@ export default class GameScene extends Phaser.Scene {
     if ((building.soldierCount ?? 0) <= 0) {
       building.isSleeping = false;
     } else {
-      building.isSleeping = !Boolean(building.isSleeping);
+      building.isSleeping = !building.isSleeping;
     }
 
     building.setSleepState?.(building.isSleeping);

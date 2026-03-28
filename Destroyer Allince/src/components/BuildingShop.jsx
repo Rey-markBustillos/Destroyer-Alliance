@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { motion } from "framer-motion";
+import { motion as Motion } from "framer-motion";
 
 import { BUILDING_LIST } from "../game/utils/buildingTypes";
 
@@ -19,9 +19,11 @@ export default function BuildingShop({
   battleTankLimit = 1,
   skyportCount = 0,
   skyportLimit = 1,
+  airDefenseCount = 0,
+  airDefenseLimit = 0,
 }) {
   return (
-    <motion.div
+    <Motion.div
       initial={{ opacity: 0, y: 18, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.28, ease: "easeOut" }}
@@ -56,16 +58,20 @@ export default function BuildingShop({
           const tentCapReached = building.id === "tent" && tentCount >= tentLimit;
           const battleTankCapReached = building.id === "battle-tank" && battleTankCount >= battleTankLimit;
           const skyportCapReached = building.id === "skyport" && skyportCount >= skyportLimit;
+          const airDefenseLocked = building.id === "air-defense" && airDefenseLimit <= 0;
+          const airDefenseCapReached = building.id === "air-defense" && airDefenseCount >= airDefenseLimit && airDefenseLimit > 0;
           const isLockedByRules = woodMachineCapReached
             || commandCenterCapReached
             || tentCapReached
             || battleTankCapReached
-            || skyportCapReached;
+            || skyportCapReached
+            || airDefenseLocked
+            || airDefenseCapReached;
           const canBuy = canAfford && !isLockedByRules;
           const isSelected = selectedBuilding?.id === building.id;
 
           return (
-            <motion.button
+            <Motion.button
               key={building.id}
               type="button"
               onClick={() => onSelectBuilding(building)}
@@ -102,17 +108,21 @@ export default function BuildingShop({
                         ? `${battleTankCount}/${battleTankLimit} Battle Tanks`
                         : skyportCapReached
                           ? `${skyportCount}/${skyportLimit} Chopper Bays`
-                    : itemizeCost(building.cost)}
+                          : airDefenseLocked
+                            ? "Unlock at Town Hall Lv.2"
+                            : airDefenseCapReached
+                              ? `${airDefenseCount}/${airDefenseLimit} Air Defense`
+                              : itemizeCost(building.cost)}
               </p>
-            </motion.button>
+            </Motion.button>
           );
         })}
       </div>
 
       <p className="mt-4 text-center text-xs leading-5 text-slate-300/75">
-        Main base is limited to 1. Soldier Tent cap is {tentLimit} at Town Hall level {townHallLevel}. Chopper Bay and Battle Tank max follow Town Hall level, and Wood Machine starts at {woodMachineLimit}.
+        Main base is limited to 1. Soldier Tent cap is {tentLimit} at Town Hall level {townHallLevel}. Chopper Bay and Battle Tank max follow Town Hall level, Air Defense unlocks at Town Hall level 2 with a 1-building cap, and Wood Machine starts at {woodMachineLimit}.
       </p>
-    </motion.div>
+    </Motion.div>
   );
 }
 

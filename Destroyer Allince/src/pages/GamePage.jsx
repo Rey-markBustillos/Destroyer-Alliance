@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion as Motion } from "framer-motion";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import BuildingShop from "../components/BuildingShop";
@@ -106,6 +106,8 @@ export default function GamePage() {
     battleTankLimit: 1,
     skyports: 0,
     skyportLimit: 1,
+    airDefenseBuildings: 0,
+    airDefenseLimit: 0,
     woodMachines: 0,
     tents: 0,
     tentLimit: 4,
@@ -215,7 +217,7 @@ export default function GamePage() {
         entries: Array.isArray(data?.leaderboard) ? data.leaderboard : [],
         currentPlayerRank: data?.currentPlayerRank ?? null,
       });
-    } catch (error) {
+    } catch {
       setLeaderboardState({
         loading: false,
         error: "Unable to load leaderboard.",
@@ -896,9 +898,6 @@ export default function GamePage() {
     && !selectedPlacedBuilding.hasTank
     && gameState.gold >= (selectedPlacedBuilding.tankCost ?? 0);
   const canSellBuilding = selectedPlacedBuilding?.type !== "command-center";
-  const tankGoldShortfall = selectedPlacedBuilding?.type === "battle-tank"
-    ? Math.max(0, (selectedPlacedBuilding.tankCost ?? 0) - gameState.gold)
-    : 0;
   const canStartWar = (gameState.totalArmyUnits ?? 0) > 0;
   const profileName = activeSession?.name || activeSession?.email?.split("@")[0] || "Commander";
   const profileId = activeSession?.playerId
@@ -910,7 +909,7 @@ export default function GamePage() {
     <main className="font-black-ops min-h-screen bg-slate-950 text-slate-950">
       <section className="relative h-screen w-full overflow-hidden bg-transparent">
 
-        <motion.div
+        <Motion.div
           initial={{ opacity: 0, y: -18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
@@ -970,13 +969,13 @@ export default function GamePage() {
               </CommandButton>
             </div>
           </div>
-        </motion.div>
+        </Motion.div>
 
         <div ref={gameRootRef} className="h-full w-full overflow-hidden" />
 
         <AnimatePresence>
         {selectedPlacedBuilding ? (
-          <motion.div
+          <Motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 12 }}
@@ -1255,11 +1254,11 @@ export default function GamePage() {
                 ) : null}
               </div>
             </div>
-          </motion.div>
+          </Motion.div>
         ) : null}
         </AnimatePresence>
 
-        <motion.div
+        <Motion.div
           initial={{ opacity: 0, x: -16 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.45, delay: 0.12 }}
@@ -1273,7 +1272,7 @@ export default function GamePage() {
           >
             Start War
           </button>
-        </motion.div>
+        </Motion.div>
 
         {hireModalOpen && selectedPlacedBuilding?.type === "tent" ? (
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/55 px-4 backdrop-blur-[3px]">
@@ -1460,7 +1459,7 @@ export default function GamePage() {
         ) : null}
 
         {shopOpen ? (
-          <motion.div
+          <Motion.div
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 18 }}
@@ -1479,23 +1478,25 @@ export default function GamePage() {
               battleTankLimit={gameState.battleTankLimit}
               skyportCount={gameState.skyports}
               skyportLimit={gameState.skyportLimit}
+              airDefenseCount={gameState.airDefenseBuildings}
+              airDefenseLimit={gameState.airDefenseLimit}
               onSelectBuilding={handleSelectBuilding}
               selectedBuilding={selectedBuilding}
               onClose={() => setShopOpen(false)}
             />
-          </motion.div>
+          </Motion.div>
         ) : null}
 
         <AnimatePresence mode="wait">
           {showWelcomeBack ? (
-            <motion.div
+            <Motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.38 }}
               className="absolute inset-0 z-30 flex items-center justify-center bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.14),transparent_30%),linear-gradient(135deg,rgba(2,6,23,0.94)_0%,rgba(2,6,23,0.82)_42%,rgba(2,6,23,0.96)_100%)] px-6 backdrop-blur-[3px]"
             >
-              <motion.div
+              <Motion.div
                 initial={{ opacity: 0, x: 46, scale: 0.94 }}
                 animate={{ opacity: 1, x: 0, scale: 1 }}
                 exit={{ opacity: 0, x: -260, scale: 0.96 }}
@@ -1531,8 +1532,8 @@ export default function GamePage() {
                     </button>
                   </div>
                 </div>
-              </motion.div>
-            </motion.div>
+              </Motion.div>
+            </Motion.div>
           ) : null}
         </AnimatePresence>
       </section>

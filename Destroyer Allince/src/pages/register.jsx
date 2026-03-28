@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion as Motion } from "framer-motion";
 
 import { register } from "../services/auth";
 import { markIntroPending, saveSession } from "../services/session";
@@ -175,7 +175,7 @@ export default function Register() {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-950 text-white">
-      <motion.div
+      <Motion.div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
         style={{ backgroundImage: "url('/assets/loginbackgound.png')" }}
         variants={backgroundVariants}
@@ -183,7 +183,7 @@ export default function Register() {
         animate={isSubmitting ? "submitting" : "idle"}
       />
 
-      <motion.div
+      <Motion.div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat mix-blend-screen opacity-20"
         style={{ backgroundImage: "url('/assets/loginbackgound.png')" }}
         variants={foregroundVariants}
@@ -193,7 +193,7 @@ export default function Register() {
 
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(74,222,128,0.2),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(34,197,94,0.12),transparent_28%),linear-gradient(135deg,rgba(2,6,23,0.24)_0%,rgba(2,6,23,0.58)_45%,rgba(2,6,23,0.86)_100%)]" />
 
-      <motion.div
+      <Motion.div
         className="absolute inset-0"
         initial={false}
         animate={{
@@ -203,7 +203,7 @@ export default function Register() {
         transition={{ duration: 0.75, ease: cinematicEase }}
       >
         <div className="h-full w-full bg-[linear-gradient(90deg,rgba(2,6,23,0.92)_0%,rgba(2,6,23,0.58)_46%,rgba(2,6,23,0.84)_100%)]" />
-      </motion.div>
+      </Motion.div>
 
       <div
         className="pointer-events-none absolute inset-0 opacity-[0.08]"
@@ -216,7 +216,7 @@ export default function Register() {
 
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         {particles.map((particle) => (
-          <motion.span
+          <Motion.span
             key={particle.id}
             className="absolute rounded-full bg-emerald-300/40 shadow-[0_0_18px_rgba(134,239,172,0.35)]"
             style={{
@@ -241,13 +241,13 @@ export default function Register() {
       </div>
 
       <div className="relative z-10 flex min-h-screen items-center justify-center px-4">
-        <motion.div
+        <Motion.div
           className="w-full max-w-md [perspective:2000px]"
           initial="hidden"
           animate="visible"
           variants={cardVariants}
         >
-          <motion.form
+          <Motion.form
             onSubmit={handleSubmit}
             className="relative overflow-hidden rounded-[1.8rem] border border-white/15 bg-white/10 p-7 shadow-[0_20px_80px_rgba(15,23,42,0.24)] backdrop-blur-2xl"
             style={{ transformOrigin: "left center", transformStyle: "preserve-3d" }}
@@ -260,7 +260,7 @@ export default function Register() {
 
             <AnimatePresence mode="wait">
               {!isSubmitting ? (
-                <motion.div
+                <Motion.div
                   key="form"
                   variants={contentVariants}
                   initial="visible"
@@ -268,19 +268,19 @@ export default function Register() {
                   exit="hidden"
                   className="relative z-10"
                 >
-                  <motion.div
+                  <Motion.div
                     initial={{ opacity: 0, y: 18 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.7, ease: cinematicEase }}
                   >
                     <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-300/30 bg-emerald-400/10 shadow-[0_0_30px_rgba(34,197,94,0.16)]">
-                      <motion.span
+                      <Motion.span
                         className="text-xl"
                         animate={{ rotate: [0, 8, -6, 0], scale: [1, 1.04, 1] }}
                         transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
                       >
                         R
-                      </motion.span>
+                      </Motion.span>
                     </div>
                     <p className="mt-5 text-center text-[0.72rem] font-semibold uppercase tracking-[0.4em] text-emerald-300/80">
                       New Commander
@@ -291,10 +291,10 @@ export default function Register() {
                     <p className="mt-3 text-center text-sm leading-6 text-slate-300">
                       Build your base, raise your army, and enter the alliance in style.
                     </p>
-                  </motion.div>
+                  </Motion.div>
 
                   <div className="mt-8 space-y-4">
-                    <motion.div
+                    <Motion.div
                       animate={{
                         scale: focusedField === "name" || name ? 1.01 : 1,
                       }}
@@ -304,7 +304,7 @@ export default function Register() {
                       <label className={floatingLabelClass(focusedField === "name" || Boolean(name))}>
                         Commander Name
                       </label>
-                      <motion.input
+                      <Motion.input
                         type="text"
                         value={name}
                         onChange={(event) => setName(event.target.value)}
@@ -318,9 +318,9 @@ export default function Register() {
                         className="w-full rounded-2xl border border-white/10 bg-slate-950/72 px-4 pb-3 pt-6 text-sm text-white outline-none transition placeholder:text-transparent"
                         placeholder="Commander Name"
                       />
-                    </motion.div>
+                    </Motion.div>
 
-                    <motion.div
+                    <Motion.div
                       animate={{
                         scale: focusedField === "email" || email ? 1.01 : 1,
                       }}
@@ -330,7 +330,7 @@ export default function Register() {
                       <label className={floatingLabelClass(focusedField === "email" || Boolean(email))}>
                         Email
                       </label>
-                      <motion.input
+                      <Motion.input
                         type="email"
                         value={email}
                         onChange={(event) => setEmail(event.target.value)}
@@ -344,9 +344,9 @@ export default function Register() {
                         className="w-full rounded-2xl border border-white/10 bg-slate-950/72 px-4 pb-3 pt-6 text-sm text-white outline-none transition placeholder:text-transparent"
                         placeholder="Email"
                       />
-                    </motion.div>
+                    </Motion.div>
 
-                    <motion.div
+                    <Motion.div
                       animate={{
                         scale: focusedField === "password" || password ? 1.01 : 1,
                       }}
@@ -356,7 +356,7 @@ export default function Register() {
                       <label className={floatingLabelClass(focusedField === "password" || Boolean(password))}>
                         Password
                       </label>
-                      <motion.input
+                      <Motion.input
                         type="password"
                         value={password}
                         onChange={(event) => setPassword(event.target.value)}
@@ -370,12 +370,12 @@ export default function Register() {
                         className="w-full rounded-2xl border border-white/10 bg-slate-950/72 px-4 pb-3 pt-6 text-sm text-white outline-none transition placeholder:text-transparent"
                         placeholder="Password"
                       />
-                    </motion.div>
+                    </Motion.div>
                   </div>
 
                   <AnimatePresence>
                     {error ? (
-                      <motion.p
+                      <Motion.p
                         initial={{ opacity: 0, y: -8 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -8 }}
@@ -383,11 +383,11 @@ export default function Register() {
                         className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200"
                       >
                         {error}
-                      </motion.p>
+                      </Motion.p>
                     ) : null}
                   </AnimatePresence>
 
-                  <motion.button
+                  <Motion.button
                     type="submit"
                     disabled={loading}
                     whileHover={{
@@ -397,14 +397,14 @@ export default function Register() {
                     whileTap={{ scale: 0.95 }}
                     className="mt-6 w-full cursor-pointer rounded-2xl bg-[linear-gradient(120deg,#15803d_0%,#16a34a_35%,#4ade80_60%,#15803d_100%)] bg-[length:200%_100%] px-4 py-3 text-sm font-bold uppercase tracking-[0.22em] text-white shadow-[0_14px_30px_rgba(22,163,74,0.28)] transition disabled:cursor-not-allowed disabled:opacity-70"
                   >
-                    <motion.span
+                    <Motion.span
                       className="block"
                       animate={{ backgroundPositionX: ["0%", "100%"] }}
                       transition={{ duration: 2.8, repeat: Infinity, ease: "linear" }}
                     >
                       Register
-                    </motion.span>
-                  </motion.button>
+                    </Motion.span>
+                  </Motion.button>
 
                   <p className="mt-5 text-center text-sm text-slate-300">
                     Already have an account?{" "}
@@ -412,9 +412,9 @@ export default function Register() {
                       Login
                     </Link>
                   </p>
-                </motion.div>
+                </Motion.div>
               ) : (
-                <motion.div
+                <Motion.div
                   key="loading"
                   variants={loadingVariants}
                   initial="hidden"
@@ -422,35 +422,35 @@ export default function Register() {
                   exit="exit"
                   className="relative z-10 flex h-[24rem] flex-col items-center justify-center"
                 >
-                  <motion.div
+                  <Motion.div
                     animate={{ rotate: 360 }}
                     transition={{ duration: 1, ease: "linear", repeat: Infinity }}
                     className="relative h-16 w-16"
                   >
                     <div className="absolute inset-0 rounded-full border-4 border-emerald-300/20" />
                     <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-emerald-300 border-r-green-400" />
-                  </motion.div>
-                  <motion.p
+                  </Motion.div>
+                  <Motion.p
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.5, duration: 0.35 }}
                     className="mt-6 text-lg font-semibold text-white"
                   >
                     Creating Account...
-                  </motion.p>
-                  <motion.p
+                  </Motion.p>
+                  <Motion.p
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.68, duration: 0.35 }}
                     className="mt-2 max-w-xs text-center text-sm leading-6 text-slate-300"
                   >
                     Building your command center and preparing your alliance profile.
-                  </motion.p>
-                </motion.div>
+                  </Motion.p>
+                </Motion.div>
               )}
             </AnimatePresence>
-          </motion.form>
-        </motion.div>
+          </Motion.form>
+        </Motion.div>
       </div>
     </div>
   );

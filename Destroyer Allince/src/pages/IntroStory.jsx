@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { motion } from "framer-motion";
+import { motion as Motion } from "framer-motion";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { clearIntroPending, getSession, isIntroPending } from "../services/session";
@@ -87,7 +87,7 @@ export default function IntroStory() {
 
       <div className="relative z-10 flex min-h-screen items-center justify-center px-4 py-8">
         <div className="grid w-full max-w-6xl gap-6 overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 p-4 shadow-[0_30px_100px_rgba(2,6,23,0.5)] backdrop-blur-2xl lg:grid-cols-[0.92fr_1.08fr] lg:p-6">
-          <motion.div
+          <Motion.div
             key={`narrator-${storyIndex}`}
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
@@ -106,9 +106,9 @@ export default function IntroStory() {
               <p className="mt-2 text-xl font-black text-white">Hello, welcome Commander {commanderName}.</p>
               <p className="mt-1 text-sm text-slate-300">The last war on Earth is about to begin.</p>
             </div>
-          </motion.div>
+          </Motion.div>
 
-          <motion.div
+          <Motion.div
             key={`story-${storyIndex}`}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -162,7 +162,7 @@ export default function IntroStory() {
                 )}
               </div>
             </div>
-          </motion.div>
+          </Motion.div>
         </div>
       </div>
     </div>

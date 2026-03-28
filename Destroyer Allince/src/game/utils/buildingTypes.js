@@ -29,7 +29,7 @@ export const BUILDING_TYPES = {
   },
   COMMAND_CENTER: {
     id: "command-center",
-    name: "Town Hall",
+    name: "Command Center",
     label: "TH",
     cost: 1800,
     color: 0x334155,

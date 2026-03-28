@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion as Motion } from "framer-motion";
 
 import { login } from "../services/auth";
 import { markWelcomeBackPending, saveSession } from "../services/session";
@@ -133,7 +133,7 @@ export default function Login() {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-950 text-white">
-      <motion.div
+      <Motion.div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
         style={{ backgroundImage: "url('/assets/loginbackgound.png')" }}
         variants={backgroundVariants}
@@ -141,7 +141,7 @@ export default function Login() {
         animate={isLoggingIn ? "loggingIn" : "idle"}
       />
 
-      <motion.div
+      <Motion.div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat mix-blend-screen opacity-20"
         style={{ backgroundImage: "url('/assets/loginbackgound.png')" }}
         variants={foregroundVariants}
@@ -151,7 +151,7 @@ export default function Login() {
 
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(96,165,250,0.22),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(56,189,248,0.12),transparent_28%),linear-gradient(135deg,rgba(2,6,23,0.24)_0%,rgba(2,6,23,0.58)_45%,rgba(2,6,23,0.86)_100%)]" />
 
-      <motion.div
+      <Motion.div
         className="absolute inset-0"
         initial={false}
         animate={{
@@ -161,7 +161,7 @@ export default function Login() {
         transition={{ duration: 0.75, ease: cinematicEase }}
       >
         <div className="h-full w-full bg-[linear-gradient(90deg,rgba(2,6,23,0.92)_0%,rgba(2,6,23,0.58)_46%,rgba(2,6,23,0.84)_100%)]" />
-      </motion.div>
+      </Motion.div>
 
       <div
         className="pointer-events-none absolute inset-0 opacity-[0.08]"
@@ -174,7 +174,7 @@ export default function Login() {
 
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         {particles.map((particle) => (
-          <motion.span
+          <Motion.span
             key={particle.id}
             className="absolute rounded-full bg-sky-300/40 shadow-[0_0_18px_rgba(125,211,252,0.35)]"
             style={{
@@ -199,13 +199,13 @@ export default function Login() {
       </div>
 
       <div className="relative z-10 flex min-h-screen items-center justify-center px-4">
-        <motion.div
+        <Motion.div
           className="w-full max-w-md"
           initial="hidden"
           animate="visible"
           variants={cardVariants}
         >
-          <motion.form
+          <Motion.form
             onSubmit={handleSubmit}
             className="relative overflow-hidden rounded-[1.8rem] border border-white/15 bg-white/10 p-7 shadow-[0_20px_80px_rgba(15,23,42,0.24)] backdrop-blur-2xl"
             initial={false}
@@ -217,7 +217,7 @@ export default function Login() {
 
             <AnimatePresence mode="wait">
               {!isLoggingIn ? (
-                <motion.div
+                <Motion.div
                   key="form"
                   variants={contentVariants}
                   initial="visible"
@@ -225,19 +225,19 @@ export default function Login() {
                   exit="hidden"
                   className="relative z-10"
                 >
-                  <motion.div
+                  <Motion.div
                     initial={{ opacity: 0, y: 18 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.7, ease: cinematicEase }}
                   >
                     <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-sky-300/30 bg-sky-400/10 shadow-[0_0_30px_rgba(56,189,248,0.16)]">
-                      <motion.span
+                      <Motion.span
                         className="text-xl"
                         animate={{ rotate: [0, 8, -6, 0], scale: [1, 1.04, 1] }}
                         transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
                       >
                         C
-                      </motion.span>
+                      </Motion.span>
                     </div>
                     <p className="mt-5 text-center text-[0.72rem] font-semibold uppercase tracking-[0.4em] text-sky-300/80">
                       Secure Access
@@ -248,10 +248,10 @@ export default function Login() {
                     <p className="mt-3 text-center text-sm leading-6 text-slate-300">
                       Command your base with a smoother, more cinematic sign-in experience.
                     </p>
-                  </motion.div>
+                  </Motion.div>
 
                   <div className="mt-8 space-y-4">
-                    <motion.div
+                    <Motion.div
                       animate={{
                         scale: focusedField === "email" || email ? 1.01 : 1,
                       }}
@@ -261,7 +261,7 @@ export default function Login() {
                       <label className={floatingLabelClass(focusedField === "email" || Boolean(email))}>
                         Email
                       </label>
-                      <motion.input
+                      <Motion.input
                         type="email"
                         value={email}
                         onChange={(event) => setEmail(event.target.value)}
@@ -275,9 +275,9 @@ export default function Login() {
                         className="w-full rounded-2xl border border-white/10 bg-slate-950/72 px-4 pb-3 pt-6 text-sm text-white outline-none transition placeholder:text-transparent"
                         placeholder="Email"
                       />
-                    </motion.div>
+                    </Motion.div>
 
-                    <motion.div
+                    <Motion.div
                       animate={{
                         scale: focusedField === "password" || password ? 1.01 : 1,
                       }}
@@ -287,7 +287,7 @@ export default function Login() {
                       <label className={floatingLabelClass(focusedField === "password" || Boolean(password))}>
                         Password
                       </label>
-                      <motion.input
+                      <Motion.input
                         type="password"
                         value={password}
                         onChange={(event) => setPassword(event.target.value)}
@@ -301,12 +301,12 @@ export default function Login() {
                         className="w-full rounded-2xl border border-white/10 bg-slate-950/72 px-4 pb-3 pt-6 text-sm text-white outline-none transition placeholder:text-transparent"
                         placeholder="Password"
                       />
-                    </motion.div>
+                    </Motion.div>
                   </div>
 
                   <AnimatePresence>
                     {error ? (
-                      <motion.p
+                      <Motion.p
                         initial={{ opacity: 0, y: -8 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -8 }}
@@ -314,11 +314,11 @@ export default function Login() {
                         className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200"
                       >
                         {error}
-                      </motion.p>
+                      </Motion.p>
                     ) : null}
                   </AnimatePresence>
 
-                  <motion.button
+                  <Motion.button
                     type="submit"
                     disabled={loading}
                     whileHover={{
@@ -328,14 +328,14 @@ export default function Login() {
                     whileTap={{ scale: 0.95 }}
                     className="mt-6 w-full cursor-pointer rounded-2xl bg-[linear-gradient(120deg,#2563eb_0%,#3b82f6_35%,#60a5fa_60%,#2563eb_100%)] bg-[length:200%_100%] px-4 py-3 text-sm font-bold uppercase tracking-[0.22em] text-white shadow-[0_14px_30px_rgba(37,99,235,0.28)] transition disabled:cursor-not-allowed disabled:opacity-70"
                   >
-                    <motion.span
+                    <Motion.span
                       className="block"
                       animate={{ backgroundPositionX: ["0%", "100%"] }}
                       transition={{ duration: 2.8, repeat: Infinity, ease: "linear" }}
                     >
                       Login
-                    </motion.span>
-                  </motion.button>
+                    </Motion.span>
+                  </Motion.button>
 
                   <p className="mt-5 text-center text-sm text-slate-300">
                     Don&apos;t have an account?{" "}
@@ -343,7 +343,7 @@ export default function Login() {
                       Register
                     </Link>
                   </p>
-                </motion.div>
+                </Motion.div>
               ) : (
                 <div
                   key="loading"
@@ -358,8 +358,8 @@ export default function Login() {
                 </div>
               )}
             </AnimatePresence>
-          </motion.form>
-        </motion.div>
+          </Motion.form>
+        </Motion.div>
       </div>
     </div>
   );
