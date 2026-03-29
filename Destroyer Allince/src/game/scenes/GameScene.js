@@ -6,6 +6,7 @@ import { BUILDING_LIST, getBuildingUpgradeCost } from "../utils/buildingTypes";
 import {
   configureHdSprite,
   createAmbientWorldLighting,
+  getTextureSourceSize,
 } from "../utils/renderQuality";
 
 const TILE_WIDTH = 64;
@@ -13,11 +14,16 @@ const TILE_HEIGHT = 32;
 const MAP_ROWS = 15;
 const MAP_COLS = 15;
 const STARTING_GOLD = 1200;
-const TARGET_CAMERA_VIEW_TILES = 16;
-const INITIAL_ZOOM = 1.2;
-const MIN_ZOOM = INITIAL_ZOOM;
+const MIN_ZOOM_FLOOR = 0.55;
 const MAX_ZOOM = 2.2;
 const ZOOM_STEP = 0.1;
+const CAMERA_EDGE_SCROLL_MARGIN = 56;
+const CAMERA_EDGE_SCROLL_SPEED = 720;
+const CAMERA_INERTIA_DAMPING = 10;
+const CAMERA_SCROLL_LERP = 14;
+const CAMERA_ZOOM_LERP = 12;
+const CAMERA_FOCUS_OFFSET_Y = TILE_HEIGHT * 0.75;
+const CAMERA_FIT_PADDING = 0;
 const WOOD_MACHINE_TICK_MS = 180000;
 const WOOD_MACHINE_GOLD_PER_TICK = 10;
 const WOOD_MACHINE_MAX_GOLD = 250;
@@ -82,12 +88,24 @@ const lightenColor = (hex, amount = 16) => {
 const getTenByTenViewZoom = (scene) => {
   const viewportWidth = Number(scene?.scale?.width ?? 1280) || 1280;
   const viewportHeight = Number(scene?.scale?.height ?? 720) || 720;
-  const visibleGridWidth = TARGET_CAMERA_VIEW_TILES * TILE_WIDTH;
-  const visibleGridHeight = TARGET_CAMERA_VIEW_TILES * TILE_HEIGHT;
-  const widthZoom = viewportWidth / visibleGridWidth;
-  const heightZoom = viewportHeight / visibleGridHeight;
+  const visibleGridWidth = Math.max(
+    1,
+    Number(scene?.cameraFitBounds?.width ?? scene?.worldBounds?.width ?? (MAP_COLS * TILE_WIDTH)) || (MAP_COLS * TILE_WIDTH)
+  );
+  const visibleGridHeight = Math.max(
+    1,
+    Number(scene?.cameraFitBounds?.height ?? scene?.worldBounds?.height ?? (MAP_ROWS * TILE_HEIGHT)) || (MAP_ROWS * TILE_HEIGHT)
+  );
+  const safeViewportWidth = Math.max(1, viewportWidth - (CAMERA_FIT_PADDING * 2));
+  const safeViewportHeight = Math.max(1, viewportHeight - (CAMERA_FIT_PADDING * 2));
+  const widthZoom = safeViewportWidth / visibleGridWidth;
+  const heightZoom = safeViewportHeight / visibleGridHeight;
+  const fitMode = scene?.cameraFitMode ?? "contain";
+  const resolvedZoom = fitMode === "cover"
+    ? Math.max(widthZoom, heightZoom)
+    : Math.min(widthZoom, heightZoom);
 
-  return Math.min(widthZoom, heightZoom) * 0.88;
+  return Phaser.Math.Clamp(resolvedZoom, MIN_ZOOM_FLOOR, MAX_ZOOM);
 };
 
 export default class GameScene extends Phaser.Scene {
@@ -102,8 +120,8 @@ export default class GameScene extends Phaser.Scene {
     this.iso = {
       tileWidth: TILE_WIDTH,
       tileHeight: TILE_HEIGHT,
-      rows: MAP_ROWS,
-      cols: MAP_COLS,
+      rows: Math.max(1, Number(this.runtimeOptions?.gridRows ?? MAP_ROWS) || MAP_ROWS),
+      cols: Math.max(1, Number(this.runtimeOptions?.gridCols ?? MAP_COLS) || MAP_COLS),
     };
 
     this.selectedBuildingType = null;
@@ -130,6 +148,21 @@ export default class GameScene extends Phaser.Scene {
       startY: 0,
       cameraScrollX: 0,
       cameraScrollY: 0,
+      lastScrollX: 0,
+      lastScrollY: 0,
+    };
+    this.cameraController = {
+      defaultZoom: 1,
+      minZoom: 1,
+      maxZoom: MAX_ZOOM,
+      targetZoom: 1,
+      targetScrollX: 0,
+      targetScrollY: 0,
+      velocityX: 0,
+      velocityY: 0,
+      focusTarget: null,
+      lastPointerX: this.scale.width / 2,
+      lastPointerY: this.scale.height / 2,
     };
 
     this.createWorldLayers();
@@ -161,29 +194,15 @@ export default class GameScene extends Phaser.Scene {
       return;
     }
 
-    const camera = this.cameras.main;
-    const currentZoom = Phaser.Math.Clamp(
-      Number(camera?.zoom ?? getTenByTenViewZoom(this)) || getTenByTenViewZoom(this),
-      MIN_ZOOM,
-      MAX_ZOOM
-    );
-
     this.computeBoardMetrics();
     this.refreshBoardVisuals();
     this.repositionPlacedBuildings();
     this.repositionWarDeployments();
+    this.refreshCameraMetrics({ centerCamera: true });
 
-    camera.setBounds(
-      this.worldBounds.minX,
-      this.worldBounds.minY,
-      this.worldBounds.width,
-      this.worldBounds.height
-    );
-    camera.setZoom(currentZoom);
-    camera.centerOn(
-      this.worldBounds.minX + (this.worldBounds.width / 2),
-      this.worldBounds.minY + (this.worldBounds.height / 2)
-    );
+    if (this.selectedPlacedBuilding) {
+      this.focusCameraOnBuilding(this.selectedPlacedBuilding, { snap: true });
+    }
 
     if (this.hoverTile) {
       const hoverPoint = this.gridToWorld(this.hoverTile.col, this.hoverTile.row);
@@ -497,10 +516,12 @@ export default class GameScene extends Phaser.Scene {
 
   drawBoard() {
     if (this.textures.exists("base")) {
+      this.cameraFitMode = "cover";
       const boardCenter = this.gridToWorld(
         (this.iso.cols - 1) / 2,
         (this.iso.rows - 1) / 2
       );
+      const mapTextureSize = getTextureSourceSize(this, "base");
       const village = this.add.image(
         boardCenter.x,
         boardCenter.y + this.iso.tileHeight * 2.2,
@@ -508,14 +529,30 @@ export default class GameScene extends Phaser.Scene {
       );
 
       village.setOrigin(0.5, 0.5);
+      const coverScale = Math.max(
+        this.scale.width / Math.max(1, mapTextureSize.width),
+        this.scale.height / Math.max(1, mapTextureSize.height)
+      );
       configureHdSprite(village, {
         scene: this,
-        maxWidth: this.iso.cols * this.iso.tileWidth * 1.45,
-        maxHeight: this.iso.rows * this.iso.tileHeight * 2.8,
+        sourceWidth: mapTextureSize.width,
+        sourceHeight: mapTextureSize.height,
       });
+      village.setDisplaySize(
+        Math.max(1, Math.round(mapTextureSize.width * coverScale)),
+        Math.max(1, Math.round(mapTextureSize.height * coverScale))
+      );
       village.setTint(0xf8fafc);
       village.setDepth(-50);
       this.groundLayer.add(village);
+      this.cameraFitBounds = {
+        minX: village.x - village.displayWidth / 2,
+        maxX: village.x + village.displayWidth / 2,
+        minY: village.y - village.displayHeight / 2,
+        maxY: village.y + village.displayHeight / 2,
+        width: village.displayWidth,
+        height: village.displayHeight,
+      };
       this.worldBounds = {
         minX: village.x - village.displayWidth / 2 - CAMERA_WORLD_PADDING,
         maxX: village.x + village.displayWidth / 2 + CAMERA_WORLD_PADDING,
@@ -532,6 +569,16 @@ export default class GameScene extends Phaser.Scene {
       });
       return;
     }
+
+    this.cameraFitMode = "contain";
+    this.cameraFitBounds = {
+      minX: this.worldBounds.minX + CAMERA_WORLD_PADDING,
+      maxX: this.worldBounds.maxX - CAMERA_WORLD_PADDING,
+      minY: this.worldBounds.minY + CAMERA_WORLD_PADDING,
+      maxY: this.worldBounds.maxY - CAMERA_WORLD_PADDING,
+      width: Math.max(1, this.worldBounds.width - (CAMERA_WORLD_PADDING * 2)),
+      height: Math.max(1, this.worldBounds.height - (CAMERA_WORLD_PADDING * 2)),
+    };
 
     for (let row = 0; row < this.iso.rows; row += 1) {
       for (let col = 0; col < this.iso.cols; col += 1) {
@@ -610,20 +657,9 @@ export default class GameScene extends Phaser.Scene {
 
   createCamera() {
     const camera = this.cameras.main;
-    const defaultZoom = Phaser.Math.Clamp(getTenByTenViewZoom(this), INITIAL_ZOOM, MAX_ZOOM);
     camera.setBackgroundColor("rgba(2, 6, 23, 0)");
-    camera.setBounds(
-      this.worldBounds.minX,
-      this.worldBounds.minY,
-      this.worldBounds.width,
-      this.worldBounds.height
-    );
-    camera.centerOn(
-      this.worldBounds.minX + (this.worldBounds.width / 2),
-      this.worldBounds.minY + (this.worldBounds.height / 2)
-    );
-    camera.setZoom(defaultZoom);
     camera.roundPixels = false;
+    this.refreshCameraMetrics({ centerCamera: true, snapZoom: true });
   }
 
   repositionPlacedBuildings() {
@@ -659,7 +695,7 @@ export default class GameScene extends Phaser.Scene {
     return {
       scrollX: Number(camera.scrollX ?? 0),
       scrollY: Number(camera.scrollY ?? 0),
-      zoom: Number(camera.zoom ?? INITIAL_ZOOM),
+      zoom: Number(camera.zoom ?? this.cameraController.defaultZoom),
     };
   }
 
@@ -669,27 +705,27 @@ export default class GameScene extends Phaser.Scene {
     }
 
     const camera = this.cameras.main;
+    const minZoom = this.getMinCameraZoom();
     const zoom = Phaser.Math.Clamp(
       Number(cameraState?.zoom ?? getTenByTenViewZoom(this)) || getTenByTenViewZoom(this),
-      MIN_ZOOM,
-      MAX_ZOOM
+      minZoom,
+      this.cameraController.maxZoom
     );
 
     camera.setZoom(zoom);
-    const minScrollX = this.worldBounds.minX;
-    const maxScrollX = this.worldBounds.maxX - camera.displayWidth;
-    const minScrollY = this.worldBounds.minY;
-    const maxScrollY = this.worldBounds.maxY - camera.displayHeight;
-    camera.scrollX = Phaser.Math.Clamp(
+    const clampedScroll = this.clampCameraScroll(
       Number(cameraState.scrollX ?? camera.scrollX) || camera.scrollX,
-      minScrollX,
-      maxScrollX
-    );
-    camera.scrollY = Phaser.Math.Clamp(
       Number(cameraState.scrollY ?? camera.scrollY) || camera.scrollY,
-      minScrollY,
-      maxScrollY
+      zoom
     );
+    camera.scrollX = clampedScroll.scrollX;
+    camera.scrollY = clampedScroll.scrollY;
+    this.cameraController.targetZoom = zoom;
+    this.cameraController.targetScrollX = clampedScroll.scrollX;
+    this.cameraController.targetScrollY = clampedScroll.scrollY;
+    this.cameraController.velocityX = 0;
+    this.cameraController.velocityY = 0;
+    this.cameraController.focusTarget = null;
   }
 
   startResourceProduction() {
@@ -709,6 +745,9 @@ export default class GameScene extends Phaser.Scene {
     this.input.setTopOnly(true);
 
     this.input.on("pointermove", (pointer) => {
+      this.cameraController.lastPointerX = pointer.x;
+      this.cameraController.lastPointerY = pointer.y;
+
       if (pointer.isDown) {
         this.handleCameraDrag(pointer);
       }
@@ -723,6 +762,11 @@ export default class GameScene extends Phaser.Scene {
       this.pointerDrag.startY = pointer.y;
       this.pointerDrag.cameraScrollX = this.cameras.main.scrollX;
       this.pointerDrag.cameraScrollY = this.cameras.main.scrollY;
+      this.pointerDrag.lastScrollX = this.cameras.main.scrollX;
+      this.pointerDrag.lastScrollY = this.cameras.main.scrollY;
+      this.cameraController.velocityX = 0;
+      this.cameraController.velocityY = 0;
+      this.cameraController.focusTarget = null;
       this.updateHoverAtWorldPoint(pointer.worldX, pointer.worldY);
     });
 
@@ -753,13 +797,13 @@ export default class GameScene extends Phaser.Scene {
       const camera = this.cameras.main;
       const direction = deltaY > 0 ? -1 : 1;
       const nextZoom = Phaser.Math.Clamp(
-        camera.zoom + direction * ZOOM_STEP,
-        MIN_ZOOM,
-        MAX_ZOOM
+        this.cameraController.targetZoom + direction * ZOOM_STEP,
+        this.getMinCameraZoom(),
+        this.cameraController.maxZoom
       );
-      camera.zoomTo(nextZoom, 120);
+      this.cameraController.focusTarget = null;
+      this.setCameraZoomTarget(nextZoom, this.cameraController.lastPointerX, this.cameraController.lastPointerY);
     });
-
   }
 
   handleCameraDrag(pointer) {
@@ -781,10 +825,302 @@ export default class GameScene extends Phaser.Scene {
     this.pointerDrag.moved = true;
 
     const camera = this.cameras.main;
-    camera.scrollX =
+    const nextScrollX =
       this.pointerDrag.cameraScrollX - (pointer.x - this.pointerDrag.startX) / camera.zoom;
-    camera.scrollY =
+    const nextScrollY =
       this.pointerDrag.cameraScrollY - (pointer.y - this.pointerDrag.startY) / camera.zoom;
+    const clampedScroll = this.clampCameraScroll(nextScrollX, nextScrollY, camera.zoom);
+    const deltaSeconds = Math.max(0.001, (this.game.loop.delta || 16) / 1000);
+
+    this.cameraController.targetScrollX = clampedScroll.scrollX;
+    this.cameraController.targetScrollY = clampedScroll.scrollY;
+    this.cameraController.velocityX =
+      (clampedScroll.scrollX - this.pointerDrag.lastScrollX) / deltaSeconds;
+    this.cameraController.velocityY =
+      (clampedScroll.scrollY - this.pointerDrag.lastScrollY) / deltaSeconds;
+
+    this.pointerDrag.lastScrollX = clampedScroll.scrollX;
+    this.pointerDrag.lastScrollY = clampedScroll.scrollY;
+    camera.scrollX = clampedScroll.scrollX;
+    camera.scrollY = clampedScroll.scrollY;
+  }
+
+  update(_time, delta) {
+    this.updateCameraController(delta);
+  }
+
+  refreshCameraMetrics(options = {}) {
+    const { centerCamera = false, snapZoom = false } = options;
+    const camera = this.cameras.main;
+    const defaultZoom = getTenByTenViewZoom(this);
+
+    this.cameraController.defaultZoom = defaultZoom;
+    this.cameraController.minZoom = defaultZoom;
+    this.cameraController.maxZoom = MAX_ZOOM;
+    this.cameraController.targetZoom = Phaser.Math.Clamp(
+      Number(this.cameraController.targetZoom ?? defaultZoom) || defaultZoom,
+      this.cameraController.minZoom,
+      this.cameraController.maxZoom
+    );
+
+    camera.setBounds(
+      this.worldBounds.minX,
+      this.worldBounds.minY,
+      this.worldBounds.width,
+      this.worldBounds.height
+    );
+
+    if (centerCamera) {
+      const centerTarget = this.getCameraCenterWorld();
+      const centeredScroll = this.getScrollForWorldPoint(
+        centerTarget.x,
+        centerTarget.y,
+        this.cameraController.targetZoom
+      );
+      this.cameraController.targetScrollX = centeredScroll.scrollX;
+      this.cameraController.targetScrollY = centeredScroll.scrollY;
+    }
+
+    if (snapZoom) {
+      camera.setZoom(this.cameraController.targetZoom);
+    }
+
+    const nextScroll = this.clampCameraScroll(
+      Number.isFinite(this.cameraController.targetScrollX) ? this.cameraController.targetScrollX : camera.scrollX,
+      Number.isFinite(this.cameraController.targetScrollY) ? this.cameraController.targetScrollY : camera.scrollY,
+      this.cameraController.targetZoom
+    );
+
+    this.cameraController.targetScrollX = nextScroll.scrollX;
+    this.cameraController.targetScrollY = nextScroll.scrollY;
+
+    if (centerCamera || snapZoom) {
+      camera.setScroll(nextScroll.scrollX, nextScroll.scrollY);
+    }
+  }
+
+  getMinCameraZoom() {
+    return this.cameraController?.minZoom ?? getTenByTenViewZoom(this);
+  }
+
+  getCameraScrollBounds(zoom = this.cameraController.targetZoom) {
+    const viewportWidth = this.scale.width / zoom;
+    const viewportHeight = this.scale.height / zoom;
+    let minScrollX = this.worldBounds.minX;
+    let maxScrollX = this.worldBounds.maxX - viewportWidth;
+    let minScrollY = this.worldBounds.minY;
+    let maxScrollY = this.worldBounds.maxY - viewportHeight;
+
+    if (maxScrollX < minScrollX) {
+      const centeredX = this.worldBounds.minX + (this.worldBounds.width - viewportWidth) / 2;
+      minScrollX = centeredX;
+      maxScrollX = centeredX;
+    }
+
+    if (maxScrollY < minScrollY) {
+      const centeredY = this.worldBounds.minY + (this.worldBounds.height - viewportHeight) / 2;
+      minScrollY = centeredY;
+      maxScrollY = centeredY;
+    }
+
+    return {
+      minScrollX,
+      maxScrollX,
+      minScrollY,
+      maxScrollY,
+    };
+  }
+
+  clampCameraScroll(scrollX, scrollY, zoom = this.cameraController.targetZoom) {
+    const bounds = this.getCameraScrollBounds(zoom);
+
+    return {
+      scrollX: Phaser.Math.Clamp(scrollX, bounds.minScrollX, bounds.maxScrollX),
+      scrollY: Phaser.Math.Clamp(scrollY, bounds.minScrollY, bounds.maxScrollY),
+    };
+  }
+
+  getScrollForWorldPoint(worldX, worldY, zoom = this.cameraController.targetZoom, screenX = null, screenY = null) {
+    const anchorX = screenX ?? (this.scale.width / 2);
+    const anchorY = screenY ?? (this.scale.height / 2);
+
+    return this.clampCameraScroll(
+      worldX - (anchorX / zoom),
+      worldY - (anchorY / zoom),
+      zoom
+    );
+  }
+
+  getGridCenterWorld() {
+    return this.gridToWorld(
+      (this.iso.cols - 1) / 2,
+      (this.iso.rows - 1) / 2
+    );
+  }
+
+  getCameraCenterWorld() {
+    if (this.cameraFitBounds) {
+      return {
+        x: this.cameraFitBounds.minX + (this.cameraFitBounds.width / 2),
+        y: this.cameraFitBounds.minY + (this.cameraFitBounds.height / 2),
+      };
+    }
+
+    return this.getGridCenterWorld();
+  }
+
+  setCameraZoomTarget(nextZoom, screenX = null, screenY = null) {
+    const camera = this.cameras.main;
+    const zoom = Phaser.Math.Clamp(nextZoom, this.getMinCameraZoom(), this.cameraController.maxZoom);
+    const pointerWorld = camera.getWorldPoint(
+      screenX ?? this.scale.width / 2,
+      screenY ?? this.scale.height / 2
+    );
+    const nextScroll = this.getScrollForWorldPoint(pointerWorld.x, pointerWorld.y, zoom, screenX, screenY);
+
+    this.cameraController.targetZoom = zoom;
+    this.cameraController.targetScrollX = nextScroll.scrollX;
+    this.cameraController.targetScrollY = nextScroll.scrollY;
+  }
+
+  getEdgeScrollVelocity() {
+    const { lastPointerX, lastPointerY } = this.cameraController;
+
+    if (
+      lastPointerX < 0
+      || lastPointerY < 0
+      || lastPointerX > this.scale.width
+      || lastPointerY > this.scale.height
+    ) {
+      return { x: 0, y: 0 };
+    }
+
+    const leftAmount = Phaser.Math.Clamp((CAMERA_EDGE_SCROLL_MARGIN - lastPointerX) / CAMERA_EDGE_SCROLL_MARGIN, 0, 1);
+    const rightAmount = Phaser.Math.Clamp((lastPointerX - (this.scale.width - CAMERA_EDGE_SCROLL_MARGIN)) / CAMERA_EDGE_SCROLL_MARGIN, 0, 1);
+    const topAmount = Phaser.Math.Clamp((CAMERA_EDGE_SCROLL_MARGIN - lastPointerY) / CAMERA_EDGE_SCROLL_MARGIN, 0, 1);
+    const bottomAmount = Phaser.Math.Clamp((lastPointerY - (this.scale.height - CAMERA_EDGE_SCROLL_MARGIN)) / CAMERA_EDGE_SCROLL_MARGIN, 0, 1);
+    const zoomFactor = 1 / Math.max(this.cameras.main.zoom, 0.001);
+
+    return {
+      x: (rightAmount - leftAmount) * CAMERA_EDGE_SCROLL_SPEED * zoomFactor,
+      y: (bottomAmount - topAmount) * CAMERA_EDGE_SCROLL_SPEED * zoomFactor,
+    };
+  }
+
+  updateCameraController(delta) {
+    const camera = this.cameras.main;
+
+    if (!camera || !this.cameraController) {
+      return;
+    }
+
+    const deltaSeconds = Math.max(0.001, Math.min(0.05, (delta || 16) / 1000));
+    const zoomLerp = 1 - Math.exp(-CAMERA_ZOOM_LERP * deltaSeconds);
+    const scrollLerp = 1 - Math.exp(-CAMERA_SCROLL_LERP * deltaSeconds);
+    const damping = Math.exp(-CAMERA_INERTIA_DAMPING * deltaSeconds);
+
+    this.cameraController.targetZoom = Phaser.Math.Clamp(
+      this.cameraController.targetZoom,
+      this.getMinCameraZoom(),
+      this.cameraController.maxZoom
+    );
+
+    if (this.cameraController.focusTarget && !this.pointerDrag.active) {
+      this.cameraController.targetZoom = Phaser.Math.Clamp(
+        this.cameraController.focusTarget.zoom ?? this.cameraController.defaultZoom,
+        this.getMinCameraZoom(),
+        this.cameraController.maxZoom
+      );
+
+      const focusedScroll = this.getScrollForWorldPoint(
+        this.cameraController.focusTarget.x,
+        this.cameraController.focusTarget.y,
+        this.cameraController.targetZoom
+      );
+
+      this.cameraController.targetScrollX = focusedScroll.scrollX;
+      this.cameraController.targetScrollY = focusedScroll.scrollY;
+      this.cameraController.velocityX = 0;
+      this.cameraController.velocityY = 0;
+    } else if (!this.pointerDrag.active) {
+      const edgeVelocity = this.getEdgeScrollVelocity();
+
+      if (edgeVelocity.x !== 0 || edgeVelocity.y !== 0) {
+        this.cameraController.focusTarget = null;
+        this.cameraController.velocityX = edgeVelocity.x;
+        this.cameraController.velocityY = edgeVelocity.y;
+      }
+
+      this.cameraController.targetScrollX += this.cameraController.velocityX * deltaSeconds;
+      this.cameraController.targetScrollY += this.cameraController.velocityY * deltaSeconds;
+      this.cameraController.velocityX *= damping;
+      this.cameraController.velocityY *= damping;
+
+      if (Math.abs(this.cameraController.velocityX) < 4) {
+        this.cameraController.velocityX = 0;
+      }
+
+      if (Math.abs(this.cameraController.velocityY) < 4) {
+        this.cameraController.velocityY = 0;
+      }
+    }
+
+    const clampedTarget = this.clampCameraScroll(
+      this.cameraController.targetScrollX,
+      this.cameraController.targetScrollY,
+      this.cameraController.targetZoom
+    );
+
+    this.cameraController.targetScrollX = clampedTarget.scrollX;
+    this.cameraController.targetScrollY = clampedTarget.scrollY;
+
+    camera.setZoom(Phaser.Math.Linear(camera.zoom, this.cameraController.targetZoom, zoomLerp));
+    camera.scrollX = Phaser.Math.Linear(camera.scrollX, this.cameraController.targetScrollX, scrollLerp);
+    camera.scrollY = Phaser.Math.Linear(camera.scrollY, this.cameraController.targetScrollY, scrollLerp);
+
+    const clampedCamera = this.clampCameraScroll(camera.scrollX, camera.scrollY, camera.zoom);
+    camera.scrollX = clampedCamera.scrollX;
+    camera.scrollY = clampedCamera.scrollY;
+  }
+
+  focusCameraOnBuilding(building, options = {}) {
+    if (!building) {
+      return;
+    }
+
+    const { snap = false } = options;
+    const currentZoomTarget = Phaser.Math.Clamp(
+      Number(this.cameraController.targetZoom ?? this.cameras.main.zoom ?? this.cameraController.defaultZoom)
+        || this.cameraController.defaultZoom,
+      this.getMinCameraZoom(),
+      this.cameraController.maxZoom
+    );
+    const targetZoom = Phaser.Math.Clamp(
+      Math.max(currentZoomTarget, this.cameraController.defaultZoom + 0.2),
+      this.getMinCameraZoom(),
+      this.cameraController.maxZoom
+    );
+
+    this.cameraController.focusTarget = {
+      x: building.x,
+      y: building.y - CAMERA_FOCUS_OFFSET_Y,
+      zoom: targetZoom,
+    };
+    this.cameraController.velocityX = 0;
+    this.cameraController.velocityY = 0;
+
+    if (snap) {
+      this.cameraController.targetZoom = targetZoom;
+      const focusedScroll = this.getScrollForWorldPoint(
+        this.cameraController.focusTarget.x,
+        this.cameraController.focusTarget.y,
+        targetZoom
+      );
+      this.cameraController.targetScrollX = focusedScroll.scrollX;
+      this.cameraController.targetScrollY = focusedScroll.scrollY;
+      this.cameras.main.setZoom(targetZoom);
+      this.cameras.main.setScroll(focusedScroll.scrollX, focusedScroll.scrollY);
+    }
   }
 
   updateHoverAtScreenPoint(screenX, screenY) {
@@ -2251,6 +2587,7 @@ export default class GameScene extends Phaser.Scene {
     this.movingBuilding = null;
     this.events.emit("structure-selection-cleared");
     this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
+    this.focusCameraOnBuilding(building);
     this.drawTileOverlay(
       this.placementIndicator,
       { row: building.row, col: building.col, buildingType: building.buildingType },
@@ -2268,6 +2605,7 @@ export default class GameScene extends Phaser.Scene {
 
     this.selectedPlacedBuilding = null;
     this.movingBuilding = null;
+    this.cameraController.focusTarget = null;
     this.events.emit("placed-building-selected", null);
 
     if (!this.selectedBuildingType) {
@@ -2283,6 +2621,7 @@ export default class GameScene extends Phaser.Scene {
     this.movingBuilding = this.selectedPlacedBuilding;
     this.selectedBuildingType = this.selectedPlacedBuilding.buildingType;
     this.selectedPlacedBuilding = null;
+    this.cameraController.focusTarget = null;
     this.events.emit("placed-building-selected", null);
     this.events.emit("structure-selection-cleared");
     this.events.emit("placed-building-moving", {
@@ -2330,6 +2669,7 @@ export default class GameScene extends Phaser.Scene {
       ...this.getBuildingPersistenceState(building),
     });
     this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
+    this.focusCameraOnBuilding(building);
 
   }
 
