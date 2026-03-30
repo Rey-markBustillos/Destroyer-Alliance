@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { fetchProfile, updateProfileName } from "../services/auth";
 import { getGameSnapshot, saveGameSnapshot } from "../services/gameStorage";
 import { clearSession, getSession, saveSession } from "../services/session";
+import soundManager from "../services/soundManager";
 
 const RENAME_COST = 5000;
 const RANK_TIERS = [
@@ -123,6 +124,7 @@ export default function ProfilePage() {
   const canAffordRename = playerGold >= RENAME_COST;
 
   const handleLogout = () => {
+    soundManager.fadeOutBackgroundMusic({ durationMs: 900, pauseAfterFade: true });
     clearSession();
     navigate("/login");
   };
@@ -209,7 +211,7 @@ export default function ProfilePage() {
           : "min-h-screen px-2 py-2 text-white"
       }
     >
-      <div className="mx-auto w-full max-w-[46rem]">
+      <div className="mx-auto w-full max-w-184">
         <div
           className={`rounded-xl border border-emerald-500/30 p-2 shadow-2xl ${
             isOverlay ? "bg-slate-900/88" : "bg-slate-900/80"

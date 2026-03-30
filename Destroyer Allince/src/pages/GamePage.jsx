@@ -20,6 +20,7 @@ import {
   getSession,
   isWelcomeBackPending,
 } from "../services/session";
+import soundManager from "../services/soundManager";
 
 const shouldPreferLocalSnapshot = (localSnapshot, serverSnapshot) => {
   const localBuildings = Array.isArray(localSnapshot?.buildings) ? localSnapshot.buildings : [];
@@ -63,9 +64,9 @@ function HudMetric({ label, value, tone = "emerald" }) {
   }[tone];
 
   return (
-    <div className={`min-w-0 rounded-[0.8rem] border px-2 py-1.5 backdrop-blur-md ${toneClass}`}>
-      <p className="text-[0.5rem] uppercase tracking-[0.18em] text-white/70">{label}</p>
-      <p className="mt-0.5 text-[0.95rem] font-black tracking-tight">{value}</p>
+    <div className={`min-w-0 rounded-[0.8rem] border px-1.5 py-1.5 backdrop-blur-md ${toneClass}`}>
+      <p className="text-[0.42rem] uppercase tracking-[0.2em] text-white/70">{label}</p>
+      <p className="mt-0.5 text-[0.8rem] font-black leading-none tracking-tight">{value}</p>
     </div>
   );
 }
@@ -134,6 +135,8 @@ export default function GamePage() {
   const [hireModalOpen, setHireModalOpen] = useState(false);
   const [removeSoldierCount, setRemoveSoldierCount] = useState("1");
   const [showWelcomeBack, setShowWelcomeBack] = useState(() => isWelcomeBackPending());
+  const [musicStatus, setMusicStatus] = useState(() => soundManager.getStatus());
+  const [musicPanelOpen, setMusicPanelOpen] = useState(false);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -143,6 +146,19 @@ export default function GamePage() {
     return () => {
       window.clearInterval(timer);
     };
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = soundManager.subscribe((status) => {
+      setMusicStatus(status);
+    });
+
+    soundManager.startBackgroundMusic({
+      fadeInDurationMs: 450,
+      volume: soundManager.getStatus().volume,
+    });
+
+    return unsubscribe;
   }, []);
 
   useEffect(() => {
@@ -187,6 +203,22 @@ export default function GamePage() {
 
     chatSocketRef.current.emit("chat:send", { text });
     setChatInput("");
+  };
+
+  const handleToggleMusicMute = () => {
+    soundManager.toggleMuted();
+  };
+
+  const handleToggleMusicPanel = () => {
+    setMusicPanelOpen((open) => !open);
+  };
+
+  const handleLowerMusicVolume = () => {
+    soundManager.stepBackgroundMusicVolume(-0.1, { fadeDurationMs: 150 });
+  };
+
+  const handleRaiseMusicVolume = () => {
+    soundManager.stepBackgroundMusicVolume(0.1, { fadeDurationMs: 150 });
   };
 
   const handleOpenLeaderboard = async () => {
@@ -905,6 +937,9 @@ export default function GamePage() {
     || (activeSession?.id ? `PLYR-${String(activeSession.id).padStart(6, "0")}` : "-");
   const profileRank = activeSession?.rankName || "Recruit";
   const profileWarPoints = Number(activeSession?.warPoints ?? 0) || 0;
+  const musicVolumePercent = musicStatus?.volumePercent ?? Math.round((musicStatus?.volume ?? 0) * 100);
+  const canLowerMusicVolume = musicVolumePercent > 0;
+  const canRaiseMusicVolume = musicVolumePercent < 100;
 
   return (
     <main className="font-black-ops min-h-screen bg-[#243322] text-slate-950">
@@ -917,12 +952,12 @@ export default function GamePage() {
           className="pointer-events-none absolute inset-x-0 top-0 z-10 p-3 sm:p-4"
         >
           <div className="flex items-start justify-between gap-3">
-            <div className="pointer-events-auto flex w-[7.2rem] flex-col gap-1">
-              <div className="rounded-[0.8rem] border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.56)_0%,rgba(15,23,42,0.38)_100%)] px-2 py-1.5 text-white backdrop-blur-sm">
-                <p className="text-[0.5rem] uppercase tracking-[0.24em] text-emerald-300/75">Base</p>
-                <p className="mt-1 text-[0.82rem] font-black leading-tight text-white">{profileName}</p>
-                <p className="mt-0.5 text-[0.46rem] uppercase tracking-[0.08em] text-slate-100/90">{profileId}</p>
-                <p className="mt-1 text-[0.46rem] uppercase tracking-[0.1em] text-amber-200/90">{profileRank}</p>
+            <div className="pointer-events-none flex w-[6.7rem] flex-col gap-0.5">
+              <div className="rounded-[0.8rem] border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.56)_0%,rgba(15,23,42,0.38)_100%)] px-1.5 py-1.5 text-white backdrop-blur-sm">
+                <p className="text-[0.42rem] uppercase tracking-[0.26em] text-emerald-300/75">Base</p>
+                <p className="mt-1 text-[0.7rem] font-black leading-tight text-white">{profileName}</p>
+                <p className="mt-0.5 text-[0.4rem] uppercase tracking-[0.1em] text-slate-100/90">{profileId}</p>
+                <p className="mt-0.5 text-[0.4rem] uppercase tracking-[0.2em] text-amber-200/90">{profileRank}</p>
               </div>
 
               <HudMetric label="Gold" value={formatCompactNumber(gameState.gold)} tone="emerald" />
@@ -968,6 +1003,49 @@ export default function GamePage() {
               >
                 {shopOpen ? "Hide Shop" : "Open Shop"}
               </CommandButton>
+              <div className="relative">
+                <CommandButton
+                  onClick={handleToggleMusicPanel}
+                  className="border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-2.5 py-1.5 text-[10px] text-violet-100 backdrop-blur-sm hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)]"
+                >
+                  Music
+                </CommandButton>
+
+                {musicPanelOpen ? (
+                  <div className="absolute right-0 top-full z-20 mt-1.5 min-w-[9.5rem] rounded-xl border border-white/10 bg-slate-950/90 p-2 shadow-[0_14px_36px_rgba(2,6,23,0.35)] backdrop-blur-md">
+                    <button
+                      type="button"
+                      onClick={handleToggleMusicMute}
+                      className="w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-violet-100 transition hover:bg-white/10"
+                    >
+                      {musicStatus?.isMuted ? "Unmute" : "Mute"}
+                    </button>
+
+                    <div className="mt-2 flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={handleLowerMusicVolume}
+                        disabled={!canLowerMusicVolume}
+                        className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-semibold text-cyan-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Vol -
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleRaiseMusicVolume}
+                        disabled={!canRaiseMusicVolume}
+                        className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-semibold text-cyan-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Vol +
+                      </button>
+                    </div>
+
+                    <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-200">
+                      {musicStatus?.isMuted ? "Muted" : `Volume ${musicVolumePercent}%`}
+                    </p>
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
         </Motion.div>
@@ -983,7 +1061,7 @@ export default function GamePage() {
             transition={{ duration: 0.22 }}
             className="pointer-events-none absolute inset-x-0 bottom-2.5 z-10 flex justify-center px-3"
           >
-            <div className="pointer-events-auto w-full max-w-[236px] rounded-[0.8rem] border border-white/10 bg-[rgba(20,30,40,0.85)] p-1.5 text-white shadow-[0_8px_20px_rgba(0,0,0,0.5)] backdrop-blur-[10px]">
+            <div className="pointer-events-auto w-full max-w-59 rounded-[0.8rem] border border-white/10 bg-[rgba(20,30,40,0.85)] p-1.5 text-white shadow-[0_8px_20px_rgba(0,0,0,0.5)] backdrop-blur-[10px]">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="text-[10px] uppercase tracking-[0.16em] text-slate-400">Selected</p>
@@ -1287,7 +1365,7 @@ export default function GamePage() {
 
         {hireModalOpen && selectedPlacedBuilding?.type === "tent" ? (
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/55 px-4 backdrop-blur-[3px]">
-            <div className="w-full max-w-[18.5rem] rounded-[1.4rem] border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.82)_0%,rgba(15,23,42,0.68)_100%)] p-3 text-white shadow-[0_20px_60px_rgba(2,6,23,0.28)] backdrop-blur-xl">
+            <div className="w-full max-w-74 rounded-[1.4rem] border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.82)_0%,rgba(15,23,42,0.68)_100%)] p-3 text-white shadow-[0_20px_60px_rgba(2,6,23,0.28)] backdrop-blur-xl">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-[0.68rem] uppercase tracking-[0.3em] text-amber-300/70">
@@ -1344,8 +1422,8 @@ export default function GamePage() {
         ) : null}
 
         {leaderboardOpen ? (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-[4px]">
-            <div className="w-full max-w-[30rem] rounded-[1.4rem] border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.88)_0%,rgba(15,23,42,0.74)_100%)] p-4 text-white shadow-[0_20px_60px_rgba(2,6,23,0.34)]">
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs">
+            <div className="w-full max-w-120 rounded-[1.4rem] border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.88)_0%,rgba(15,23,42,0.74)_100%)] p-4 text-white shadow-[0_20px_60px_rgba(2,6,23,0.34)]">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-[0.68rem] uppercase tracking-[0.3em] text-amber-300/70">Leaderboard</p>
@@ -1375,7 +1453,7 @@ export default function GamePage() {
               ) : leaderboardState.error ? (
                 <p className="mt-4 text-sm font-semibold text-rose-300">{leaderboardState.error}</p>
               ) : (
-                <div className="mt-4 max-h-[24rem] overflow-y-auto rounded-2xl border border-white/8 bg-slate-950/45">
+                <div className="mt-4 max-h-96 overflow-y-auto rounded-2xl border border-white/8 bg-slate-950/45">
                   <div className="grid grid-cols-[3rem_minmax(0,1fr)_3.6rem_3.6rem_3.8rem] gap-2 border-b border-white/8 px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
                     <span>Rank</span>
                     <span>Player</span>
@@ -1412,7 +1490,7 @@ export default function GamePage() {
         ) : null}
 
         {chatOpen ? (
-          <div className="pointer-events-none absolute bottom-4 right-4 z-20 flex w-full max-w-[22rem] justify-end">
+          <div className="pointer-events-none absolute bottom-4 right-4 z-20 flex w-full max-w-88 justify-end">
             <div className="pointer-events-auto w-full rounded-[1.2rem] border border-white/12 bg-[linear-gradient(180deg,rgba(15,23,42,0.9)_0%,rgba(15,23,42,0.78)_100%)] p-3 text-white shadow-[0_18px_50px_rgba(2,6,23,0.34)] backdrop-blur-xl">
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -1429,14 +1507,14 @@ export default function GamePage() {
                 </button>
               </div>
 
-              <div className="mt-3 h-[18rem] overflow-y-auto rounded-2xl border border-white/8 bg-slate-950/45 px-3 py-2">
+              <div className="mt-3 h-72 overflow-y-auto rounded-2xl border border-white/8 bg-slate-950/45 px-3 py-2">
                 {chatMessages.length ? (
                   chatMessages.map((message) => (
                     <div key={message.id} className="mb-2 last:mb-0">
                       <p className="text-[10px] font-black uppercase tracking-[0.12em] text-emerald-200">
                         {message.name}
                       </p>
-                      <p className="mt-0.5 break-words text-sm text-slate-100">{message.text}</p>
+                      <p className="mt-0.5 wrap-break-word text-sm text-slate-100">{message.text}</p>
                     </div>
                   ))
                 ) : (
@@ -1514,8 +1592,8 @@ export default function GamePage() {
                 transition={{ duration: 0.52, ease: [0.22, 1, 0.36, 1] }}
                 className="relative flex h-full w-full items-center justify-center overflow-hidden text-white"
               >
-                <div className="relative z-10 flex w-full max-w-[88rem] items-center justify-center gap-10">
-                  <div className="h-[34rem] w-[34rem] flex-shrink-0 overflow-hidden">
+                <div className="relative z-10 flex w-full max-w-352 items-center justify-center gap-10">
+                  <div className="h-136 w-136 shrink-0 overflow-hidden">
                     <img
                       src="/assets/welcomeback.png"
                       alt="Welcome Back"
@@ -1524,7 +1602,7 @@ export default function GamePage() {
                     />
                   </div>
 
-                  <div className="min-w-0 max-w-[28rem]">
+                  <div className="min-w-0 max-w-md">
                     <p className="text-[0.9rem] uppercase tracking-[0.42em] text-sky-300/80">
                       Welcome Back
                     </p>

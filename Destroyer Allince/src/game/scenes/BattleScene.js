@@ -18,6 +18,11 @@ const BATTLE_CAMERA_PADDING_Y = 220;
 const RAID_PREVIEW_READY_DELAY_MS = 1800;
 const RAID_TIME_LIMIT_MS = 180000;
 const RAID_DEPLOY_INTERVAL_MS = 180;
+const SOLDIER_WALK_FRAME_MS = 130;
+const SOLDIER_WALK_BOB_AMPLITUDE = 1.2;
+const SOLDIER_WALK_BOB_SPEED = 0.016;
+const SOLDIER_DIRECTION_DEADZONE = 4;
+const SOLDIER_DIRECTION_SWITCH_RATIO = 1.18;
 const AIR_DEFENSE_TARGET_PRIORITY = ["rocket", "jet", "helicopter"];
 const DEPLOYABLE_MIN_ROW = MAP_ROWS - 3;
 const SOLDIER_WALK_TEXTURES = {
@@ -32,6 +37,7 @@ const SOLDIER_FIRING_TEXTURES = {
   left: "soldier-left-firing",
   right: "soldier-right-firing",
 };
+const TANK_ATTACK_TEXTURES = ["tank-attack-1", "tank-attack-2"];
 
 const darkenColor = (hex, amount = 16) => {
   const color = Phaser.Display.Color.ValueToColor(hex);
@@ -45,7 +51,7 @@ const distanceBetween = Phaser.Math.Distance.Between;
 const UNIT_CONFIG = {
   soldier: {
     maxHealth: 80,
-    speed: 38,
+    speed: 24,
     range: 108,
     detectRange: 172,
     damage: 14,
@@ -76,7 +82,7 @@ const UNIT_CONFIG = {
   },
   guard: {
     maxHealth: 90,
-    speed: 46,
+    speed: 24,
     range: 92,
     detectRange: 156,
     damage: 10,
@@ -119,6 +125,44 @@ const normalizeDirection = (dx, dy) => {
   }
 
   return dy >= 0 ? "front" : "back";
+};
+
+const getDeterministicSeed = (value) => {
+  const text = String(value ?? "");
+  let seed = 7;
+
+  for (let index = 0; index < text.length; index += 1) {
+    seed = ((seed * 31) + text.charCodeAt(index)) % 100000;
+  }
+
+  return seed;
+};
+
+const resolveStableDirection = (currentDirection, dx, dy) => {
+  const absX = Math.abs(dx);
+  const absY = Math.abs(dy);
+
+  if (absX < SOLDIER_DIRECTION_DEADZONE && absY < SOLDIER_DIRECTION_DEADZONE) {
+    return currentDirection ?? "front";
+  }
+
+  if (absX > absY * SOLDIER_DIRECTION_SWITCH_RATIO) {
+    return dx >= 0 ? "right" : "left";
+  }
+
+  if (absY > absX * SOLDIER_DIRECTION_SWITCH_RATIO) {
+    return dy >= 0 ? "front" : "back";
+  }
+
+  return currentDirection ?? normalizeDirection(dx, dy);
+};
+
+const getTankTextureForDirection = (direction = "front") => {
+  if (direction === "left" || direction === "back") {
+    return TANK_ATTACK_TEXTURES[1];
+  }
+
+  return TANK_ATTACK_TEXTURES[0];
 };
 
 const getUnitPriority = (unitType, candidate) => {
@@ -826,14 +870,28 @@ export default class BattleScene extends Phaser.Scene {
       sprite.setTint(type === "guard" ? 0xffc0c0 : 0xffffff);
       display.add(sprite);
     } else if (type === "tank") {
-      const body = this.add.graphics();
-      body.fillStyle(0x475569, 1);
-      body.fillRoundedRect(-18, -17, 36, 20, 7);
-      body.fillStyle(0x94a3b8, 1);
-      body.fillCircle(0, -20, 10);
-      body.fillStyle(0x1e293b, 1);
-      body.fillRect(7, -23, 20, 4);
-      display.add(body);
+      const hasAttackTextures = TANK_ATTACK_TEXTURES.every((key) => this.textures.exists(key));
+
+      if (hasAttackTextures) {
+        const initialTankTexture = getTankTextureForDirection(options?.direction ?? "front");
+        const sprite = this.add.image(0, 0, initialTankTexture);
+        sprite.setOrigin(0.5, 1);
+        configureHdSprite(sprite, {
+          scene: this,
+          maxWidth: 48,
+          maxHeight: 36,
+        });
+        display.add(sprite);
+      } else {
+        const body = this.add.graphics();
+        body.fillStyle(0x475569, 1);
+        body.fillRoundedRect(-18, -17, 36, 20, 7);
+        body.fillStyle(0x94a3b8, 1);
+        body.fillCircle(0, -20, 10);
+        body.fillStyle(0x1e293b, 1);
+        body.fillRect(7, -23, 20, 4);
+        display.add(body);
+      }
     } else if (type === "helicopter") {
       const copter = this.add.graphics();
       copter.fillStyle(0x16a34a, 1);
@@ -874,6 +932,7 @@ export default class BattleScene extends Phaser.Scene {
       walkFrameIndex: 0,
       walkFrameElapsed: 0,
       firingUntil: 0,
+      isMoving: false,
       detectRange: config.detectRange ?? (config.range + 48),
       focusTargetId: null,
     };
@@ -931,7 +990,39 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   updateUnitVisual(unit, deltaMs = 0) {
-    if (!unit?.sprite || (unit.type !== "soldier" && unit.type !== "guard")) {
+    if (!unit?.sprite) {
+      return;
+    }
+
+    if (unit.type === "tank") {
+      const textures = TANK_ATTACK_TEXTURES.filter((key) => this.textures.exists(key));
+
+      if (!textures.length) {
+        return;
+      }
+
+      const isFiring = this.time.now < Number(unit.firingUntil ?? 0);
+      const nextTexture = this.textures.exists(getTankTextureForDirection(unit.direction))
+        ? getTankTextureForDirection(unit.direction)
+        : textures[0];
+      const nextState = isFiring ? "firing" : unit.isMoving ? "walk" : "idle";
+
+      if (unit.visualState !== nextState
+        || unit.sprite.texture?.key !== nextTexture) {
+        unit.visualState = nextState;
+        unit.sprite.setTexture(nextTexture);
+        configureHdSprite(unit.sprite, {
+          scene: this,
+          maxWidth: 48,
+          maxHeight: 36,
+        });
+      }
+
+      unit.sprite.setY(0);
+      return;
+    }
+
+    if (unit.type !== "soldier" && unit.type !== "guard") {
       return;
     }
 
@@ -951,13 +1042,36 @@ export default class BattleScene extends Phaser.Scene {
         });
         unit.sprite.setTint(unit.type === "guard" ? 0xffc0c0 : 0xffffff);
       }
+      unit.sprite.setY(0);
+      return;
+    }
+
+    if (!unit.isMoving) {
+      const idleTexture = walkTextures[0];
+
+      if (unit.visualState !== "idle" || unit.sprite.texture?.key !== idleTexture) {
+        unit.visualState = "idle";
+        unit.walkFrameElapsed = 0;
+        unit.walkFrameIndex = 0;
+        unit.sprite.setTexture(idleTexture);
+        configureHdSprite(unit.sprite, {
+          scene: this,
+          maxWidth: 26,
+          maxHeight: 38,
+        });
+        unit.sprite.setTint(unit.type === "guard" ? 0xffc0c0 : 0xffffff);
+      }
+
+      unit.sprite.setY(0);
       return;
     }
 
     unit.walkFrameElapsed = Number(unit.walkFrameElapsed ?? 0) + deltaMs;
-    if (deltaMs > 0 && unit.walkFrameElapsed >= 180) {
-      unit.walkFrameElapsed = 0;
-      unit.walkFrameIndex = (Number(unit.walkFrameIndex ?? 0) + 1) % walkTextures.length;
+    if (deltaMs > 0 && unit.walkFrameElapsed >= SOLDIER_WALK_FRAME_MS) {
+      while (unit.walkFrameElapsed >= SOLDIER_WALK_FRAME_MS) {
+        unit.walkFrameElapsed -= SOLDIER_WALK_FRAME_MS;
+        unit.walkFrameIndex = (Number(unit.walkFrameIndex ?? 0) + 1) % walkTextures.length;
+      }
     }
 
     const nextTexture = walkTextures[Number(unit.walkFrameIndex ?? 0) % walkTextures.length];
@@ -971,6 +1085,11 @@ export default class BattleScene extends Phaser.Scene {
       });
       unit.sprite.setTint(unit.type === "guard" ? 0xffc0c0 : 0xffffff);
     }
+
+    const numericId = Number(unit.id);
+    const safeSeed = Number.isFinite(numericId) ? numericId : getDeterministicSeed(unit.id);
+    const bobSeed = safeSeed * 17;
+    unit.sprite.setY(Math.sin((this.time.now + bobSeed) * SOLDIER_WALK_BOB_SPEED) * SOLDIER_WALK_BOB_AMPLITUDE);
   }
 
   updateUnitVisuals(deltaMs) {
@@ -1320,10 +1439,15 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   advanceUnit(unit, target, dt) {
+    const dx = target.x - unit.x;
+    const dy = target.y - unit.y;
     const distance = distanceBetween(unit.x, unit.y, target.x, target.y);
     const config = UNIT_CONFIG[unit.type];
 
     if (distance <= config.range) {
+      unit.isMoving = false;
+      unit.direction = resolveStableDirection(unit.direction, dx, dy);
+
       if (this.time.now - unit.lastAttackAt >= config.cooldownMs) {
         unit.lastAttackAt = this.time.now;
         this.fireAtTarget(unit, target);
@@ -1339,9 +1463,10 @@ export default class BattleScene extends Phaser.Scene {
     const dy = targetY - unit.y;
     const distance = Math.max(1, Math.hypot(dx, dy));
     const step = Math.min(distance, unit.speed * dt);
+    unit.isMoving = step > 0.01;
     unit.x += (dx / distance) * step;
     unit.y += (dy / distance) * step;
-    unit.direction = normalizeDirection(dx, dy);
+    unit.direction = resolveStableDirection(unit.direction, dx, dy);
     this.positionUnit(unit);
   }
 
@@ -1358,8 +1483,9 @@ export default class BattleScene extends Phaser.Scene {
     const color = unit.type === "tank" ? 0xf59e0b : unit.type === "helicopter" ? 0x86efac : 0xe2e8f0;
     const width = unit.type === "tank" ? 4 : 2;
     const speed = unit.type === "tank" ? 170 : 260;
-    if (unit.type === "soldier" || unit.type === "guard") {
-      unit.firingUntil = this.time.now + 170;
+    unit.direction = resolveStableDirection(unit.direction, target.x - unit.x, target.y - unit.y);
+    if (unit.type === "soldier" || unit.type === "guard" || unit.type === "tank") {
+      unit.firingUntil = this.time.now + (unit.type === "tank" ? 240 : 170);
       unit.visualState = "firing";
       this.updateUnitVisual(unit, 0);
     }

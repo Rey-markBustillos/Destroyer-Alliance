@@ -6,6 +6,7 @@ import { applyWarResolution, fetchWarTarget, syncGameSnapshot } from "../service
 import { getBattleRecords, saveBattleRecord } from "../services/battleRecordStorage";
 import { getGameSnapshot, saveGameSnapshot } from "../services/gameStorage";
 import { getSession, saveSession } from "../services/session";
+import soundManager from "../services/soundManager";
 
 const deriveArmyFromSnapshot = (snapshot) => {
   const buildings = Array.isArray(snapshot?.buildings) ? snapshot.buildings : [];
@@ -160,6 +161,8 @@ export default function WarPage() {
   const [lookupError, setLookupError] = useState("");
   const [target, setTarget] = useState(null);
   const [battleRecords, setBattleRecords] = useState(() => getBattleRecords(session));
+  const [musicStatus, setMusicStatus] = useState(() => soundManager.getStatus());
+  const [musicPanelOpen, setMusicPanelOpen] = useState(false);
   const [raidState, setRaidState] = useState({
     phase: "idle",
     destructionPercent: 0,
@@ -178,6 +181,19 @@ export default function WarPage() {
   useEffect(() => {
     targetRef.current = target;
   }, [target]);
+
+  useEffect(() => {
+    const unsubscribe = soundManager.subscribe((status) => {
+      setMusicStatus(status);
+    });
+
+    soundManager.startBackgroundMusic({
+      fadeInDurationMs: 450,
+      volume: soundManager.getStatus().volume,
+    });
+
+    return unsubscribe;
+  }, []);
 
   useEffect(() => {
     armyRef.current = army;
@@ -461,6 +477,22 @@ export default function WarPage() {
     navigate("/game");
   };
 
+  const handleToggleMusicMute = () => {
+    soundManager.toggleMuted();
+  };
+
+  const handleToggleMusicPanel = () => {
+    setMusicPanelOpen((open) => !open);
+  };
+
+  const handleLowerMusicVolume = () => {
+    soundManager.stepBackgroundMusicVolume(-0.1, { fadeDurationMs: 150 });
+  };
+
+  const handleRaiseMusicVolume = () => {
+    soundManager.stepBackgroundMusicVolume(0.1, { fadeDurationMs: 150 });
+  };
+
   const totalTroops = getTotalTroops(army);
   const canAttack = totalTroops > 0 && target && raidState.phase === "ready";
   const canFindMatch = lookupState !== "loading" && raidState.phase !== "active";
@@ -468,6 +500,9 @@ export default function WarPage() {
   const earnedWarPoints = getWarPointsEarned(summary?.destructionPercent);
   const playerName = session?.name || session?.email?.split("@")[0] || "Commander";
   const playerId = session?.playerId || (session?.id ? `PLYR-${String(session.id).padStart(6, "0")}` : "UNKNOWN");
+  const musicVolumePercent = musicStatus?.volumePercent ?? Math.round((musicStatus?.volume ?? 0) * 100);
+  const canLowerMusicVolume = musicVolumePercent > 0;
+  const canRaiseMusicVolume = musicVolumePercent < 100;
 
   useEffect(() => {
     if (autoSearchTriggeredRef.current) {
@@ -529,6 +564,50 @@ export default function WarPage() {
             >
               Exit Raid
             </button>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={handleToggleMusicPanel}
+                className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-violet-100 transition hover:bg-white/10"
+              >
+                Music
+              </button>
+
+              {musicPanelOpen ? (
+                <div className="absolute right-0 top-full z-20 mt-1.5 min-w-[9.5rem] rounded-xl border border-white/10 bg-slate-950/90 p-2 shadow-[0_14px_36px_rgba(2,6,23,0.35)] backdrop-blur-md">
+                  <button
+                    type="button"
+                    onClick={handleToggleMusicMute}
+                    className="w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-violet-100 transition hover:bg-white/10"
+                  >
+                    {musicStatus?.isMuted ? "Unmute" : "Mute"}
+                  </button>
+
+                  <div className="mt-2 flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={handleLowerMusicVolume}
+                      disabled={!canLowerMusicVolume}
+                      className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-semibold text-cyan-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Vol -
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleRaiseMusicVolume}
+                      disabled={!canRaiseMusicVolume}
+                      className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-semibold text-cyan-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Vol +
+                    </button>
+                  </div>
+
+                  <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-200">
+                    {musicStatus?.isMuted ? "Muted" : `Volume ${musicVolumePercent}%`}
+                  </p>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>

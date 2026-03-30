@@ -1,7 +1,14 @@
 import Phaser from "phaser";
 import { configureHdSprite, createSoftShadow } from "../utils/renderQuality";
 
-const SOLDIER_SPEED = 0.045;
+const SOLDIER_SPEED = 0.024;
+const SOLDIER_WALK_FRAME_MS = 130;
+const SOLDIER_IDLE_AFTER_MOVE_MIN_MS = 120;
+const SOLDIER_IDLE_AFTER_MOVE_MAX_MS = 260;
+const SOLDIER_BEHAVIOR_DELAY_MIN_MS = 220;
+const SOLDIER_BEHAVIOR_DELAY_MAX_MS = 700;
+const SOLDIER_WALK_BOB_HEIGHT = 1.6;
+const SOLDIER_WALK_BOB_DURATION_MS = 130;
 
 const getDirectionFromDelta = (dx, dy) => {
   if (Math.abs(dx) > Math.abs(dy)) {
@@ -36,6 +43,7 @@ export default class SoldierUnit extends Phaser.GameObjects.Container {
     this.behaviorEvent = null;
     this.frameEvent = null;
     this.moveTween = null;
+    this.walkBobTween = null;
     this.walkFrameIndex = 0;
     this.hungryLabel = null;
     this.shadow = createSoftShadow(scene, {
@@ -75,11 +83,13 @@ export default class SoldierUnit extends Phaser.GameObjects.Container {
       this.behaviorEvent?.remove(false);
       this.frameEvent?.remove(false);
       this.moveTween?.remove();
+      this.walkBobTween?.remove();
       this.shadow?.destroy();
       this.hungryLabel?.destroy();
       this.behaviorEvent = null;
       this.frameEvent = null;
       this.moveTween = null;
+      this.walkBobTween = null;
       this.shadow = null;
       this.hungryLabel = null;
     });
@@ -97,7 +107,7 @@ export default class SoldierUnit extends Phaser.GameObjects.Container {
     this.queueNextAction(300 + index * 120);
   }
 
-  queueNextAction(delay = Phaser.Math.Between(400, 1100)) {
+  queueNextAction(delay = Phaser.Math.Between(SOLDIER_BEHAVIOR_DELAY_MIN_MS, SOLDIER_BEHAVIOR_DELAY_MAX_MS)) {
     this.behaviorEvent?.remove(false);
     this.behaviorEvent = this.scene.time.addEvent({
       delay,
@@ -115,7 +125,7 @@ export default class SoldierUnit extends Phaser.GameObjects.Container {
     if (enemy) {
       const direction = getDirectionFromDelta(enemy.x - this.x, enemy.y - this.y);
       this.playFiring(direction);
-      this.queueNextAction(500);
+      this.queueNextAction(360);
       return;
     }
 
@@ -123,7 +133,7 @@ export default class SoldierUnit extends Phaser.GameObjects.Container {
 
     if (!patrolPoint) {
       this.playIdle(this.currentDirection);
-      this.queueNextAction(700);
+      this.queueNextAction(360);
       return;
     }
 
@@ -137,6 +147,13 @@ export default class SoldierUnit extends Phaser.GameObjects.Container {
     const dy = point.y - this.y;
     const distance = Phaser.Math.Distance.Between(this.x, this.y, point.x, point.y);
     const direction = getDirectionFromDelta(dx, dy);
+
+    if (distance < 2) {
+      this.playIdle(direction);
+      this.queueNextAction(Phaser.Math.Between(90, 180));
+      return;
+    }
+
     const duration = Math.max(300, Math.round(distance / SOLDIER_SPEED));
 
     this.playWalk(direction);
@@ -145,17 +162,24 @@ export default class SoldierUnit extends Phaser.GameObjects.Container {
       x: point.x,
       y: point.y,
       duration,
-      ease: "Linear",
+      ease: "Sine.easeInOut",
+      onUpdate: () => {
+        const { row, col } = this.scene.worldToGrid(this.x, this.y);
+        this.setDepth(320 + row + col + 2);
+      },
       onComplete: () => {
         this.moveTween = null;
         this.playIdle(direction);
-        this.queueNextAction();
+        this.queueNextAction(
+          Phaser.Math.Between(SOLDIER_IDLE_AFTER_MOVE_MIN_MS, SOLDIER_IDLE_AFTER_MOVE_MAX_MS)
+        );
       },
     });
   }
 
   playIdle(direction = this.currentDirection) {
     this.stopFrameAnimation();
+    this.stopWalkBob();
     this.currentDirection = direction;
     this.sprite.setTexture(WALK_TEXTURES[direction][0]);
     configureHdSprite(this.sprite, { scene: this.scene, maxWidth: 20, maxHeight: 30 });
@@ -167,8 +191,9 @@ export default class SoldierUnit extends Phaser.GameObjects.Container {
     this.walkFrameIndex = 0;
     this.sprite.setTexture(WALK_TEXTURES[direction][0]);
     configureHdSprite(this.sprite, { scene: this.scene, maxWidth: 20, maxHeight: 30 });
+    this.startWalkBob();
     this.frameEvent = this.scene.time.addEvent({
-      delay: 180,
+      delay: SOLDIER_WALK_FRAME_MS,
       loop: true,
       callback: () => {
         this.walkFrameIndex = (this.walkFrameIndex + 1) % WALK_TEXTURES[this.currentDirection].length;
@@ -180,9 +205,28 @@ export default class SoldierUnit extends Phaser.GameObjects.Container {
 
   playFiring(direction = this.currentDirection) {
     this.stopFrameAnimation();
+    this.stopWalkBob();
     this.currentDirection = direction;
     this.sprite.setTexture(FIRING_TEXTURES[direction]);
     configureHdSprite(this.sprite, { scene: this.scene, maxWidth: 20, maxHeight: 30 });
+  }
+
+  startWalkBob() {
+    this.walkBobTween?.remove();
+    this.walkBobTween = this.scene.tweens.add({
+      targets: this.sprite,
+      y: -SOLDIER_WALK_BOB_HEIGHT,
+      duration: SOLDIER_WALK_BOB_DURATION_MS,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut",
+    });
+  }
+
+  stopWalkBob() {
+    this.walkBobTween?.remove();
+    this.walkBobTween = null;
+    this.sprite.setY(0);
   }
 
   stopFrameAnimation() {

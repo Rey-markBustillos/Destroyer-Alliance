@@ -327,7 +327,7 @@ export default function Login() {
                   boxShadow: "0 16px 36px rgba(37,99,235,0.38)",
                 }}
                 whileTap={{ scale: 0.95 }}
-                className="mt-6 w-full cursor-pointer rounded-2xl bg-[linear-gradient(120deg,#2563eb_0%,#3b82f6_35%,#60a5fa_60%,#2563eb_100%)] bg-[length:200%_100%] px-4 py-3 text-sm font-bold uppercase tracking-[0.22em] text-white shadow-[0_14px_30px_rgba(37,99,235,0.28)] transition disabled:cursor-not-allowed disabled:opacity-70"
+                className="mt-6 w-full cursor-pointer rounded-2xl bg-[linear-gradient(120deg,#2563eb_0%,#3b82f6_35%,#60a5fa_60%,#2563eb_100%)] bg-size-[200%_100%] px-4 py-3 text-sm font-bold uppercase tracking-[0.22em] text-white shadow-[0_14px_30px_rgba(37,99,235,0.28)] transition disabled:cursor-not-allowed disabled:opacity-70"
               >
                 <Motion.span
                   className="block"

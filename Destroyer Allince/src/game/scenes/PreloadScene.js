@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import soundManager from "../../services/soundManager";
 
 const HD_TEXTURE_KEYS = [
   "town",
@@ -10,6 +11,8 @@ const HD_TEXTURE_KEYS = [
   "skyport-bought",
   "tank-shop",
   "tank-owned",
+  "tank-attack-1",
+  "tank-attack-2",
   "air-defense",
   "tent",
   "goldcoin",
@@ -37,6 +40,8 @@ const TEXTURE_FALLBACKS = {
   "skyport-bought": ["skyport-shop", "command-center", "town"],
   "tank-owned": ["tank-shop", "command-center", "machine-wood"],
   "tank-shop": ["tank-owned", "command-center", "machine-wood"],
+  "tank-attack-1": ["tank-owned", "tank-shop", "command-center", "machine-wood"],
+  "tank-attack-2": ["tank-attack-1", "tank-owned", "tank-shop", "command-center", "machine-wood"],
   "air-defense": ["command-center", "town"],
   tent: ["machine-wood", "town"],
   "machine-wood": ["command-center", "town"],
@@ -50,6 +55,12 @@ export default class PreloadScene extends Phaser.Scene {
   }
 
   preload() {
+    soundManager.preloadBackgroundMusic();
+    soundManager.startBackgroundMusic({
+      fadeInDurationMs: 1600,
+      volume: soundManager.getStatus().volume,
+    });
+
     const width = this.cameras.main.width;
     const height = this.cameras.main.height;
 
@@ -102,6 +113,8 @@ export default class PreloadScene extends Phaser.Scene {
     this.load.image("skyport-bought", "/assets/chopper/skychop2.png");
     this.load.image("tank-shop", "/assets/tank/tank1.png");
     this.load.image("tank-owned", "/assets/tank/tank2.png");
+    this.load.image("tank-attack-1", "/assets/tank/tankattack1.png");
+    this.load.image("tank-attack-2", "/assets/tank/tankattack2.png");
     this.load.image("air-defense", "/assets/airdef.png");
     this.load.image("tent", "/assets/tent.png");
     this.load.image("goldcoin", "/assets/goldcoin.png");

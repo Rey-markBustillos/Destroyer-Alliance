@@ -28,7 +28,9 @@ const CAMERA_FOCUS_TRANSITION_MS = 420;
 const CAMERA_FOCUS_OFFSET_Y = TILE_HEIGHT * 0.18;
 const CAMERA_FIT_PADDING = 0;
 const MAP_COVER_BLEED = 96;
-const CAMERA_SCROLL_SAFE_INSET_X = 72;
+const CAMERA_SCROLL_SAFE_INSET_LEFT = 0;
+const CAMERA_SCROLL_SAFE_INSET_RIGHT = 72;
+const CAMERA_EXTRA_LEFT_SCROLL = 84;
 const CAMERA_SCROLL_SAFE_INSET_TOP = 40;
 const CAMERA_SCROLL_SAFE_INSET_BOTTOM = 120;
 const CAMERA_COVER_ZOOM_GUARD = 1.035;
@@ -106,11 +108,11 @@ const getCameraSafeBounds = (scene) => {
   };
 
   return {
-    minX: activeBounds.minX + CAMERA_SCROLL_SAFE_INSET_X,
-    maxX: activeBounds.maxX - CAMERA_SCROLL_SAFE_INSET_X,
+    minX: activeBounds.minX + CAMERA_SCROLL_SAFE_INSET_LEFT,
+    maxX: activeBounds.maxX - CAMERA_SCROLL_SAFE_INSET_RIGHT,
     minY: activeBounds.minY + CAMERA_SCROLL_SAFE_INSET_TOP,
     maxY: activeBounds.maxY - CAMERA_SCROLL_SAFE_INSET_BOTTOM,
-    width: Math.max(1, activeBounds.width - (CAMERA_SCROLL_SAFE_INSET_X * 2)),
+    width: Math.max(1, activeBounds.width - CAMERA_SCROLL_SAFE_INSET_LEFT - CAMERA_SCROLL_SAFE_INSET_RIGHT),
     height: Math.max(1, activeBounds.height - CAMERA_SCROLL_SAFE_INSET_TOP - CAMERA_SCROLL_SAFE_INSET_BOTTOM),
   };
 };
@@ -938,7 +940,7 @@ export default class GameScene extends Phaser.Scene {
     const viewportWidth = this.scale.width / zoom;
     const viewportHeight = this.scale.height / zoom;
     const insetBounds = getCameraSafeBounds(this);
-    let minScrollX = insetBounds.minX;
+    let minScrollX = insetBounds.minX - CAMERA_EXTRA_LEFT_SCROLL;
     let maxScrollX = insetBounds.maxX - viewportWidth;
     let minScrollY = insetBounds.minY;
     let maxScrollY = insetBounds.maxY - viewportHeight;

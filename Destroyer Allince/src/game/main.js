@@ -8,6 +8,7 @@ import UIScene from "./scenes/UIScene";
 import { GAME_HEIGHT, GAME_WIDTH } from "./utils/config";
 import { GAME_RENDER_CONFIG } from "./tilemap/layoutConfig";
 import { applyCanvasQuality } from "./utils/renderQuality";
+import soundManager from "../services/soundManager";
 
 const phaserConfig = {
 	type: Phaser.AUTO,
@@ -36,6 +37,8 @@ const phaserConfig = {
 };
 
 export const createGame = (parentElement, options = {}) => {
+	soundManager.preloadBackgroundMusic();
+
 	const existingCanvas = parentElement.querySelector("canvas");
 	if (existingCanvas) {
 		existingCanvas.remove();
