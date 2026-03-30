@@ -101,11 +101,11 @@ export default function GamePage() {
     totalHelicopters: 0,
     totalArmyUnits: 0,
     commandCenters: 0,
-    commandCenterLimit: 2,
+    commandCenterLimit: 1,
     battleTankBuildings: 0,
-    battleTankLimit: 1,
+    battleTankLimit: 0,
     skyports: 0,
-    skyportLimit: 1,
+    skyportLimit: 0,
     airDefenseBuildings: 0,
     airDefenseLimit: 0,
     woodMachines: 0,
@@ -863,6 +863,7 @@ export default function GamePage() {
   const upgradeCost = selectedPlacedBuilding
     ? getBuildingUpgradeCost(selectedPlacedBuilding.type)
     : 0;
+  const upgradeCostLabel = `${formatCompactNumber(upgradeCost)} gold`;
   const upgradeCap = selectedPlacedBuilding?.type === "command-center"
     ? 2
     : Math.min(2, gameState.townHallLevel ?? 1);
@@ -906,8 +907,8 @@ export default function GamePage() {
   const profileWarPoints = Number(activeSession?.warPoints ?? 0) || 0;
 
   return (
-    <main className="font-black-ops min-h-screen bg-slate-950 text-slate-950">
-      <section className="relative h-screen w-full overflow-hidden bg-transparent">
+    <main className="font-black-ops min-h-screen bg-[#243322] text-slate-950">
+      <section className="relative h-screen w-full overflow-hidden bg-[#243322]">
 
         <Motion.div
           initial={{ opacity: 0, y: -18 }}
@@ -1057,13 +1058,19 @@ export default function GamePage() {
                     <span className="font-bold text-white">{feedCost} gold</span>
                   </div>
                 ) : null}
+                {(selectedPlacedBuilding.level ?? 1) < upgradeCap ? (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-slate-400">Upgrade</span>
+                    <span className="font-bold text-amber-200">{upgradeCostLabel}</span>
+                  </div>
+                ) : null}
                 {selectedPlacedBuilding.isUpgrading ? (
                   <p className="pt-px text-[10px] font-semibold text-amber-300">
                     Upgrading... {upgradeMinutes}:{String(upgradeSeconds).padStart(2, "0")}
                   </p>
                 ) : (selectedPlacedBuilding.level ?? 1) < upgradeCap ? (
                   <p className="pt-px text-[10px] font-semibold text-emerald-300">
-                    Upgrade Cost: {upgradeCost} gold
+                    Need {upgradeCostLabel} to upgrade
                   </p>
                 ) : blockedByTownHall ? (
                   <p className="pt-px text-[10px] font-semibold text-rose-300">
@@ -1110,7 +1117,11 @@ export default function GamePage() {
                   disabled={!canUpgrade}
                   className="rounded-[9px] bg-sky-400 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-sky-950 transition hover:-translate-y-0.5 hover:bg-sky-300 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
                 >
-                  {selectedPlacedBuilding.isUpgrading ? "Upgrading" : "Upgrade"}
+                  {selectedPlacedBuilding.isUpgrading
+                    ? "Upgrading"
+                    : (selectedPlacedBuilding.level ?? 1) < upgradeCap
+                      ? `Upgrade ${formatCompactNumber(upgradeCost)}G`
+                      : "Upgrade"}
                 </button>
 
                 {selectedPlacedBuilding.isUpgrading ? (

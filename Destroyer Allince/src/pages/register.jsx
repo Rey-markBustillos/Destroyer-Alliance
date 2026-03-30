@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion as Motion } from "framer-motion";
 
+import AuthLoadingScreen, { primeAuthLoadingScreen } from "../components/AuthLoadingScreen";
 import { register } from "../services/auth";
 import { markIntroPending, saveSession } from "../services/session";
 
@@ -92,32 +93,6 @@ const contentVariants = {
   },
 };
 
-const loadingVariants = {
-  hidden: {
-    opacity: 0,
-    y: 20,
-    scale: 0.96,
-  },
-  visible: {
-    opacity: 1,
-    y: 0,
-    scale: 1,
-    transition: {
-      delay: 0.3,
-      duration: 0.45,
-      ease: cinematicEase,
-    },
-  },
-  exit: {
-    opacity: 0,
-    y: -10,
-    transition: {
-      duration: 0.2,
-      ease: "easeIn",
-    },
-  },
-};
-
 const floatingLabelClass = (active) =>
   `pointer-events-none absolute left-4 transition-all duration-300 ${
     active
@@ -147,6 +122,10 @@ export default function Register() {
       })),
     []
   );
+
+  useEffect(() => {
+    primeAuthLoadingScreen();
+  }, []);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -258,200 +237,169 @@ export default function Register() {
             <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(160deg,rgba(255,255,255,0.16)_0%,rgba(255,255,255,0.06)_30%,rgba(15,23,42,0.16)_100%)]" />
             <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[radial-gradient(circle_at_top,rgba(134,239,172,0.22),transparent_70%)]" />
 
-            <AnimatePresence mode="wait">
-              {!isSubmitting ? (
-                <Motion.div
-                  key="form"
-                  variants={contentVariants}
-                  initial="visible"
-                  animate="visible"
-                  exit="hidden"
-                  className="relative z-10"
-                >
-                  <Motion.div
-                    initial={{ opacity: 0, y: 18 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.7, ease: cinematicEase }}
+            <Motion.div
+              variants={contentVariants}
+              initial="visible"
+              animate="visible"
+              className="relative z-10"
+            >
+              <Motion.div
+                initial={{ opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.7, ease: cinematicEase }}
+              >
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-300/30 bg-emerald-400/10 shadow-[0_0_30px_rgba(34,197,94,0.16)]">
+                  <Motion.span
+                    className="text-xl"
+                    animate={{ rotate: [0, 8, -6, 0], scale: [1, 1.04, 1] }}
+                    transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
                   >
-                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-300/30 bg-emerald-400/10 shadow-[0_0_30px_rgba(34,197,94,0.16)]">
-                      <Motion.span
-                        className="text-xl"
-                        animate={{ rotate: [0, 8, -6, 0], scale: [1, 1.04, 1] }}
-                        transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                      >
-                        R
-                      </Motion.span>
-                    </div>
-                    <p className="mt-5 text-center text-[0.72rem] font-semibold uppercase tracking-[0.4em] text-emerald-300/80">
-                      New Commander
-                    </p>
-                    <h1 className="mt-3 text-center text-3xl font-black tracking-tight md:text-[2.25rem]">
-                      Create Account
-                    </h1>
-                    <p className="mt-3 text-center text-sm leading-6 text-slate-300">
-                      Build your base, raise your army, and enter the alliance in style.
-                    </p>
-                  </Motion.div>
+                    R
+                  </Motion.span>
+                </div>
+                <p className="mt-5 text-center text-[0.72rem] font-semibold uppercase tracking-[0.4em] text-emerald-300/80">
+                  New Commander
+                </p>
+                <h1 className="mt-3 text-center text-3xl font-black tracking-tight md:text-[2.25rem]">
+                  Create Account
+                </h1>
+                <p className="mt-3 text-center text-sm leading-6 text-slate-300">
+                  Build your base, raise your army, and enter the alliance in style.
+                </p>
+              </Motion.div>
 
-                  <div className="mt-8 space-y-4">
-                    <Motion.div
-                      animate={{
-                        scale: focusedField === "name" || name ? 1.01 : 1,
-                      }}
-                      transition={{ duration: 0.2 }}
-                      className="relative"
-                    >
-                      <label className={floatingLabelClass(focusedField === "name" || Boolean(name))}>
-                        Commander Name
-                      </label>
-                      <Motion.input
-                        type="text"
-                        value={name}
-                        onChange={(event) => setName(event.target.value)}
-                        onFocus={() => setFocusedField("name")}
-                        onBlur={() => setFocusedField((current) => (current === "name" ? "" : current))}
-                        disabled={loading}
-                        required
-                        whileFocus={{
-                          boxShadow: "0 0 0 1px rgba(74,222,128,0.85), 0 0 28px rgba(34,197,94,0.26)",
-                        }}
-                        className="w-full rounded-2xl border border-white/10 bg-slate-950/72 px-4 pb-3 pt-6 text-sm text-white outline-none transition placeholder:text-transparent"
-                        placeholder="Commander Name"
-                      />
-                    </Motion.div>
-
-                    <Motion.div
-                      animate={{
-                        scale: focusedField === "email" || email ? 1.01 : 1,
-                      }}
-                      transition={{ duration: 0.2 }}
-                      className="relative"
-                    >
-                      <label className={floatingLabelClass(focusedField === "email" || Boolean(email))}>
-                        Email
-                      </label>
-                      <Motion.input
-                        type="email"
-                        value={email}
-                        onChange={(event) => setEmail(event.target.value)}
-                        onFocus={() => setFocusedField("email")}
-                        onBlur={() => setFocusedField((current) => (current === "email" ? "" : current))}
-                        disabled={loading}
-                        required
-                        whileFocus={{
-                          boxShadow: "0 0 0 1px rgba(74,222,128,0.85), 0 0 28px rgba(34,197,94,0.26)",
-                        }}
-                        className="w-full rounded-2xl border border-white/10 bg-slate-950/72 px-4 pb-3 pt-6 text-sm text-white outline-none transition placeholder:text-transparent"
-                        placeholder="Email"
-                      />
-                    </Motion.div>
-
-                    <Motion.div
-                      animate={{
-                        scale: focusedField === "password" || password ? 1.01 : 1,
-                      }}
-                      transition={{ duration: 0.2 }}
-                      className="relative"
-                    >
-                      <label className={floatingLabelClass(focusedField === "password" || Boolean(password))}>
-                        Password
-                      </label>
-                      <Motion.input
-                        type="password"
-                        value={password}
-                        onChange={(event) => setPassword(event.target.value)}
-                        onFocus={() => setFocusedField("password")}
-                        onBlur={() => setFocusedField((current) => (current === "password" ? "" : current))}
-                        disabled={loading}
-                        required
-                        whileFocus={{
-                          boxShadow: "0 0 0 1px rgba(74,222,128,0.85), 0 0 28px rgba(34,197,94,0.26)",
-                        }}
-                        className="w-full rounded-2xl border border-white/10 bg-slate-950/72 px-4 pb-3 pt-6 text-sm text-white outline-none transition placeholder:text-transparent"
-                        placeholder="Password"
-                      />
-                    </Motion.div>
-                  </div>
-
-                  <AnimatePresence>
-                    {error ? (
-                      <Motion.p
-                        initial={{ opacity: 0, y: -8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -8 }}
-                        transition={{ duration: 0.25 }}
-                        className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200"
-                      >
-                        {error}
-                      </Motion.p>
-                    ) : null}
-                  </AnimatePresence>
-
-                  <Motion.button
-                    type="submit"
+              <div className="mt-8 space-y-4">
+                <Motion.div
+                  animate={{
+                    scale: focusedField === "name" || name ? 1.01 : 1,
+                  }}
+                  transition={{ duration: 0.2 }}
+                  className="relative"
+                >
+                  <label className={floatingLabelClass(focusedField === "name" || Boolean(name))}>
+                    Commander Name
+                  </label>
+                  <Motion.input
+                    type="text"
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    onFocus={() => setFocusedField("name")}
+                    onBlur={() => setFocusedField((current) => (current === "name" ? "" : current))}
                     disabled={loading}
-                    whileHover={{
-                      scale: 1.05,
-                      boxShadow: "0 16px 36px rgba(22,163,74,0.38)",
+                    required
+                    whileFocus={{
+                      boxShadow: "0 0 0 1px rgba(74,222,128,0.85), 0 0 28px rgba(34,197,94,0.26)",
                     }}
-                    whileTap={{ scale: 0.95 }}
-                    className="mt-6 w-full cursor-pointer rounded-2xl bg-[linear-gradient(120deg,#15803d_0%,#16a34a_35%,#4ade80_60%,#15803d_100%)] bg-[length:200%_100%] px-4 py-3 text-sm font-bold uppercase tracking-[0.22em] text-white shadow-[0_14px_30px_rgba(22,163,74,0.28)] transition disabled:cursor-not-allowed disabled:opacity-70"
-                  >
-                    <Motion.span
-                      className="block"
-                      animate={{ backgroundPositionX: ["0%", "100%"] }}
-                      transition={{ duration: 2.8, repeat: Infinity, ease: "linear" }}
-                    >
-                      Register
-                    </Motion.span>
-                  </Motion.button>
+                    className="w-full rounded-2xl border border-white/10 bg-slate-950/72 px-4 pb-3 pt-6 text-sm text-white outline-none transition placeholder:text-transparent"
+                    placeholder="Commander Name"
+                  />
+                </Motion.div>
 
-                  <p className="mt-5 text-center text-sm text-slate-300">
-                    Already have an account?{" "}
-                    <Link to="/" className="font-semibold text-emerald-300 transition hover:text-emerald-200 hover:underline">
-                      Login
-                    </Link>
-                  </p>
-                </Motion.div>
-              ) : (
                 <Motion.div
-                  key="loading"
-                  variants={loadingVariants}
-                  initial="hidden"
-                  animate="visible"
-                  exit="exit"
-                  className="relative z-10 flex h-[24rem] flex-col items-center justify-center"
+                  animate={{
+                    scale: focusedField === "email" || email ? 1.01 : 1,
+                  }}
+                  transition={{ duration: 0.2 }}
+                  className="relative"
                 >
-                  <Motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 1, ease: "linear", repeat: Infinity }}
-                    className="relative h-16 w-16"
-                  >
-                    <div className="absolute inset-0 rounded-full border-4 border-emerald-300/20" />
-                    <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-emerald-300 border-r-green-400" />
-                  </Motion.div>
-                  <Motion.p
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.5, duration: 0.35 }}
-                    className="mt-6 text-lg font-semibold text-white"
-                  >
-                    Creating Account...
-                  </Motion.p>
-                  <Motion.p
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.68, duration: 0.35 }}
-                    className="mt-2 max-w-xs text-center text-sm leading-6 text-slate-300"
-                  >
-                    Building your command center and preparing your alliance profile.
-                  </Motion.p>
+                  <label className={floatingLabelClass(focusedField === "email" || Boolean(email))}>
+                    Email
+                  </label>
+                  <Motion.input
+                    type="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    onFocus={() => setFocusedField("email")}
+                    onBlur={() => setFocusedField((current) => (current === "email" ? "" : current))}
+                    disabled={loading}
+                    required
+                    whileFocus={{
+                      boxShadow: "0 0 0 1px rgba(74,222,128,0.85), 0 0 28px rgba(34,197,94,0.26)",
+                    }}
+                    className="w-full rounded-2xl border border-white/10 bg-slate-950/72 px-4 pb-3 pt-6 text-sm text-white outline-none transition placeholder:text-transparent"
+                    placeholder="Email"
+                  />
                 </Motion.div>
-              )}
-            </AnimatePresence>
+
+                <Motion.div
+                  animate={{
+                    scale: focusedField === "password" || password ? 1.01 : 1,
+                  }}
+                  transition={{ duration: 0.2 }}
+                  className="relative"
+                >
+                  <label className={floatingLabelClass(focusedField === "password" || Boolean(password))}>
+                    Password
+                  </label>
+                  <Motion.input
+                    type="password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    onFocus={() => setFocusedField("password")}
+                    onBlur={() => setFocusedField((current) => (current === "password" ? "" : current))}
+                    disabled={loading}
+                    required
+                    whileFocus={{
+                      boxShadow: "0 0 0 1px rgba(74,222,128,0.85), 0 0 28px rgba(34,197,94,0.26)",
+                    }}
+                    className="w-full rounded-2xl border border-white/10 bg-slate-950/72 px-4 pb-3 pt-6 text-sm text-white outline-none transition placeholder:text-transparent"
+                    placeholder="Password"
+                  />
+                </Motion.div>
+              </div>
+
+              <AnimatePresence>
+                {error ? (
+                  <Motion.p
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.25 }}
+                    className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200"
+                  >
+                    {error}
+                  </Motion.p>
+                ) : null}
+              </AnimatePresence>
+
+              <Motion.button
+                type="submit"
+                disabled={loading}
+                whileHover={{
+                  scale: 1.05,
+                  boxShadow: "0 16px 36px rgba(22,163,74,0.38)",
+                }}
+                whileTap={{ scale: 0.95 }}
+                className="mt-6 w-full cursor-pointer rounded-2xl bg-[linear-gradient(120deg,#15803d_0%,#16a34a_35%,#4ade80_60%,#15803d_100%)] bg-[length:200%_100%] px-4 py-3 text-sm font-bold uppercase tracking-[0.22em] text-white shadow-[0_14px_30px_rgba(22,163,74,0.28)] transition disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                <Motion.span
+                  className="block"
+                  animate={{ backgroundPositionX: ["0%", "100%"] }}
+                  transition={{ duration: 2.8, repeat: Infinity, ease: "linear" }}
+                >
+                  Register
+                </Motion.span>
+              </Motion.button>
+
+              <p className="mt-5 text-center text-sm text-slate-300">
+                Already have an account?{" "}
+                <Link to="/" className="font-semibold text-emerald-300 transition hover:text-emerald-200 hover:underline">
+                  Login
+                </Link>
+              </p>
+            </Motion.div>
           </Motion.form>
         </Motion.div>
       </div>
+
+      <AnimatePresence>
+        {isSubmitting ? (
+          <AuthLoadingScreen
+            title="Loading......."
+            description="Building your command center and preparing your alliance profile."
+          />
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }

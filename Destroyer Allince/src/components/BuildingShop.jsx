@@ -56,14 +56,18 @@ export default function BuildingShop({
           const woodMachineCapReached = building.id === "wood-machine" && woodMachineCount >= woodMachineLimit;
           const commandCenterCapReached = building.id === "command-center" && commandCenterCount >= commandCenterLimit;
           const tentCapReached = building.id === "tent" && tentCount >= tentLimit;
+          const battleTankLocked = building.id === "battle-tank" && battleTankLimit <= 0;
           const battleTankCapReached = building.id === "battle-tank" && battleTankCount >= battleTankLimit;
+          const skyportLocked = building.id === "skyport" && skyportLimit <= 0;
           const skyportCapReached = building.id === "skyport" && skyportCount >= skyportLimit;
           const airDefenseLocked = building.id === "air-defense" && airDefenseLimit <= 0;
           const airDefenseCapReached = building.id === "air-defense" && airDefenseCount >= airDefenseLimit && airDefenseLimit > 0;
           const isLockedByRules = woodMachineCapReached
             || commandCenterCapReached
             || tentCapReached
+            || battleTankLocked
             || battleTankCapReached
+            || skyportLocked
             || skyportCapReached
             || airDefenseLocked
             || airDefenseCapReached;
@@ -104,8 +108,12 @@ export default function BuildingShop({
                       ? "Main base already built"
                       : tentCapReached
                         ? `${tentCount}/${tentLimit} Soldier Tents`
+                      : battleTankLocked
+                        ? "Unlock at Town Hall Lv.2"
                       : battleTankCapReached
                         ? `${battleTankCount}/${battleTankLimit} Battle Tanks`
+                        : skyportLocked
+                          ? "Unlock at Town Hall Lv.2"
                         : skyportCapReached
                           ? `${skyportCount}/${skyportLimit} Chopper Bays`
                           : airDefenseLocked
@@ -120,7 +128,7 @@ export default function BuildingShop({
       </div>
 
       <p className="mt-4 text-center text-xs leading-5 text-slate-300/75">
-        Main base is limited to 1. Soldier Tent cap is {tentLimit} at Town Hall level {townHallLevel}. Chopper Bay and Battle Tank max follow Town Hall level, Air Defense unlocks at Town Hall level 2 with a 1-building cap, and Wood Machine starts at {woodMachineLimit}.
+        Main base is limited to 1. Wood Machine is 4 at Town Hall level 1 and 6 at level 2. Soldier Tent cap is {tentLimit} at Town Hall level {townHallLevel}. Chopper Bay and Battle Tank unlock at Town Hall level 2 with a 1-building cap, and Air Defense also unlocks at Town Hall level 2 with a 1-building cap.
       </p>
     </Motion.div>
   );
