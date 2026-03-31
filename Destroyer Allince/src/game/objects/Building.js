@@ -18,6 +18,8 @@ const lighten = (hex, amount = 18) => {
 };
 
 const BUILDING_TEXTURE_FALLBACKS = ["command-center", "machine-wood", "town"];
+const ENERGY_MACHINE_TEXTURE_KEY = "energy-machine-animated";
+const ENERGY_MACHINE_ANIM_KEY = "energy-machine-spin";
 
 const getBestTextureKey = (scene, preferredKey, fallbackKeys = BUILDING_TEXTURE_FALLBACKS) => {
   if (preferredKey && scene.textures.exists(preferredKey)) {
@@ -82,6 +84,8 @@ const getLevelLabelOffsetY = (buildingTypeId, roofY) => {
     case "tent":
       return -4;
     case "wood-machine":
+      return -8;
+    case "energy-machine":
       return -8;
     case "town-hall":
       return -82;
@@ -309,6 +313,55 @@ export default class Building extends Phaser.GameObjects.Container {
         fontStyle: "bold",
         color: "#fde68a",
         stroke: "#1f2937",
+        strokeThickness: 4,
+        align: "center",
+      });
+      this.resourceLabel.setOrigin(0.5, 0.5);
+      this.visualContainer.add(this.resourceLabel);
+    } else if (buildingType.id === "energy-machine") {
+      addSpriteShadow(footprintWidth * 0.9, footprintHeight * 0.54, footprintHeight / 2 + 6);
+
+      if (scene.textures.exists(ENERGY_MACHINE_TEXTURE_KEY)) {
+        if (!scene.anims.exists(ENERGY_MACHINE_ANIM_KEY)) {
+          scene.anims.create({
+            key: ENERGY_MACHINE_ANIM_KEY,
+            frames: scene.anims.generateFrameNumbers(ENERGY_MACHINE_TEXTURE_KEY, { start: 0, end: 3 }),
+            duration: 4200,
+            repeat: -1,
+            repeatDelay: 80,
+          });
+        }
+
+        const energySprite = scene.add.sprite(0, footprintHeight / 2 + 22, ENERGY_MACHINE_TEXTURE_KEY, 0);
+        energySprite.setOrigin(0.5, 1);
+        energySprite.setAlpha(0.995);
+        configureHdSprite(energySprite, {
+          scene,
+          maxWidth: footprintWidth * 0.94,
+          maxHeight: footprintWidth * 0.9,
+          sourceWidth: 512,
+          sourceHeight: 516,
+        });
+        energySprite.play(ENERGY_MACHINE_ANIM_KEY);
+        this.visualContainer.add(energySprite);
+      } else {
+        addQualitySprite({
+          textureKey: "energy-machine",
+          y: footprintHeight / 2 + 22,
+          maxWidth: footprintWidth * 0.94,
+          maxHeight: footprintWidth * 0.9,
+          shadowWidth: footprintWidth * 0.9,
+          shadowHeight: footprintHeight * 0.54,
+          shadowY: footprintHeight / 2 + 6,
+        });
+      }
+
+      this.resourceLabel = scene.add.text(0, -34, "0/3", {
+        fontFamily: "Verdana",
+        fontSize: "13px",
+        fontStyle: "bold",
+        color: "#93c5fd",
+        stroke: "#0f172a",
         strokeThickness: 4,
         align: "center",
       });

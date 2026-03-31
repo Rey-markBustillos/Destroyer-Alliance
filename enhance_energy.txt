@@ -1,0 +1,33 @@
+Enhance and refine this 2D isometric military energy generator sprite sheet.
+
+IMPORTANT:
+- This is a 4-frame vertical sprite sheet
+- Keep EXACT layout and size (512x2064)
+- DO NOT resize or crop
+
+GOAL:
+- Make animation smoother across frames
+- Improve visual consistency and realism
+
+SMOOTHING RULES:
+- Ensure turbine rotation is progressive (frame-to-frame continuity)
+- Ensure energy glow transitions smoothly (no sudden jumps)
+- Ensure lighting intensity increases gradually
+- Ensure frame 4 loops naturally back to frame 1
+
+STRICT:
+- DO NOT redesign the structure
+- DO NOT change perspective
+- DO NOT move object position
+- DO NOT add new elements
+
+ENHANCEMENT:
+- sharpen edges
+- improve lighting consistency
+- refine glow and energy effects
+- remove noise/pixelation
+
+OUTPUT:
+- transparent PNG
+- same resolution
+- perfect loop-ready animation

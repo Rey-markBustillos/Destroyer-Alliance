@@ -14,6 +14,7 @@ model User {
   email     String     @unique
   password  String
   gold      Int        @default(1200)
+  energy    Int        @default(0)
   warPoints Int        @default(0)
   rankName  String     @default("Recruit")
   buildings Building[]
@@ -35,6 +36,8 @@ model Building {
   lastFedAt         DateTime?
   hasChopper        Boolean   @default(false)
   hasTank           Boolean   @default(false)
+  tankShotsRemaining Int      @default(0)
+  chopperShotsRemaining Int   @default(0)
   userId            Int
   user              User      @relation(fields: [userId], references: [id])
 }

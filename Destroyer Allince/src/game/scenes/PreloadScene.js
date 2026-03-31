@@ -5,14 +5,22 @@ const HD_TEXTURE_KEYS = [
   "town",
   "base",
   "machine-wood",
+  "energy-machine",
+  "energy-machine-animated",
   "command-center",
   "skyport-shop",
   "skyport-empty",
   "skyport-bought",
   "tank-shop",
   "tank-owned",
-  "tank-attack-1",
-  "tank-attack-2",
+  "tank-attack-down",
+  "tank-attack-down-left",
+  "tank-attack-down-right",
+  "tank-attack-left",
+  "tank-attack-right",
+  "tank-attack-up",
+  "tank-attack-up-left",
+  "tank-attack-up-right",
   "air-defense",
   "tent",
   "goldcoin",
@@ -40,10 +48,17 @@ const TEXTURE_FALLBACKS = {
   "skyport-bought": ["skyport-shop", "command-center", "town"],
   "tank-owned": ["tank-shop", "command-center", "machine-wood"],
   "tank-shop": ["tank-owned", "command-center", "machine-wood"],
-  "tank-attack-1": ["tank-owned", "tank-shop", "command-center", "machine-wood"],
-  "tank-attack-2": ["tank-attack-1", "tank-owned", "tank-shop", "command-center", "machine-wood"],
+  "tank-attack-down": ["tank-owned", "tank-shop", "command-center", "machine-wood"],
+  "tank-attack-down-left": ["tank-attack-down", "tank-owned", "tank-shop", "command-center"],
+  "tank-attack-down-right": ["tank-attack-down", "tank-owned", "tank-shop", "command-center"],
+  "tank-attack-left": ["tank-attack-down-left", "tank-owned", "tank-shop", "command-center"],
+  "tank-attack-right": ["tank-attack-down-right", "tank-owned", "tank-shop", "command-center"],
+  "tank-attack-up": ["tank-attack-down", "tank-owned", "tank-shop", "command-center"],
+  "tank-attack-up-left": ["tank-attack-left", "tank-owned", "tank-shop", "command-center"],
+  "tank-attack-up-right": ["tank-attack-right", "tank-owned", "tank-shop", "command-center"],
   "air-defense": ["command-center", "town"],
   tent: ["machine-wood", "town"],
+  "energy-machine": ["machine-wood", "command-center", "town"],
   "machine-wood": ["command-center", "town"],
   "command-center": ["town", "machine-wood"],
 };
@@ -107,14 +122,25 @@ export default class PreloadScene extends Phaser.Scene {
     this.load.image("town", "/assets/town.png");
     this.load.image("base", "/assets/newmap.png");
     this.load.image("machine-wood", "/assets/machine-wood.png");
+    this.load.image("energy-machine", "/assets/energymachine.png");
+    this.load.spritesheet("energy-machine-animated", "/assets/energymachine.png", {
+      frameWidth: 512,
+      frameHeight: 516,
+    });
     this.load.image("command-center", "/assets/command center.png");
     this.load.image("skyport-shop", "/assets/chopper/skychop.png");
     this.load.image("skyport-empty", "/assets/chopper/skychop.png");
     this.load.image("skyport-bought", "/assets/chopper/skychop2.png");
     this.load.image("tank-shop", "/assets/tank/tank1.png");
     this.load.image("tank-owned", "/assets/tank/tank2.png");
-    this.load.image("tank-attack-1", "/assets/tank/tankattack1.png");
-    this.load.image("tank-attack-2", "/assets/tank/tankattack2.png");
+    this.load.image("tank-attack-down", "/assets/tank/Attack/down.png");
+    this.load.image("tank-attack-down-left", "/assets/tank/Attack/down-left.png");
+    this.load.image("tank-attack-down-right", "/assets/tank/Attack/down-right.png");
+    this.load.image("tank-attack-left", "/assets/tank/Attack/left.png");
+    this.load.image("tank-attack-right", "/assets/tank/Attack/right.png");
+    this.load.image("tank-attack-up", "/assets/tank/Attack/up.png");
+    this.load.image("tank-attack-up-left", "/assets/tank/Attack/up-left.png");
+    this.load.image("tank-attack-up-right", "/assets/tank/Attack/up-right.png");
     this.load.image("air-defense", "/assets/airdef.png");
     this.load.image("tent", "/assets/tent.png");
     this.load.image("goldcoin", "/assets/goldcoin.png");

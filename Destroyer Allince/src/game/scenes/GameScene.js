@@ -35,8 +35,11 @@ const CAMERA_SCROLL_SAFE_INSET_TOP = 40;
 const CAMERA_SCROLL_SAFE_INSET_BOTTOM = 120;
 const CAMERA_COVER_ZOOM_GUARD = 1.035;
 const WOOD_MACHINE_TICK_MS = 180000;
+const ENERGY_MACHINE_TICK_MS = 180000;
 const WOOD_MACHINE_GOLD_PER_TICK = 10;
+const ENERGY_MACHINE_PER_TICK = 1;
 const WOOD_MACHINE_MAX_GOLD = 250;
+const ENERGY_MACHINE_MAX_STORAGE = 3;
 const TOWN_HALL_GOLD_PER_TICK = 100;
 const TOWN_HALL_MAX_GOLD = 500;
 const WOOD_MACHINE_LEVEL_TWO_GOLD_PER_TICK = 20;
@@ -44,17 +47,24 @@ const BUILDING_UPGRADE_DURATION_MS = 1800000;
 const BUILDING_MAX_LEVEL = 2;
 const WOOD_MACHINE_BASE_LIMIT = 4;
 const WOOD_MACHINE_LIMIT_PER_TOWN_HALL_LEVEL = 2;
+const ENERGY_MACHINE_BASE_LIMIT = 2;
+const ENERGY_MACHINE_LIMIT_PER_TOWN_HALL_LEVEL = 1;
 const TENT_BASE_LIMIT = 4;
 const TENT_LIMIT_PER_TOWN_HALL_LEVEL = 4;
 const COMMAND_CENTER_BASE_SOLDIER_LIMIT = 5;
 const COMMAND_CENTER_SOLDIER_LIMIT_PER_LEVEL = 5;
 const SOLDIER_HUNGER_WARNING_MS = 18000000;
 const SOLDIER_STARVATION_MS = 86400000;
+const SOLDIER_RECRUIT_COST_PER_UNIT = 2;
 const SOLDIER_FEED_COST_PER_UNIT = 1;
 const SKYPORT_CHOPPER_COST = 5000;
 const SKYPORT_CHOPPER_LEVEL_TWO_COST = 3500;
 const SKYPORT_CHOPPER_SELL_VALUE = 4000;
 const BATTLE_TANK_PURCHASE_COST = 5000;
+const TANK_RECHARGE_ENERGY_COST = 2;
+const HELICOPTER_RECHARGE_ENERGY_COST = 3;
+const TANK_MAX_SHOTS = 10;
+const HELICOPTER_MAX_SHOTS = 15;
 const TANK_BASE_HEALTH = 260;
 const TANK_HEALTH_PER_LEVEL = 120;
 const TANK_BASE_DAMAGE = 80;
@@ -81,6 +91,20 @@ const WAR_FIRING_TEXTURES = {
   back: "soldier-back-firing",
   left: "soldier-left-firing",
   right: "soldier-right-firing",
+};
+
+const clampStoredShots = (value, maxShots, hasVehicle = true) => {
+  if (!hasVehicle) {
+    return 0;
+  }
+
+  const parsed = Number(value);
+
+  if (!Number.isFinite(parsed)) {
+    return maxShots;
+  }
+
+  return Math.max(0, Math.min(maxShots, Math.floor(parsed)));
 };
 
 const darkenColor = (hex, amount = 16) => {
@@ -159,6 +183,7 @@ export default class GameScene extends Phaser.Scene {
     this.selectedPlacedBuilding = null;
     this.movingBuilding = null;
     this.gold = STARTING_GOLD;
+    this.energy = 0;
     this.placedBuildings = [];
     this.soldierUnits = [];
     this.enemyUnits = [];
@@ -392,6 +417,11 @@ export default class GameScene extends Phaser.Scene {
       + (Math.max(1, this.getTownHallLevel()) - 1) * WOOD_MACHINE_LIMIT_PER_TOWN_HALL_LEVEL;
   }
 
+  getEnergyMachineLimit() {
+    return ENERGY_MACHINE_BASE_LIMIT
+      + (Math.max(1, this.getTownHallLevel()) - 1) * ENERGY_MACHINE_LIMIT_PER_TOWN_HALL_LEVEL;
+  }
+
   getTentLimit() {
     return TENT_BASE_LIMIT
       + (Math.max(1, this.getTownHallLevel()) - 1) * TENT_LIMIT_PER_TOWN_HALL_LEVEL;
@@ -423,6 +453,11 @@ export default class GameScene extends Phaser.Scene {
     if (typeId === "wood-machine") {
       const woodMachineCount = this.placedBuildings.filter((building) => this.isWoodMachine(building)).length;
       return woodMachineCount < this.getWoodMachineLimit();
+    }
+
+    if (typeId === "energy-machine") {
+      const energyMachineCount = this.placedBuildings.filter((building) => this.isEnergyMachine(building)).length;
+      return energyMachineCount < this.getEnergyMachineLimit();
     }
 
     if (typeId === "command-center") {
@@ -767,6 +802,7 @@ export default class GameScene extends Phaser.Scene {
       callback: () => {
         this.updateTownHallProduction();
         this.updateWoodMachineProduction();
+        this.updateEnergyMachineProduction();
         this.updateBuildingUpgrades();
         this.updateCommandCenterHunger();
       },
@@ -1549,6 +1585,16 @@ export default class GameScene extends Phaser.Scene {
     building.lastFedAt = Number(resourceState.lastFedAt ?? Date.now());
     building.hasChopper = Boolean(resourceState.hasChopper ?? false);
     building.hasTank = Boolean(resourceState.hasTank ?? false);
+    building.tankShotsRemaining = clampStoredShots(
+      resourceState.tankShotsRemaining,
+      TANK_MAX_SHOTS,
+      building.hasTank
+    );
+    building.chopperShotsRemaining = clampStoredShots(
+      resourceState.chopperShotsRemaining,
+      HELICOPTER_MAX_SHOTS,
+      building.hasChopper
+    );
     building.setLevel(Number(resourceState.level ?? 1));
     building.setUpgradeState(
       Boolean(resourceState.isUpgrading),
@@ -1642,6 +1688,8 @@ export default class GameScene extends Phaser.Scene {
           lastFedAt: entry.lastFedAt ?? Date.now(),
           hasChopper: entry.hasChopper ?? false,
           hasTank: entry.hasTank ?? false,
+          tankShotsRemaining: entry.tankShotsRemaining,
+          chopperShotsRemaining: entry.chopperShotsRemaining,
         },
       });
     });
@@ -1788,9 +1836,15 @@ export default class GameScene extends Phaser.Scene {
     });
   }
 
-  initializeFromSnapshot({ gold = this.gold, buildings = [], camera = null } = {}) {
+  initializeFromSnapshot({
+    gold = this.gold,
+    energy = this.energy,
+    buildings = [],
+    camera = null,
+  } = {}) {
     this.clearPlacedBuildings();
     this.setGoldState(gold, { emitChangeEvent: false });
+    this.setEnergyState(energy, { emitChangeEvent: false });
     this.loadPersistedBuildings(buildings);
     this.ensureTownHall({ emitPlacedEvent: false });
     this.ensureCommandCenter({ emitPlacedEvent: false });
@@ -1943,6 +1997,7 @@ export default class GameScene extends Phaser.Scene {
   getPersistedSnapshot() {
     return {
       gold: this.gold,
+      energy: this.energy,
       camera: this.getCameraState(),
       buildings: this.placedBuildings.map((building) => ({
         id: building.persistedId ?? null,
@@ -1960,6 +2015,12 @@ export default class GameScene extends Phaser.Scene {
         lastFedAt: building.lastFedAt ?? Date.now(),
         hasChopper: building.hasChopper ?? false,
         hasTank: building.hasTank ?? false,
+        tankShotsRemaining: this.isBattleTank(building)
+          ? clampStoredShots(building.tankShotsRemaining, TANK_MAX_SHOTS, building.hasTank)
+          : 0,
+        chopperShotsRemaining: this.isSkyport(building)
+          ? clampStoredShots(building.chopperShotsRemaining, HELICOPTER_MAX_SHOTS, building.hasChopper)
+          : 0,
       })),
     };
   }
@@ -1985,6 +2046,9 @@ export default class GameScene extends Phaser.Scene {
   emitGameState() {
     const woodMachines = this.placedBuildings.filter((building) =>
       this.isWoodMachine(building)
+    );
+    const energyMachines = this.placedBuildings.filter((building) =>
+      this.isEnergyMachine(building)
     );
     const fullWoodMachines = woodMachines.filter(
       (building) => (building.machineGold ?? 0) >= this.getBuildingMaxGold(building)
@@ -2023,6 +2087,7 @@ export default class GameScene extends Phaser.Scene {
 
     this.events.emit("game-state-update", {
       gold: this.gold,
+      energy: this.energy,
       buildings: this.placedBuildings.length,
       totalMachineGold,
       totalMachineCapacity,
@@ -2039,11 +2104,13 @@ export default class GameScene extends Phaser.Scene {
       airDefenseBuildings,
       airDefenseLimit: this.getAirDefenseLimit(),
       woodMachines: woodMachines.length,
+      energyMachines: energyMachines.length,
       tents,
       fullWoodMachines,
       townHallLevel: this.getTownHallLevel(),
       townHallCount: this.getTownHall() ? 1 : 0,
       woodMachineLimit: this.getWoodMachineLimit(),
+      energyMachineLimit: this.getEnergyMachineLimit(),
       tentLimit: this.getTentLimit(),
     });
   }
@@ -2056,6 +2123,18 @@ export default class GameScene extends Phaser.Scene {
     if (emitChangeEvent) {
       this.events.emit("gold-changed", {
         gold: this.gold,
+      });
+    }
+  }
+
+  setEnergyState(nextEnergy, options = {}) {
+    const { emitChangeEvent = true } = options;
+    this.energy = Math.max(0, Math.floor(nextEnergy));
+    this.emitGameState();
+
+    if (emitChangeEvent) {
+      this.events.emit("energy-changed", {
+        energy: this.energy,
       });
     }
   }
@@ -2330,6 +2409,12 @@ export default class GameScene extends Phaser.Scene {
     const isHungry = isMainBase
       ? this.isAnyTentHungry()
       : this.isCommandCenterHungry(building);
+    const tankShotsRemaining = this.isBattleTank(building)
+      ? clampStoredShots(building.tankShotsRemaining, TANK_MAX_SHOTS, building.hasTank)
+      : 0;
+    const chopperShotsRemaining = this.isSkyport(building)
+      ? clampStoredShots(building.chopperShotsRemaining, HELICOPTER_MAX_SHOTS, building.hasChopper)
+      : 0;
 
     return {
       id: building.persistedId,
@@ -2349,10 +2434,22 @@ export default class GameScene extends Phaser.Scene {
       isHungry,
       hasTank: building.hasTank ?? false,
       tankCost: this.isBattleTank(building) ? BATTLE_TANK_PURCHASE_COST : 0,
+      tankRechargeCost: this.isBattleTank(building) ? TANK_RECHARGE_ENERGY_COST : 0,
+      tankShotsRemaining,
+      tankMaxShots: this.isBattleTank(building) ? TANK_MAX_SHOTS : 0,
+      tankChargePercent: this.isBattleTank(building) && TANK_MAX_SHOTS > 0
+        ? Math.round((tankShotsRemaining / TANK_MAX_SHOTS) * 100)
+        : 0,
       tankHealth: this.isBattleTank(building) ? this.getBattleTankStats(building).health : 0,
       tankDamage: this.isBattleTank(building) ? this.getBattleTankStats(building).damage : 0,
       hasChopper: building.hasChopper ?? false,
       chopperCost: this.getSkyportChopperCost(building),
+      chopperRechargeCost: this.isSkyport(building) ? HELICOPTER_RECHARGE_ENERGY_COST : 0,
+      chopperShotsRemaining,
+      chopperMaxShots: this.isSkyport(building) ? HELICOPTER_MAX_SHOTS : 0,
+      chopperChargePercent: this.isSkyport(building) && HELICOPTER_MAX_SHOTS > 0
+        ? Math.round((chopperShotsRemaining / HELICOPTER_MAX_SHOTS) * 100)
+        : 0,
       chopperSellValue: this.isSkyport(building) ? SKYPORT_CHOPPER_SELL_VALUE : 0,
       currentHp,
       maxHp,
@@ -2361,6 +2458,13 @@ export default class GameScene extends Phaser.Scene {
   }
 
   getBuildingPersistenceState(building) {
+    const tankShotsRemaining = this.isBattleTank(building)
+      ? clampStoredShots(building.tankShotsRemaining, TANK_MAX_SHOTS, building.hasTank)
+      : 0;
+    const chopperShotsRemaining = this.isSkyport(building)
+      ? clampStoredShots(building.chopperShotsRemaining, HELICOPTER_MAX_SHOTS, building.hasChopper)
+      : 0;
+
     return {
       level: building.level ?? 1,
       isUpgrading: building.isUpgrading ?? false,
@@ -2377,10 +2481,22 @@ export default class GameScene extends Phaser.Scene {
       isHungry: this.isCommandCenterHungry(building),
       hasTank: building.hasTank ?? false,
       tankCost: this.isBattleTank(building) ? BATTLE_TANK_PURCHASE_COST : 0,
+      tankRechargeCost: this.isBattleTank(building) ? TANK_RECHARGE_ENERGY_COST : 0,
+      tankShotsRemaining,
+      tankMaxShots: this.isBattleTank(building) ? TANK_MAX_SHOTS : 0,
+      tankChargePercent: this.isBattleTank(building) && TANK_MAX_SHOTS > 0
+        ? Math.round((tankShotsRemaining / TANK_MAX_SHOTS) * 100)
+        : 0,
       tankHealth: this.isBattleTank(building) ? this.getBattleTankStats(building).health : 0,
       tankDamage: this.isBattleTank(building) ? this.getBattleTankStats(building).damage : 0,
       hasChopper: building.hasChopper ?? false,
       chopperCost: this.getSkyportChopperCost(building),
+      chopperRechargeCost: this.isSkyport(building) ? HELICOPTER_RECHARGE_ENERGY_COST : 0,
+      chopperShotsRemaining,
+      chopperMaxShots: this.isSkyport(building) ? HELICOPTER_MAX_SHOTS : 0,
+      chopperChargePercent: this.isSkyport(building) && HELICOPTER_MAX_SHOTS > 0
+        ? Math.round((chopperShotsRemaining / HELICOPTER_MAX_SHOTS) * 100)
+        : 0,
       chopperSellValue: this.isSkyport(building) ? SKYPORT_CHOPPER_SELL_VALUE : 0,
     };
   }
@@ -2440,6 +2556,7 @@ export default class GameScene extends Phaser.Scene {
     }
 
     building.hasTank = true;
+    building.tankShotsRemaining = TANK_MAX_SHOTS;
     building.setBattleTankState?.(true);
     this.setGoldState(this.gold - BATTLE_TANK_PURCHASE_COST);
 
@@ -2485,6 +2602,7 @@ export default class GameScene extends Phaser.Scene {
     }
 
     building.hasChopper = true;
+    building.chopperShotsRemaining = HELICOPTER_MAX_SHOTS;
     building.setSkyportState?.(true);
     this.setGoldState(this.gold - chopperCost);
 
@@ -2511,6 +2629,7 @@ export default class GameScene extends Phaser.Scene {
     }
 
     building.hasChopper = false;
+    building.chopperShotsRemaining = 0;
     building.setSkyportState?.(false);
     this.setGoldState(this.gold + SKYPORT_CHOPPER_SELL_VALUE);
 
@@ -2540,7 +2659,12 @@ export default class GameScene extends Phaser.Scene {
       return this.getPlacedBuildingSelectionPayload(building);
     }
 
+    if (this.gold < SOLDIER_RECRUIT_COST_PER_UNIT) {
+      return this.getPlacedBuildingSelectionPayload(building);
+    }
+
     const now = Date.now();
+    this.setGoldState(this.gold - SOLDIER_RECRUIT_COST_PER_UNIT);
     building.soldierCount = currentSoldiers + 1;
     building.isSleeping = false;
     building.lastWagePaidAt = now;
@@ -2574,7 +2698,12 @@ export default class GameScene extends Phaser.Scene {
       return this.getPlacedBuildingSelectionPayload(this.selectedPlacedBuilding);
     }
 
+    if (this.gold < SOLDIER_RECRUIT_COST_PER_UNIT) {
+      return this.getPlacedBuildingSelectionPayload(this.selectedPlacedBuilding);
+    }
+
     const now = Date.now();
+    this.setGoldState(this.gold - SOLDIER_RECRUIT_COST_PER_UNIT);
     targetTent.soldierCount = Math.max(0, Number(targetTent.soldierCount ?? 0) || 0) + 1;
     targetTent.isSleeping = false;
     targetTent.lastWagePaidAt = now;
@@ -2919,6 +3048,84 @@ export default class GameScene extends Phaser.Scene {
     this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
   }
 
+  rechargeTankAtSelectedBuilding() {
+    if (!this.selectedPlacedBuilding || !this.isBattleTank(this.selectedPlacedBuilding)) {
+      return;
+    }
+
+    const building = this.selectedPlacedBuilding;
+
+    if (!building.hasTank || (building.tankShotsRemaining ?? 0) > 0 || this.energy < TANK_RECHARGE_ENERGY_COST) {
+      return;
+    }
+
+    building.tankShotsRemaining = TANK_MAX_SHOTS;
+    this.setEnergyState(this.energy - TANK_RECHARGE_ENERGY_COST);
+
+    this.events.emit("structure-army-updated", {
+      structure: building,
+      id: building.persistedId,
+      type: building.buildingType.id,
+      row: building.row,
+      col: building.col,
+      ...this.getBuildingPersistenceState(building),
+    });
+    this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
+  }
+
+  rechargeChopperAtSelectedBuilding() {
+    if (!this.selectedPlacedBuilding || !this.isSkyport(this.selectedPlacedBuilding)) {
+      return;
+    }
+
+    const building = this.selectedPlacedBuilding;
+
+    if (!building.hasChopper || (building.chopperShotsRemaining ?? 0) > 0 || this.energy < HELICOPTER_RECHARGE_ENERGY_COST) {
+      return;
+    }
+
+    building.chopperShotsRemaining = HELICOPTER_MAX_SHOTS;
+    this.setEnergyState(this.energy - HELICOPTER_RECHARGE_ENERGY_COST);
+
+    this.events.emit("structure-resource-updated", {
+      structure: building,
+      id: building.persistedId,
+      type: building.buildingType.id,
+      row: building.row,
+      col: building.col,
+      ...this.getBuildingPersistenceState(building),
+    });
+    this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
+  }
+
+  collectSelectedBuildingEnergy() {
+    if (!this.selectedPlacedBuilding || !this.isEnergyMachine(this.selectedPlacedBuilding)) {
+      return;
+    }
+
+    const building = this.selectedPlacedBuilding;
+    const collectedEnergy = Number(building.machineGold ?? 0);
+
+    if (collectedEnergy <= 0) {
+      return;
+    }
+
+    building.machineGold = 0;
+    building.lastGeneratedAt = Date.now();
+    building.setMachineGoldDisplay(0, this.getBuildingMaxGold(building));
+    this.setEnergyState(this.energy + collectedEnergy);
+    this.events.emit("structure-resource-updated", {
+      structure: building,
+      id: building.persistedId,
+      type: building.buildingType.id,
+      row: building.row,
+      col: building.col,
+      ...this.getBuildingPersistenceState(building),
+      isFull: false,
+    });
+    this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
+  }
+
   collectAllWoodMachineGold() {
     const woodMachines = this.placedBuildings.filter((building) => this.isWoodMachine(building));
 
@@ -3063,6 +3270,14 @@ export default class GameScene extends Phaser.Scene {
     return typeId === "wood-machine";
   }
 
+  isEnergyMachine(buildingOrType) {
+    const typeId = typeof buildingOrType === "string"
+      ? buildingOrType
+      : buildingOrType?.buildingType?.id ?? buildingOrType?.id;
+
+    return typeId === "energy-machine";
+  }
+
   getBuildingGoldPerTick(building) {
     if (this.isWoodMachine(building)) {
       return (building?.level ?? 1) >= 2
@@ -3084,6 +3299,10 @@ export default class GameScene extends Phaser.Scene {
       return (building?.level ?? 1) >= 2
         ? WOOD_MACHINE_MAX_GOLD * 2
         : WOOD_MACHINE_MAX_GOLD;
+    }
+
+    if (this.isEnergyMachine(building)) {
+      return ENERGY_MACHINE_MAX_STORAGE;
     }
 
     if (this.isTownHall(building)) {
@@ -3195,6 +3414,51 @@ export default class GameScene extends Phaser.Scene {
     if (hasChanges) {
       this.emitGameState();
     }
+  }
+
+  updateEnergyMachineProduction() {
+    const now = Date.now();
+
+    this.placedBuildings.forEach((building) => {
+      if (!this.isEnergyMachine(building) || building.isUpgrading) {
+        return;
+      }
+
+      const maxEnergy = this.getBuildingMaxGold(building);
+
+      if ((building.machineGold ?? 0) >= maxEnergy) {
+        return;
+      }
+
+      const lastGeneratedAt = Number(building.lastGeneratedAt ?? now);
+      const elapsed = now - lastGeneratedAt;
+      const earnedTicks = Math.floor(elapsed / ENERGY_MACHINE_TICK_MS);
+
+      if (earnedTicks <= 0) {
+        return;
+      }
+
+      building.machineGold = Math.min(
+        maxEnergy,
+        (building.machineGold ?? 0) + earnedTicks * ENERGY_MACHINE_PER_TICK
+      );
+      building.lastGeneratedAt = lastGeneratedAt + earnedTicks * ENERGY_MACHINE_TICK_MS;
+      building.setMachineGoldDisplay(building.machineGold, maxEnergy);
+
+      this.events.emit("structure-resource-updated", {
+        structure: building,
+        id: building.persistedId,
+        type: building.buildingType.id,
+        row: building.row,
+        col: building.col,
+        ...this.getBuildingPersistenceState(building),
+        isFull: building.machineGold >= maxEnergy,
+      });
+
+      if (this.selectedPlacedBuilding === building) {
+        this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
+      }
+    });
   }
 
   updateBuildingUpgrades() {

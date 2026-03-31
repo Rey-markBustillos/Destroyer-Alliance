@@ -2,6 +2,7 @@ import prisma from "../prismaClient.js";
 import { buildRankPayload, getRankName, getWarPointReward } from "../utils/rankSystem.js";
 
 const DEFAULT_GOLD = 1200;
+const DEFAULT_ENERGY = 0;
 
 const serializeTimestamp = (value) => {
   if (!value) {
@@ -29,6 +30,8 @@ const serializeBuilding = (building) => ({
   lastFedAt: serializeTimestamp(building.lastFedAt),
   hasChopper: Boolean(building.hasChopper),
   hasTank: Boolean(building.hasTank),
+  tankShotsRemaining: Math.max(0, Math.floor(Number(building.tankShotsRemaining ?? 0) || 0)),
+  chopperShotsRemaining: Math.max(0, Math.floor(Number(building.chopperShotsRemaining ?? 0) || 0)),
 });
 
 const parseOptionalDate = (value) => {
@@ -47,6 +50,8 @@ const normalizeBuildingPayload = (building) => {
   const level = Math.max(1, Math.floor(Number(building?.level ?? 1) || 1));
   const machineGold = Math.max(0, Math.floor(Number(building?.machineGold ?? 0) || 0));
   const soldierCount = Math.max(0, Math.floor(Number(building?.soldierCount ?? 0) || 0));
+  const hasChopper = Boolean(building?.hasChopper);
+  const hasTank = Boolean(building?.hasTank);
 
   if (!type || !Number.isFinite(x) || !Number.isFinite(y)) {
     return null;
@@ -65,8 +70,14 @@ const normalizeBuildingPayload = (building) => {
     isSleeping: Boolean(building?.isSleeping) && soldierCount > 0,
     lastWagePaidAt: parseOptionalDate(building?.lastWagePaidAt),
     lastFedAt: parseOptionalDate(building?.lastFedAt),
-    hasChopper: Boolean(building?.hasChopper),
-    hasTank: Boolean(building?.hasTank),
+    hasChopper,
+    hasTank,
+    tankShotsRemaining: hasTank
+      ? Math.max(0, Math.min(10, Math.floor(Number(building?.tankShotsRemaining ?? 10) || 10)))
+      : 0,
+    chopperShotsRemaining: hasChopper
+      ? Math.max(0, Math.min(15, Math.floor(Number(building?.chopperShotsRemaining ?? 15) || 15)))
+      : 0,
   };
 };
 
@@ -77,6 +88,7 @@ const getVillageSnapshotForUser = async (userId) => {
     },
     select: {
       gold: true,
+      energy: true,
       buildings: {
         orderBy: [
           { y: "asc" },
@@ -89,6 +101,7 @@ const getVillageSnapshotForUser = async (userId) => {
 
   return {
     gold: user?.gold ?? DEFAULT_GOLD,
+    energy: user?.energy ?? DEFAULT_ENERGY,
     buildings: (user?.buildings ?? []).map(serializeBuilding),
   };
 };
@@ -116,11 +129,13 @@ export const getGameState = async (req, res) => {
     },
     select: {
       gold: true,
+      energy: true,
     },
   });
 
   res.json({
     gold: user?.gold ?? DEFAULT_GOLD,
+    energy: user?.energy ?? DEFAULT_ENERGY,
   });
 };
 
@@ -136,9 +151,15 @@ export const getGameSnapshot = async (req, res) => {
 
 export const updateGameState = async (req, res) => {
   const nextGold = Number(req.body.gold);
+  const hasEnergy = req.body?.energy !== undefined && req.body?.energy !== null;
+  const nextEnergy = hasEnergy ? Number(req.body.energy) : null;
 
   if (!Number.isFinite(nextGold) || nextGold < 0) {
     return res.status(400).json({ message: "Invalid gold value" });
+  }
+
+  if (hasEnergy && (!Number.isFinite(nextEnergy) || nextEnergy < 0)) {
+    return res.status(400).json({ message: "Invalid energy value" });
   }
 
   const user = await prisma.user.update({
@@ -147,9 +168,11 @@ export const updateGameState = async (req, res) => {
     },
     data: {
       gold: Math.floor(nextGold),
+      ...(hasEnergy ? { energy: Math.floor(nextEnergy) } : {}),
     },
     select: {
       gold: true,
+      energy: true,
     },
   });
 
@@ -188,9 +211,16 @@ export const getBuildings = async (req, res) => {
 export const syncGameSnapshot = async (req, res) => {
   try {
     const nextGold = Number(req.body?.gold);
+    const hasEnergy = req.body?.energy !== undefined && req.body?.energy !== null;
+    const nextEnergy = hasEnergy ? Number(req.body?.energy) : null;
     const incomingBuildings = Array.isArray(req.body?.buildings) ? req.body.buildings : null;
 
-    if (!Number.isFinite(nextGold) || nextGold < 0 || !incomingBuildings) {
+    if (
+      !Number.isFinite(nextGold)
+      || nextGold < 0
+      || (hasEnergy && (!Number.isFinite(nextEnergy) || nextEnergy < 0))
+      || !incomingBuildings
+    ) {
       return res.status(400).json({ message: "Invalid snapshot payload" });
     }
 
@@ -209,6 +239,7 @@ export const syncGameSnapshot = async (req, res) => {
         },
         data: {
           gold: Math.floor(nextGold),
+          ...(hasEnergy ? { energy: Math.floor(nextEnergy) } : {}),
         },
       });
 
@@ -549,6 +580,18 @@ export const updateBuilding = async (req, res) => {
 
   if (typeof req.body.hasChopper === "boolean") {
     nextData.hasChopper = req.body.hasChopper;
+  }
+
+  if (typeof req.body.hasTank === "boolean") {
+    nextData.hasTank = req.body.hasTank;
+  }
+
+  if (Number.isFinite(Number(req.body.tankShotsRemaining))) {
+    nextData.tankShotsRemaining = Math.max(0, Math.min(10, Math.floor(Number(req.body.tankShotsRemaining))));
+  }
+
+  if (Number.isFinite(Number(req.body.chopperShotsRemaining))) {
+    nextData.chopperShotsRemaining = Math.max(0, Math.min(15, Math.floor(Number(req.body.chopperShotsRemaining))));
   }
 
   if (req.body.lastGeneratedAt !== undefined) {

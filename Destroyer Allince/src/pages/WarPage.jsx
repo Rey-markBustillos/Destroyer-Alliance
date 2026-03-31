@@ -8,6 +8,38 @@ import { getGameSnapshot, saveGameSnapshot } from "../services/gameStorage";
 import { getSession, saveSession } from "../services/session";
 import soundManager from "../services/soundManager";
 
+const VEHICLE_LEVEL_STATS = {
+  tank: {
+    baseHealth: 260,
+    healthPerLevel: 120,
+    baseDamage: 80,
+    damagePerLevel: 18,
+  },
+  helicopter: {
+    baseHealth: 170,
+    healthPerLevel: 70,
+    baseDamage: 24,
+    damagePerLevel: 10,
+  },
+};
+
+const TANK_SHOTS_PER_DEPLOY = 10;
+const HELICOPTER_SHOTS_PER_DEPLOY = 15;
+
+const resolveVehicleStatsForLevel = (type, level = 1) => {
+  const profile = VEHICLE_LEVEL_STATS[type];
+  const resolvedLevel = Math.max(1, Number(level ?? 1) || 1);
+
+  if (!profile) {
+    return { health: 1, damage: 1 };
+  }
+
+  return {
+    health: profile.baseHealth + ((resolvedLevel - 1) * profile.healthPerLevel),
+    damage: profile.baseDamage + ((resolvedLevel - 1) * profile.damagePerLevel),
+  };
+};
+
 const deriveArmyFromSnapshot = (snapshot) => {
   const buildings = Array.isArray(snapshot?.buildings) ? snapshot.buildings : [];
   const hasTentArmy = buildings.some((building) => building?.type === "tent");
@@ -21,18 +53,42 @@ const deriveArmyFromSnapshot = (snapshot) => {
   );
   const tankUnits = buildings
     .filter((building) => building?.type === "battle-tank" && building?.hasTank)
-    .map((building, index) => ({
-      id: building?.id ?? `tank-${index}`,
-      health: 260 + ((Math.max(1, Number(building?.level ?? 1) || 1) - 1) * 120),
-      damage: 80 + ((Math.max(1, Number(building?.level ?? 1) || 1) - 1) * 18),
-    }));
-  const helicopters = buildings.filter((building) => building?.type === "skyport" && building?.hasChopper).length;
+    .map((building, index) => {
+      const stats = resolveVehicleStatsForLevel("tank", building?.level);
+      return {
+        id: building?.id ?? `tank-${index}`,
+        health: stats.health,
+        damage: stats.damage,
+        shotsRemaining: Math.max(
+          0,
+          Math.min(TANK_SHOTS_PER_DEPLOY, Number(building?.tankShotsRemaining ?? TANK_SHOTS_PER_DEPLOY) || TANK_SHOTS_PER_DEPLOY)
+        ),
+        maxShots: TANK_SHOTS_PER_DEPLOY,
+      };
+    });
+  const helicopterUnits = buildings
+    .filter((building) => building?.type === "skyport" && building?.hasChopper)
+    .map((building, index) => {
+      const stats = resolveVehicleStatsForLevel("helicopter", building?.level);
+      return {
+        id: building?.id ?? `helicopter-${index}`,
+        health: stats.health,
+        damage: stats.damage,
+        shotsRemaining: Math.max(
+          0,
+          Math.min(HELICOPTER_SHOTS_PER_DEPLOY, Number(building?.chopperShotsRemaining ?? HELICOPTER_SHOTS_PER_DEPLOY) || HELICOPTER_SHOTS_PER_DEPLOY)
+        ),
+        maxShots: HELICOPTER_SHOTS_PER_DEPLOY,
+      };
+    });
 
   return {
     soldiers,
+    energy: Math.max(0, Number(snapshot?.energy ?? 0) || 0),
     tanks: tankUnits.length,
     tankUnits,
-    helicopters,
+    helicopters: helicopterUnits.length,
+    helicopterUnits,
   };
 };
 
@@ -90,42 +146,57 @@ const applyRaidLossesToSnapshot = (snapshot, summary) => {
     remainingSoldiers -= keptSoldiers;
   });
 
-  let remainingHelicopters = survivors.helicopters;
-  nextBuildings.forEach((building) => {
-    if (building?.type !== "skyport") {
-      return;
-    }
+  const survivingTankUnits = new Map(
+    (summary?.survivingTankUnits ?? []).map((unit) => [String(unit?.id), unit])
+  );
+  const survivingHelicopterUnits = new Map(
+    (summary?.survivingHelicopterUnits ?? []).map((unit) => [String(unit?.id), unit])
+  );
 
-    const hasChopper = Boolean(building.hasChopper);
-    if (!hasChopper) {
-      building.hasChopper = false;
-      return;
-    }
-
-    if (remainingHelicopters > 0) {
-      building.hasChopper = true;
-      remainingHelicopters -= 1;
-      return;
-    }
-
-    building.hasChopper = false;
-  });
-
-  let remainingTanks = survivors.tanks;
   nextBuildings = nextBuildings.map((building) => {
-    if (building?.type !== "battle-tank" || !building?.hasTank) {
-      return building;
+    if (building?.type === "battle-tank" && building?.hasTank) {
+      const unit = survivingTankUnits.get(String(building.id));
+
+      if (!unit) {
+        return {
+          ...building,
+          hasTank: false,
+          tankShotsRemaining: 0,
+        };
+      }
+
+      return {
+        ...building,
+        hasTank: true,
+        tankShotsRemaining: Math.max(
+          0,
+          Math.min(TANK_SHOTS_PER_DEPLOY, Number(unit?.shotsRemaining ?? 0) || 0)
+        ),
+      };
     }
 
-    if (remainingTanks > 0) {
-      remainingTanks -= 1;
-      return building;
+    if (building?.type === "skyport" && building?.hasChopper) {
+      const unit = survivingHelicopterUnits.get(String(building.id));
+
+      if (!unit) {
+        return {
+          ...building,
+          hasChopper: false,
+          chopperShotsRemaining: 0,
+        };
+      }
+
+      return {
+        ...building,
+        hasChopper: true,
+        chopperShotsRemaining: Math.max(
+          0,
+          Math.min(HELICOPTER_SHOTS_PER_DEPLOY, Number(unit?.shotsRemaining ?? 0) || 0)
+        ),
+      };
     }
 
-    return {
-      ...building,
-      hasTank: false,
-    };
+    return building;
   });
 
   return {
@@ -136,11 +207,12 @@ const applyRaidLossesToSnapshot = (snapshot, summary) => {
 
 export default function WarPage() {
   const navigate = useNavigate();
-  const emptyReserves = {
+  const emptyReserves = useMemo(() => ({
+    energy: 0,
     soldiers: 0,
     tanks: 0,
     helicopters: 0,
-  };
+  }), []);
   const gameRootRef = useRef(null);
   const gameRef = useRef(null);
   const battleSceneRef = useRef(null);
@@ -167,9 +239,11 @@ export default function WarPage() {
     phase: "idle",
     destructionPercent: 0,
     loot: 0,
+    energy: 0,
     attackersRemaining: 0,
     defendersRemaining: 0,
     reserves: {
+      energy: 0,
       soldiers: 0,
       tanks: 0,
       helicopters: 0,
@@ -237,6 +311,7 @@ export default function WarPage() {
               nextState.summary
             );
             const savedSnapshot = saveGameSnapshot(nextSnapshot, session);
+            snapshotRef.current = savedSnapshot;
             setSnapshot(savedSnapshot);
 
             if (session?.token) {
@@ -266,6 +341,7 @@ export default function WarPage() {
               const nextSnapshot = {
                 ...(snapshotRef.current ?? { buildings: [] }),
                 gold: result.attackerGold,
+                energy: snapshotRef.current?.energy ?? 0,
               };
               const savedSnapshot = saveGameSnapshot(nextSnapshot, session);
               snapshotRef.current = savedSnapshot;
@@ -389,7 +465,7 @@ export default function WarPage() {
     });
   }, [target, army, raidState.phase, raidState.summary]);
 
-  const resetRaidPanel = () => {
+  const resetRaidPanel = useCallback(() => {
     savedSummaryRef.current = "";
     appliedLossSignatureRef.current = "";
     appliedWarResolutionRef.current = "";
@@ -397,13 +473,14 @@ export default function WarPage() {
       phase: "idle",
       destructionPercent: 0,
       loot: 0,
+      energy: 0,
       attackersRemaining: 0,
       defendersRemaining: 0,
       reserves: emptyReserves,
       selectedDeploymentType: "soldier",
       summary: null,
     });
-  };
+  }, [emptyReserves]);
 
   const resolveTarget = useCallback(async () => {
     const token = session?.token ?? null;
@@ -455,7 +532,7 @@ export default function WarPage() {
       setLookupState("error");
       setLookupError(error.response?.data?.message || "Unable to find another village or base.");
     }
-  }, [session, army]);
+  }, [session, army, resetRaidPanel]);
 
   const handleFindMatch = useCallback(async () => {
     await resolveTarget();
@@ -466,7 +543,12 @@ export default function WarPage() {
   };
 
   const handleSelectDeploymentType = (type) => {
-    battleSceneRef.current?.setDeploymentType?.(type);
+    const didSelect = battleSceneRef.current?.setDeploymentType?.(type);
+
+    if (didSelect === false) {
+      return;
+    }
+
     setRaidState((current) => ({
       ...current,
       selectedDeploymentType: type,
@@ -494,6 +576,10 @@ export default function WarPage() {
   };
 
   const totalTroops = getTotalTroops(army);
+  const availableTankCount = raidState.reserves?.tanks ?? army.tanks ?? 0;
+  const availableHelicopterCount = raidState.reserves?.helicopters ?? army.helicopters ?? 0;
+  const canDeployTank = availableTankCount > 0;
+  const canDeployHelicopter = availableHelicopterCount > 0;
   const canAttack = totalTroops > 0 && target && raidState.phase === "ready";
   const canFindMatch = lookupState !== "loading" && raidState.phase !== "active";
   const summary = raidState.summary;
@@ -537,6 +623,11 @@ export default function WarPage() {
             <div>
               <p className="text-[0.65rem] uppercase tracking-[0.3em] text-amber-300/70">Loot Gained</p>
               <p className="mt-1 text-xl font-black text-amber-200">{raidState.loot ?? 0}</p>
+            </div>
+            <div className="h-10 w-px bg-white/10" />
+            <div>
+              <p className="text-[0.65rem] uppercase tracking-[0.3em] text-sky-300/70">Energy</p>
+              <p className="mt-1 text-xl font-black text-sky-100">{raidState.energy ?? army.energy ?? 0}</p>
             </div>
             <div className="h-10 w-px bg-white/10" />
             <div>
@@ -716,6 +807,10 @@ export default function WarPage() {
                 <p className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">Helicopters</p>
                 <p className="mt-1 text-xl font-black text-emerald-100">{army.helicopters}</p>
               </div>
+              <div className="min-w-[6.5rem] rounded-xl border border-cyan-400/20 bg-cyan-500/10 px-3 py-2.5">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-cyan-200/70">Energy</p>
+                <p className="mt-1 text-xl font-black text-cyan-100">{raidState.energy ?? army.energy ?? 0}</p>
+              </div>
             </div>
 
             {raidState.phase === "active" ? (
@@ -735,7 +830,7 @@ export default function WarPage() {
                 <button
                   type="button"
                   onClick={() => handleSelectDeploymentType("tank")}
-                  disabled={(raidState.reserves?.tanks ?? 0) <= 0}
+                  disabled={!canDeployTank}
                   className={`rounded-xl px-3 py-2 text-xs font-black uppercase tracking-[0.16em] transition disabled:cursor-not-allowed disabled:opacity-40 ${
                     raidState.selectedDeploymentType === "tank"
                       ? "bg-amber-300 text-slate-950"
@@ -747,7 +842,7 @@ export default function WarPage() {
                 <button
                   type="button"
                   onClick={() => handleSelectDeploymentType("helicopter")}
-                  disabled={(raidState.reserves?.helicopters ?? 0) <= 0}
+                  disabled={!canDeployHelicopter}
                   className={`rounded-xl px-3 py-2 text-xs font-black uppercase tracking-[0.16em] transition disabled:cursor-not-allowed disabled:opacity-40 ${
                     raidState.selectedDeploymentType === "helicopter"
                       ? "bg-emerald-300 text-slate-950"
@@ -759,6 +854,11 @@ export default function WarPage() {
               </div>
             ) : null}
           </div>
+          {raidState.phase === "active" ? (
+            <p className="mt-3 text-xs font-semibold text-slate-300">
+              Tank uses stored charge with {TANK_SHOTS_PER_DEPLOY} shots max. Chopper uses stored charge with {HELICOPTER_SHOTS_PER_DEPLOY} shots max.
+            </p>
+          ) : null}
         </div>
       </div>
 
@@ -793,6 +893,9 @@ export default function WarPage() {
 
             <p className="mt-4 text-sm font-semibold text-slate-300">
               Troops Left: <span className="text-sky-200">{summary.remainingTroops}</span>
+            </p>
+            <p className="mt-1 text-sm font-semibold text-cyan-200">
+              Energy Used: {summary.energySpent ?? 0}
             </p>
             <p className="mt-1 text-sm font-semibold text-yellow-200">
               War Points Earned: +{earnedWarPoints}

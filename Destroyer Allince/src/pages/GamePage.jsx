@@ -43,6 +43,9 @@ const formatCompactNumber = (value) =>
   );
 
 const BACKEND_RETRY_COOLDOWN_MS = 10000;
+const SOLDIER_RECRUIT_COST = 2;
+const TANK_ENERGY_COST = 2;
+const HELICOPTER_ENERGY_COST = 3;
 
 const isBackendConnectionError = (error) => {
   const message = String(error?.message ?? "");
@@ -53,6 +56,12 @@ const isBackendConnectionError = (error) => {
     || code === "ECONNREFUSED"
     || message.includes("Network Error")
   );
+};
+
+const getChargePercent = (shotsRemaining, maxShots) => {
+  const resolvedMax = Math.max(1, Number(maxShots ?? 1) || 1);
+  const resolvedShots = Math.max(0, Number(shotsRemaining ?? 0) || 0);
+  return Math.max(0, Math.min(100, Math.round((resolvedShots / resolvedMax) * 100)));
 };
 
 function HudMetric({ label, value, tone = "emerald" }) {
@@ -67,6 +76,62 @@ function HudMetric({ label, value, tone = "emerald" }) {
     <div className={`min-w-0 rounded-[0.8rem] border px-1.5 py-1.5 backdrop-blur-md ${toneClass}`}>
       <p className="text-[0.42rem] uppercase tracking-[0.2em] text-white/70">{label}</p>
       <p className="mt-0.5 text-[0.8rem] font-black leading-none tracking-tight">{value}</p>
+    </div>
+  );
+}
+
+function ChargeRing({ percent = 0, label = "Charge", tone = "cyan" }) {
+  const resolvedPercent = Math.max(0, Math.min(100, Math.round(Number(percent ?? 0) || 0)));
+  const radius = 22;
+  const circumference = 2 * Math.PI * radius;
+  const dashOffset = circumference - ((resolvedPercent / 100) * circumference);
+  const palette = tone === "emerald"
+    ? {
+      track: "rgba(16, 185, 129, 0.18)",
+      stroke: "#34d399",
+      glow: "drop-shadow(0 0 10px rgba(52, 211, 153, 0.28))",
+    }
+    : {
+      track: "rgba(56, 189, 248, 0.18)",
+      stroke: "#38bdf8",
+      glow: "drop-shadow(0 0 10px rgba(56, 189, 248, 0.28))",
+    };
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/5 px-2.5 py-2">
+      <p className="text-center text-[10px] uppercase tracking-[0.16em] text-slate-400">{label}</p>
+      <div className="mt-2 flex items-center justify-center">
+        <div className="relative h-14 w-14">
+          <svg viewBox="0 0 56 56" className="h-14 w-14 -rotate-90">
+            <circle
+              cx="28"
+              cy="28"
+              r={radius}
+              fill="none"
+              stroke={palette.track}
+              strokeWidth="5"
+            />
+            <circle
+              cx="28"
+              cy="28"
+              r={radius}
+              fill="none"
+              stroke={palette.stroke}
+              strokeWidth="5"
+              strokeLinecap="round"
+              strokeDasharray={circumference}
+              strokeDashoffset={dashOffset}
+              style={{
+                transition: "stroke-dashoffset 240ms ease",
+                filter: palette.glow,
+              }}
+            />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center text-[11px] font-black text-white">
+            {resolvedPercent}%
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -94,6 +159,7 @@ export default function GamePage() {
   const [clock, setClock] = useState(() => Date.now());
   const [gameState, setGameState] = useState({
     gold: 1200,
+    energy: 0,
     buildings: 0,
     totalMachineGold: 0,
     totalMachineCapacity: 0,
@@ -110,12 +176,14 @@ export default function GamePage() {
     airDefenseBuildings: 0,
     airDefenseLimit: 0,
     woodMachines: 0,
+    energyMachines: 0,
     tents: 0,
     tentLimit: 4,
     fullWoodMachines: 0,
     townHallLevel: 1,
     townHallCount: 1,
     woodMachineLimit: 4,
+    energyMachineLimit: 2,
   });
   const [selectedBuilding, setSelectedBuilding] = useState(null);
   const [selectedPlacedBuilding, setSelectedPlacedBuilding] = useState(null);
@@ -320,6 +388,9 @@ export default function GamePage() {
             backendWarningShownRef.current = false;
             saveGameSnapshot({
               ...savedSnapshot,
+              gold: savedSnapshot?.gold ?? snapshot.gold,
+              energy: savedSnapshot?.energy ?? snapshot.energy,
+              buildings: savedSnapshot?.buildings ?? snapshot.buildings,
               camera: snapshot.camera ?? null,
               serverSyncedAt: Date.now(),
             }, session);
@@ -358,6 +429,10 @@ export default function GamePage() {
         persistAndSyncSnapshot();
       };
 
+      const handleEnergyChanged = () => {
+        persistAndSyncSnapshot();
+      };
+
       const handleStructureSelectionCleared = () => {
         setSelectedBuilding(null);
         setHireModalOpen(false);
@@ -393,8 +468,16 @@ export default function GamePage() {
         hasChopper,
         hasTank,
         tankCost,
+        tankRechargeCost,
+        tankShotsRemaining,
+        tankMaxShots,
+        tankChargePercent,
         tankHealth,
         tankDamage,
+        chopperRechargeCost,
+        chopperShotsRemaining,
+        chopperMaxShots,
+        chopperChargePercent,
       }) => {
         persistAndSyncSnapshot();
 
@@ -415,8 +498,16 @@ export default function GamePage() {
           hasChopper,
           hasTank,
           tankCost,
+          tankRechargeCost,
+          tankShotsRemaining,
+          tankMaxShots,
+          tankChargePercent,
           tankHealth,
           tankDamage,
+          chopperRechargeCost,
+          chopperShotsRemaining,
+          chopperMaxShots,
+          chopperChargePercent,
         });
         setIsMoveMode(false);
       };
@@ -434,8 +525,16 @@ export default function GamePage() {
         hasChopper,
         hasTank,
         tankCost,
+        tankRechargeCost,
+        tankShotsRemaining,
+        tankMaxShots,
+        tankChargePercent,
         tankHealth,
         tankDamage,
+        chopperRechargeCost,
+        chopperShotsRemaining,
+        chopperMaxShots,
+        chopperChargePercent,
       }) => {
         persistAndSyncSnapshot();
 
@@ -457,8 +556,16 @@ export default function GamePage() {
             hasChopper,
             hasTank,
             tankCost,
+            tankRechargeCost,
+            tankShotsRemaining,
+            tankMaxShots,
+            tankChargePercent,
             tankHealth,
             tankDamage,
+            chopperRechargeCost,
+            chopperShotsRemaining,
+            chopperMaxShots,
+            chopperChargePercent,
           };
         });
       };
@@ -483,8 +590,16 @@ export default function GamePage() {
         hasChopper,
         hasTank,
         tankCost,
+        tankRechargeCost,
+        tankShotsRemaining,
+        tankMaxShots,
+        tankChargePercent,
         tankHealth,
         tankDamage,
+        chopperRechargeCost,
+        chopperShotsRemaining,
+        chopperMaxShots,
+        chopperChargePercent,
       }) => {
         persistAndSyncSnapshot();
 
@@ -506,8 +621,16 @@ export default function GamePage() {
             hasChopper,
             hasTank,
             tankCost,
+            tankRechargeCost,
+            tankShotsRemaining,
+            tankMaxShots,
+            tankChargePercent,
             tankHealth,
             tankDamage,
+            chopperRechargeCost,
+            chopperShotsRemaining,
+            chopperMaxShots,
+            chopperChargePercent,
           };
         });
       };
@@ -525,8 +648,16 @@ export default function GamePage() {
         hasChopper,
         hasTank,
         tankCost,
+        tankRechargeCost,
+        tankShotsRemaining,
+        tankMaxShots,
+        tankChargePercent,
         tankHealth,
         tankDamage,
+        chopperRechargeCost,
+        chopperShotsRemaining,
+        chopperMaxShots,
+        chopperChargePercent,
       }) => {
         persistAndSyncSnapshot();
 
@@ -548,8 +679,16 @@ export default function GamePage() {
             hasChopper,
             hasTank,
             tankCost,
+            tankRechargeCost,
+            tankShotsRemaining,
+            tankMaxShots,
+            tankChargePercent,
             tankHealth,
             tankDamage,
+            chopperRechargeCost,
+            chopperShotsRemaining,
+            chopperMaxShots,
+            chopperChargePercent,
           };
         });
       };
@@ -567,8 +706,16 @@ export default function GamePage() {
         hasChopper,
         hasTank,
         tankCost,
+        tankRechargeCost,
+        tankShotsRemaining,
+        tankMaxShots,
+        tankChargePercent,
         tankHealth,
         tankDamage,
+        chopperRechargeCost,
+        chopperShotsRemaining,
+        chopperMaxShots,
+        chopperChargePercent,
       }) => {
         persistAndSyncSnapshot();
 
@@ -590,8 +737,16 @@ export default function GamePage() {
             hasChopper,
             hasTank,
             tankCost,
+            tankRechargeCost,
+            tankShotsRemaining,
+            tankMaxShots,
+            tankChargePercent,
             tankHealth,
             tankDamage,
+            chopperRechargeCost,
+            chopperShotsRemaining,
+            chopperMaxShots,
+            chopperChargePercent,
           };
         });
       };
@@ -611,8 +766,16 @@ export default function GamePage() {
         hasChopper,
         hasTank,
         tankCost,
+        tankRechargeCost,
+        tankShotsRemaining,
+        tankMaxShots,
+        tankChargePercent,
         tankHealth,
         tankDamage,
+        chopperRechargeCost,
+        chopperShotsRemaining,
+        chopperMaxShots,
+        chopperChargePercent,
       }) => {
         persistAndSyncSnapshot();
 
@@ -634,14 +797,23 @@ export default function GamePage() {
             hasChopper,
             hasTank,
             tankCost,
+            tankRechargeCost,
+            tankShotsRemaining,
+            tankMaxShots,
+            tankChargePercent,
             tankHealth,
             tankDamage,
+            chopperRechargeCost,
+            chopperShotsRemaining,
+            chopperMaxShots,
+            chopperChargePercent,
           };
         });
       };
 
       gameScene.events.on("game-state-update", handleGameStateUpdate);
       gameScene.events.on("gold-changed", handleGoldChanged);
+      gameScene.events.on("energy-changed", handleEnergyChanged);
       gameScene.events.on("structure-selection-cleared", handleStructureSelectionCleared);
       gameScene.events.on("placed-building-selected", handlePlacedBuildingSelected);
       gameScene.events.on("structure-placed", handleStructurePlaced);
@@ -683,6 +855,13 @@ export default function GamePage() {
             resolvedSnapshot = {
               ...resolvedSnapshot,
               camera: localSnapshot.camera,
+            };
+          }
+
+          if (resolvedSnapshot?.energy == null && localSnapshot?.energy != null) {
+            resolvedSnapshot = {
+              ...resolvedSnapshot,
+              energy: localSnapshot.energy,
             };
           }
 
@@ -741,6 +920,7 @@ export default function GamePage() {
         document.removeEventListener("visibilitychange", handleVisibilityChange);
         gameScene.events.off("game-state-update", handleGameStateUpdate);
         gameScene.events.off("gold-changed", handleGoldChanged);
+        gameScene.events.off("energy-changed", handleEnergyChanged);
         gameScene.events.off(
           "structure-selection-cleared",
           handleStructureSelectionCleared
@@ -798,6 +978,11 @@ export default function GamePage() {
   const handleCollectGold = () => {
     const gameScene = gameRef.current?.scene?.getScene("GameScene");
     gameScene?.collectSelectedBuildingGold();
+  };
+
+  const handleCollectEnergy = () => {
+    const gameScene = gameRef.current?.scene?.getScene("GameScene");
+    gameScene?.collectSelectedBuildingEnergy();
   };
 
   const handleCollectAllWoodMachineGold = () => {
@@ -878,12 +1063,28 @@ export default function GamePage() {
     gameScene?.buyTankAtSelectedBuilding();
   };
 
+  const handleRechargeTank = () => {
+    const gameScene = gameRef.current?.scene?.getScene("GameScene");
+    gameScene?.rechargeTankAtSelectedBuilding();
+  };
+
   const handleSellChopper = () => {
     const gameScene = gameRef.current?.scene?.getScene("GameScene");
     gameScene?.sellChopperAtSelectedBuilding();
   };
 
+  const handleRechargeChopper = () => {
+    const gameScene = gameRef.current?.scene?.getScene("GameScene");
+    gameScene?.rechargeChopperAtSelectedBuilding();
+  };
+
   const handleStartWar = () => {
+    const gameScene = gameRef.current?.scene?.getScene("GameScene");
+
+    if (gameScene) {
+      saveGameSnapshot(gameScene.getPersistedSnapshot(), activeSession);
+    }
+
     navigate("/war");
   };
 
@@ -913,6 +1114,9 @@ export default function GamePage() {
   const wageMinutes = Math.floor((wageRemainingMs % 3600000) / 60000);
   const canHireSoldier = (selectedPlacedBuilding?.type === "tent" || selectedPlacedBuilding?.type === "command-center")
     && (selectedPlacedBuilding.soldierCount ?? 0) < (selectedPlacedBuilding.maxSoldiers ?? 0);
+  const canAffordRecruit = gameState.gold >= SOLDIER_RECRUIT_COST;
+  const soldierCapacityReached = (selectedPlacedBuilding?.soldierCount ?? 0) >= (selectedPlacedBuilding?.maxSoldiers ?? 0);
+  const canRecruitSoldier = canHireSoldier && canAffordRecruit;
   const parsedRemoveSoldierCount = Math.max(1, Math.floor(Number(removeSoldierCount) || 1));
   const canRemoveSoldier = selectedPlacedBuilding?.type === "tent"
     && (selectedPlacedBuilding.soldierCount ?? 0) > 0;
@@ -930,7 +1134,23 @@ export default function GamePage() {
   const canBuyTank = selectedPlacedBuilding?.type === "battle-tank"
     && !selectedPlacedBuilding.hasTank
     && gameState.gold >= (selectedPlacedBuilding.tankCost ?? 0);
+  const canRechargeTank = selectedPlacedBuilding?.type === "battle-tank"
+    && selectedPlacedBuilding.hasTank
+    && (selectedPlacedBuilding.tankShotsRemaining ?? 0) <= 0
+    && gameState.energy >= (selectedPlacedBuilding.tankRechargeCost ?? TANK_ENERGY_COST);
+  const canRechargeChopper = selectedPlacedBuilding?.type === "skyport"
+    && selectedPlacedBuilding.hasChopper
+    && (selectedPlacedBuilding.chopperShotsRemaining ?? 0) <= 0
+    && gameState.energy >= (selectedPlacedBuilding.chopperRechargeCost ?? HELICOPTER_ENERGY_COST);
   const canSellBuilding = selectedPlacedBuilding?.type !== "command-center";
+  const tankEnergyPercent = getChargePercent(
+    selectedPlacedBuilding?.tankShotsRemaining,
+    selectedPlacedBuilding?.tankMaxShots
+  );
+  const helicopterEnergyPercent = getChargePercent(
+    selectedPlacedBuilding?.chopperShotsRemaining,
+    selectedPlacedBuilding?.chopperMaxShots
+  );
   const canStartWar = (gameState.totalArmyUnits ?? 0) > 0;
   const profileName = activeSession?.name || activeSession?.email?.split("@")[0] || "Commander";
   const profileId = activeSession?.playerId
@@ -961,9 +1181,10 @@ export default function GamePage() {
               </div>
 
               <HudMetric label="Gold" value={formatCompactNumber(gameState.gold)} tone="emerald" />
+              <HudMetric label="Energy" value={formatCompactNumber(gameState.energy ?? 0)} tone="sky" />
               <HudMetric label="WP" value={formatCompactNumber(profileWarPoints)} tone="amber" />
               <HudMetric label="Troops" value={formatCompactNumber(gameState.totalArmyUnits ?? 0)} tone="sky" />
-              <HudMetric label="Town Hall" value={`Lv ${gameState.townHallLevel ?? 1}`} tone="amber" />
+              <HudMetric label="Command Center" value={`Lv ${gameState.townHallLevel ?? 1}`} tone="amber" />
 
               {gameState.woodMachines > 0 ? (
                 <HudMetric
@@ -1114,11 +1335,33 @@ export default function GamePage() {
                     </span>
                   </div>
                 ) : null}
+                {selectedPlacedBuilding.type === "energy-machine" ? (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-slate-400">Stored Energy</span>
+                    <span className="font-bold text-white">
+                      {selectedPlacedBuilding.machineGold ?? 0}/{selectedPlacedBuilding.maxGold ?? 3}
+                    </span>
+                  </div>
+                ) : null}
                 {selectedPlacedBuilding.type === "battle-tank" ? (
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-slate-400">Cost</span>
                     <span className="font-bold text-white">
                       {selectedPlacedBuilding.hasTank ? "Tank Ready" : `${selectedPlacedBuilding.tankCost ?? 5000} gold`}
+                    </span>
+                  </div>
+                ) : null}
+                {selectedPlacedBuilding.type === "battle-tank" ? (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-slate-400">Charge</span>
+                    <span className="font-bold text-cyan-200">{tankEnergyPercent}%</span>
+                  </div>
+                ) : null}
+                {selectedPlacedBuilding.type === "battle-tank" ? (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-slate-400">Shots</span>
+                    <span className="font-bold text-white">
+                      {selectedPlacedBuilding.tankShotsRemaining ?? 0}/{selectedPlacedBuilding.tankMaxShots ?? 10}
                     </span>
                   </div>
                 ) : null}
@@ -1128,6 +1371,36 @@ export default function GamePage() {
                     <span className="font-bold text-white">
                       {selectedPlacedBuilding.hasChopper ? "Chopper Ready" : `${selectedPlacedBuilding.chopperCost ?? 0} gold`}
                     </span>
+                  </div>
+                ) : null}
+                {selectedPlacedBuilding.type === "skyport" ? (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-slate-400">Charge</span>
+                    <span className="font-bold text-cyan-200">{helicopterEnergyPercent}%</span>
+                  </div>
+                ) : null}
+                {selectedPlacedBuilding.type === "skyport" ? (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-slate-400">Shots</span>
+                    <span className="font-bold text-white">
+                      {selectedPlacedBuilding.chopperShotsRemaining ?? 0}/{selectedPlacedBuilding.chopperMaxShots ?? 15}
+                    </span>
+                  </div>
+                ) : null}
+                {selectedPlacedBuilding.type === "battle-tank" ? (
+                  <div className="pt-1">
+                    <ChargeRing percent={tankEnergyPercent} label={`Tank ${selectedPlacedBuilding.tankShotsRemaining ?? 0}/${selectedPlacedBuilding.tankMaxShots ?? 10}`} tone="cyan" />
+                  </div>
+                ) : null}
+                {selectedPlacedBuilding.type === "skyport" ? (
+                  <div className="pt-1">
+                    <ChargeRing percent={helicopterEnergyPercent} label={`Chopper ${selectedPlacedBuilding.chopperShotsRemaining ?? 0}/${selectedPlacedBuilding.chopperMaxShots ?? 15}`} tone="emerald" />
+                  </div>
+                ) : null}
+                {selectedPlacedBuilding.type === "tent" || selectedPlacedBuilding.type === "command-center" ? (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-slate-400">Recruit Cost</span>
+                    <span className="font-bold text-white">{SOLDIER_RECRUIT_COST} gold</span>
                   </div>
                 ) : null}
                 {selectedPlacedBuilding.type === "tent" || selectedPlacedBuilding.type === "command-center" ? (
@@ -1233,12 +1506,23 @@ export default function GamePage() {
                   </>
                 ) : null}
 
+                {selectedPlacedBuilding.type === "energy-machine" ? (
+                  <button
+                    type="button"
+                    onClick={handleCollectEnergy}
+                    disabled={(selectedPlacedBuilding.machineGold ?? 0) <= 0 || selectedPlacedBuilding.isUpgrading}
+                    className="rounded-[9px] bg-cyan-400 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-slate-950 transition hover:-translate-y-0.5 hover:bg-cyan-300 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
+                  >
+                    Collect Energy
+                  </button>
+                ) : null}
+
                 {selectedPlacedBuilding.type === "tent" ? (
                   <>
                     <button
                       type="button"
                       onClick={handleHireSoldier}
-                      disabled={!canHireSoldier}
+                      disabled={!canRecruitSoldier}
                       className="rounded-[9px] bg-violet-500 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-white transition hover:-translate-y-0.5 hover:bg-violet-400 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
                     >
                       Recruit
@@ -1275,7 +1559,7 @@ export default function GamePage() {
                     <button
                       type="button"
                       onClick={handleHireSoldier}
-                      disabled={!canHireSoldier}
+                      disabled={!canRecruitSoldier}
                       className="rounded-[9px] bg-violet-500 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-white transition hover:-translate-y-0.5 hover:bg-violet-400 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
                     >
                       Recruit
@@ -1300,26 +1584,51 @@ export default function GamePage() {
                 ) : null}
 
                 {selectedPlacedBuilding.type === "battle-tank" ? (
-                  <button
-                    type="button"
-                    onClick={handleBuyTank}
-                    disabled={!canBuyTank}
-                    className="rounded-[9px] bg-cyan-400 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-slate-950 transition hover:-translate-y-0.5 hover:bg-cyan-300 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
-                  >
-                    {selectedPlacedBuilding.hasTank ? "Tank Ready" : "Buy Tank"}
-                  </button>
+                  selectedPlacedBuilding.hasTank ? (
+                    <button
+                      type="button"
+                      onClick={handleRechargeTank}
+                      disabled={!canRechargeTank}
+                      className="rounded-[9px] bg-cyan-400 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-slate-950 transition hover:-translate-y-0.5 hover:bg-cyan-300 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
+                    >
+                      {(selectedPlacedBuilding.tankShotsRemaining ?? 0) > 0
+                        ? "Tank Charged"
+                        : `Charge ${selectedPlacedBuilding.tankRechargeCost ?? TANK_ENERGY_COST}E`}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleBuyTank}
+                      disabled={!canBuyTank}
+                      className="rounded-[9px] bg-cyan-400 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-slate-950 transition hover:-translate-y-0.5 hover:bg-cyan-300 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
+                    >
+                      Buy Tank
+                    </button>
+                  )
                 ) : null}
 
                 {selectedPlacedBuilding.type === "skyport" ? (
                   selectedPlacedBuilding.hasChopper ? (
-                    <button
-                      type="button"
-                      onClick={handleSellChopper}
-                      disabled={!canSellChopper}
-                      className="rounded-[9px] bg-orange-400 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-slate-950 transition hover:-translate-y-0.5 hover:bg-orange-300 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
-                    >
-                      Sell Chop
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleRechargeChopper}
+                        disabled={!canRechargeChopper}
+                        className="rounded-[9px] bg-cyan-400 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-slate-950 transition hover:-translate-y-0.5 hover:bg-cyan-300 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
+                      >
+                        {(selectedPlacedBuilding.chopperShotsRemaining ?? 0) > 0
+                          ? "Chopper Charged"
+                          : `Charge ${selectedPlacedBuilding.chopperRechargeCost ?? HELICOPTER_ENERGY_COST}E`}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSellChopper}
+                        disabled={!canSellChopper}
+                        className="rounded-[9px] bg-orange-400 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-slate-950 transition hover:-translate-y-0.5 hover:bg-orange-300 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
+                      >
+                        Sell Chop
+                      </button>
+                    </>
                   ) : (
                     <button
                       type="button"
@@ -1390,7 +1699,7 @@ export default function GamePage() {
                 <button
                   type="button"
                   onClick={handleConfirmHireSoldier}
-                  disabled={!canHireSoldier}
+                  disabled={!canRecruitSoldier}
                   className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-2 text-left transition hover:border-emerald-300 hover:bg-emerald-400/15 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <div className="flex h-14 items-center justify-center rounded-xl bg-slate-900/70 p-1.5">
@@ -1404,6 +1713,9 @@ export default function GamePage() {
                   <p className="mt-2 text-sm font-bold text-white">Basic Soldier</p>
                   <p className="mt-1 text-xs text-slate-300">Starter unit para sa Soldier Tent.</p>
                   <p className="mt-2 text-xs font-semibold text-amber-300">
+                    Recruit: {SOLDIER_RECRUIT_COST} gold / unit
+                  </p>
+                  <p className="mt-1 text-xs font-semibold text-amber-300">
                     Wage: 1 gold / 24 hrs
                   </p>
                   <p className="mt-1 text-xs font-semibold text-sky-300">
@@ -1412,9 +1724,11 @@ export default function GamePage() {
                 </button>
               </div>
 
-              {!canHireSoldier && (
+              {!canRecruitSoldier && (
                 <p className="mt-4 text-sm font-semibold text-rose-300">
-                  Max soldiers reached na para sa Soldier Tent na ito.
+                  {soldierCapacityReached
+                    ? "Max soldiers reached na para sa Soldier Tent na ito."
+                    : `Kulang gold. Kailangan ${SOLDIER_RECRUIT_COST} gold kada recruit.`}
                 </p>
               )}
             </div>
@@ -1559,6 +1873,8 @@ export default function GamePage() {
               townHallLevel={gameState.townHallLevel}
               woodMachineCount={gameState.woodMachines}
               woodMachineLimit={gameState.woodMachineLimit}
+              energyMachineCount={gameState.energyMachines}
+              energyMachineLimit={gameState.energyMachineLimit}
               commandCenterCount={gameState.commandCenters}
               commandCenterLimit={gameState.commandCenterLimit}
               tentCount={gameState.tents}

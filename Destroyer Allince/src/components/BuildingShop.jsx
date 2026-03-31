@@ -11,6 +11,8 @@ export default function BuildingShop({
   townHallLevel = 1,
   woodMachineCount = 0,
   woodMachineLimit = 4,
+  energyMachineCount = 0,
+  energyMachineLimit = 2,
   commandCenterCount = 0,
   commandCenterLimit = 1,
   tentCount = 0,
@@ -54,6 +56,7 @@ export default function BuildingShop({
         {BUILDING_LIST.map((building) => {
           const canAfford = gold >= building.cost;
           const woodMachineCapReached = building.id === "wood-machine" && woodMachineCount >= woodMachineLimit;
+          const energyMachineCapReached = building.id === "energy-machine" && energyMachineCount >= energyMachineLimit;
           const commandCenterCapReached = building.id === "command-center" && commandCenterCount >= commandCenterLimit;
           const tentCapReached = building.id === "tent" && tentCount >= tentLimit;
           const battleTankLocked = building.id === "battle-tank" && battleTankLimit <= 0;
@@ -63,6 +66,7 @@ export default function BuildingShop({
           const airDefenseLocked = building.id === "air-defense" && airDefenseLimit <= 0;
           const airDefenseCapReached = building.id === "air-defense" && airDefenseCount >= airDefenseLimit && airDefenseLimit > 0;
           const isLockedByRules = woodMachineCapReached
+            || energyMachineCapReached
             || commandCenterCapReached
             || tentCapReached
             || battleTankLocked
@@ -104,20 +108,22 @@ export default function BuildingShop({
               <p className="mt-1 min-h-[2.5rem] text-[11px] leading-5 text-slate-300/80">
                 {woodMachineCapReached
                   ? `${woodMachineCount}/${woodMachineLimit} Wood Machines`
+                  : energyMachineCapReached
+                    ? `${energyMachineCount}/${energyMachineLimit} Energy Machines`
                     : commandCenterCapReached
                       ? "Main base already built"
                       : tentCapReached
                         ? `${tentCount}/${tentLimit} Soldier Tents`
                       : battleTankLocked
-                        ? "Unlock at Town Hall Lv.2"
+                        ? "Unlock at Command Center Lv.2"
                       : battleTankCapReached
                         ? `${battleTankCount}/${battleTankLimit} Battle Tanks`
                         : skyportLocked
-                          ? "Unlock at Town Hall Lv.2"
-                        : skyportCapReached
-                          ? `${skyportCount}/${skyportLimit} Chopper Bays`
+                          ? "Unlock at Command Center Lv.2"
+                          : skyportCapReached
+                            ? `${skyportCount}/${skyportLimit} Chopper Bays`
                           : airDefenseLocked
-                            ? "Unlock at Town Hall Lv.2"
+                            ? "Unlock at Command Center Lv.2"
                             : airDefenseCapReached
                               ? `${airDefenseCount}/${airDefenseLimit} Air Defense`
                               : itemizeCost(building.cost)}
@@ -128,7 +134,7 @@ export default function BuildingShop({
       </div>
 
       <p className="mt-4 text-center text-xs leading-5 text-slate-300/75">
-        Main base is limited to 1. Wood Machine is 4 at Town Hall level 1 and 6 at level 2. Soldier Tent cap is {tentLimit} at Town Hall level {townHallLevel}. Chopper Bay and Battle Tank unlock at Town Hall level 2 with a 1-building cap, and Air Defense also unlocks at Town Hall level 2 with a 1-building cap.
+        Main base is limited to 1. Wood Machine is 4 at Command Center level 1 and 6 at level 2. Energy Machine is 2 at Command Center level 1 and 3 at level 2. Soldier Tent cap is {tentLimit} at Command Center level {townHallLevel}. Chopper Bay and Battle Tank unlock at Command Center level 2 with a 1-building cap, and Air Defense also unlocks at Command Center level 2 with a 1-building cap.
       </p>
     </Motion.div>
   );
@@ -153,6 +159,28 @@ function ShopPreviewImage({ building }) {
         style={{ backgroundColor: `#${building.color.toString(16).padStart(6, "0")}` }}
       >
         {building.label}
+      </div>
+    );
+  }
+
+  if ((building.shopSpriteFrames ?? 1) > 1) {
+    const safeFrames = Math.max(1, Number(building.shopSpriteFrames) || 1);
+
+    return (
+      <div className="mb-3 flex h-20 w-full items-center justify-center overflow-hidden rounded-[0.95rem] border border-white/6 bg-black/20 p-2">
+        <div
+          aria-label={building.name}
+          className="h-full max-w-full flex-1 rounded-md bg-contain bg-no-repeat"
+          style={{
+            aspectRatio: "512 / 516",
+            backgroundImage: `url(${currentSource})`,
+            backgroundPosition: "center top",
+            backgroundRepeat: "no-repeat",
+            backgroundSize: `100% ${safeFrames * 100}%`,
+            filter: "drop-shadow(0 8px 18px rgba(2, 6, 23, 0.22)) saturate(1.05) contrast(1.04)",
+            transform: "translateZ(0)",
+          }}
+        />
       </div>
     );
   }

@@ -8,6 +8,7 @@ import prisma from "../prismaClient.js";
 dotenv.config();
 
 const DEFAULT_GOLD = 1200;
+const DEFAULT_ENERGY = 0;
 
 const usage = () => {
   console.log("Usage: node scripts/force-sync-snapshots.js <path-to-snapshots.json>");
@@ -45,6 +46,13 @@ const normalizeBuilding = (building) => {
     lastWagePaidAt: parseOptionalDate(building?.lastWagePaidAt),
     lastFedAt: parseOptionalDate(building?.lastFedAt),
     hasChopper: Boolean(building?.hasChopper),
+    hasTank: Boolean(building?.hasTank),
+    tankShotsRemaining: Boolean(building?.hasTank)
+      ? Math.max(0, Math.min(10, Math.floor(Number(building?.tankShotsRemaining ?? 10) || 10)))
+      : 0,
+    chopperShotsRemaining: Boolean(building?.hasChopper)
+      ? Math.max(0, Math.min(15, Math.floor(Number(building?.chopperShotsRemaining ?? 15) || 15)))
+      : 0,
   };
 };
 
@@ -66,6 +74,12 @@ const normalizeSnapshot = (entry) => {
       0,
       Math.floor(
         Number(entry?.snapshot?.gold ?? entry?.gold ?? DEFAULT_GOLD) || DEFAULT_GOLD
+      )
+    ),
+    energy: Math.max(
+      0,
+      Math.floor(
+        Number(entry?.snapshot?.energy ?? entry?.energy ?? DEFAULT_ENERGY) || DEFAULT_ENERGY
       )
     ),
     buildings: normalizedBuildings,
@@ -133,7 +147,10 @@ const main = async () => {
     await prisma.$transaction(async (tx) => {
       await tx.user.update({
         where: { id: user.id },
-        data: { gold: snapshot.gold },
+        data: {
+          gold: snapshot.gold,
+          energy: snapshot.energy,
+        },
       });
 
       await tx.building.deleteMany({

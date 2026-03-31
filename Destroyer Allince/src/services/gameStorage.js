@@ -7,6 +7,11 @@ const normalizeGold = (gold) => {
   return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : 1200;
 };
 
+const normalizeEnergy = (energy) => {
+  const parsed = Number(energy);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : 0;
+};
+
 const normalizeTimestamp = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : null;
@@ -38,28 +43,40 @@ const normalizeBuildings = (buildings) => {
   }
 
   return buildings
-    .map((building) => ({
-      id: building?.id ?? null,
-      type: building?.type ?? null,
-      x: Number(building?.x ?? building?.col ?? 0),
-      y: Number(building?.y ?? building?.row ?? 0),
-      level: Math.max(1, Number(building?.level ?? 1) || 1),
-      isUpgrading: Boolean(building?.isUpgrading),
-      upgradeCompleteAt: building?.upgradeCompleteAt
-        ? Number(new Date(building.upgradeCompleteAt).getTime() || building.upgradeCompleteAt)
-        : null,
-      machineGold: Math.max(0, Number(building?.machineGold ?? 0) || 0),
-      lastGeneratedAt: Number(building?.lastGeneratedAt ?? Date.now()),
-      soldierCount: Math.max(0, Number(building?.soldierCount ?? 0) || 0),
-      lastWagePaidAt: Number(building?.lastWagePaidAt ?? Date.now()),
-      lastFedAt: Number(building?.lastFedAt ?? Date.now()),
-      // Legacy saves dropped the purchased skyport flag, so recover it for
-      // older skyport entries that are missing the field entirely.
-      hasChopper: building?.type === "skyport"
+    .map((building) => {
+      const type = building?.type ?? null;
+      const hasChopper = type === "skyport"
         ? Boolean(building?.hasChopper ?? true)
-        : Boolean(building?.hasChopper),
-      hasTank: Boolean(building?.hasTank),
-    }))
+        : Boolean(building?.hasChopper);
+      const hasTank = Boolean(building?.hasTank);
+      const tankShotsRemaining = hasTank
+        ? Math.max(0, Math.min(10, Math.floor(Number(building?.tankShotsRemaining ?? 10) || 10)))
+        : 0;
+      const chopperShotsRemaining = hasChopper
+        ? Math.max(0, Math.min(15, Math.floor(Number(building?.chopperShotsRemaining ?? 15) || 15)))
+        : 0;
+
+      return {
+        id: building?.id ?? null,
+        type,
+        x: Number(building?.x ?? building?.col ?? 0),
+        y: Number(building?.y ?? building?.row ?? 0),
+        level: Math.max(1, Number(building?.level ?? 1) || 1),
+        isUpgrading: Boolean(building?.isUpgrading),
+        upgradeCompleteAt: building?.upgradeCompleteAt
+          ? Number(new Date(building.upgradeCompleteAt).getTime() || building.upgradeCompleteAt)
+          : null,
+        machineGold: Math.max(0, Number(building?.machineGold ?? 0) || 0),
+        lastGeneratedAt: Number(building?.lastGeneratedAt ?? Date.now()),
+        soldierCount: Math.max(0, Number(building?.soldierCount ?? 0) || 0),
+        lastWagePaidAt: Number(building?.lastWagePaidAt ?? Date.now()),
+        lastFedAt: Number(building?.lastFedAt ?? Date.now()),
+        hasChopper,
+        hasTank,
+        tankShotsRemaining,
+        chopperShotsRemaining,
+      };
+    })
     .filter((building) => typeof building.type === "string");
 };
 
@@ -88,6 +105,7 @@ const getLegacySnapshot = () => {
 
   return {
     gold: normalizeGold(legacyGoldRaw),
+    energy: 0,
     buildings: normalizeBuildings(legacyBuildings),
     camera: null,
     savedAt: Date.now(),
@@ -114,6 +132,7 @@ export const getGameSnapshot = (session) => {
     const parsed = JSON.parse(raw);
     return {
       gold: normalizeGold(parsed?.gold),
+      energy: normalizeEnergy(parsed?.energy),
       buildings: normalizeBuildings(parsed?.buildings),
       camera: normalizeCamera(parsed?.camera),
       savedAt: normalizeTimestamp(parsed?.savedAt) ?? 0,
@@ -128,6 +147,7 @@ export const getGameSnapshot = (session) => {
 export const saveGameSnapshot = (snapshot, session) => {
   const payload = {
     gold: normalizeGold(snapshot?.gold),
+    energy: normalizeEnergy(snapshot?.energy),
     buildings: normalizeBuildings(snapshot?.buildings),
     camera: normalizeCamera(snapshot?.camera),
     savedAt: Date.now(),
