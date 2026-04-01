@@ -33,7 +33,7 @@ export default function BuildingShop({
     >
       <div className="pointer-events-none absolute inset-x-10 top-0 h-16 rounded-full bg-cyan-300/10 blur-3xl" />
 
-      <div className="relative mb-4 flex items-start justify-between gap-3">
+      <div className="relative mb-4 flex flex-col sm:flex-row items-start justify-between gap-3">
         <div>
           <p className="font-orbitron text-[0.66rem] uppercase tracking-[0.34em] text-cyan-300/80">
             Builder Menu

@@ -7,7 +7,7 @@ export default function Dashboard() {
   const playerId = session?.playerId || (session?.id ? `PLYR-${String(session.id).padStart(6, "0")}` : "-");
 
   return (
-    <main className="min-h-[calc(100vh-72px)] bg-gray-950 text-white px-6 py-10">
+    <main className="min-h-[calc(100vh-72px)] bg-gray-950 text-white px-4 sm:px-6 py-10">
       <div className="max-w-4xl mx-auto space-y-6">
         <h2 className="text-3xl font-bold">Command Dashboard</h2>
         <p className="text-gray-300">
