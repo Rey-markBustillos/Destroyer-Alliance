@@ -1,14 +1,27 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+
+const getViewportSize = () => {
+  if (typeof window === "undefined") {
+    return { width: 0, height: 0 };
+  }
+
+  const viewport = window.visualViewport;
+  return {
+    width: Math.round(Number(viewport?.width ?? window.innerWidth ?? 0) || 0),
+    height: Math.round(Number(viewport?.height ?? window.innerHeight ?? 0) || 0),
+  };
+};
 
 const isMobileViewport = () => {
   if (typeof window === "undefined") {
     return false;
   }
 
-  const viewportWidth = Math.min(window.innerWidth || 0, window.screen?.width || window.innerWidth || 0);
+  const { width: viewportWidth } = getViewportSize();
+  const screenWidth = Math.round(Number(window.screen?.width ?? viewportWidth) || viewportWidth);
   const hasCoarsePointer = window.matchMedia?.("(pointer: coarse)")?.matches ?? false;
 
-  return viewportWidth <= 900 && hasCoarsePointer;
+  return Math.min(viewportWidth, screenWidth) <= 900 && hasCoarsePointer;
 };
 
 const isPortraitViewport = () => {
@@ -16,7 +29,8 @@ const isPortraitViewport = () => {
     return false;
   }
 
-  return window.innerHeight > window.innerWidth;
+  const { width, height } = getViewportSize();
+  return height > width;
 };
 
 const requestFullscreen = async () => {
@@ -62,32 +76,45 @@ const tryEnterLandscape = async () => {
 export default function MobileLandscapePrompt() {
   const [isMobile, setIsMobile] = useState(() => isMobileViewport());
   const [isPortrait, setIsPortrait] = useState(() => isPortraitViewport());
+  const autoRotateAttemptedRef = useRef(false);
 
   useEffect(() => {
     const updateViewportState = () => {
       setIsMobile(isMobileViewport());
       setIsPortrait(isPortraitViewport());
+
+      if (!isPortraitViewport()) {
+        autoRotateAttemptedRef.current = false;
+      }
     };
 
     const handleFirstInteraction = () => {
-      if (!isMobileViewport()) {
+      if (
+        autoRotateAttemptedRef.current
+        || !isMobileViewport()
+        || !isPortraitViewport()
+      ) {
         return;
       }
 
+      autoRotateAttemptedRef.current = true;
       void tryEnterLandscape();
     };
+
+    const viewport = window.visualViewport;
+    const interactionEventName = window.PointerEvent ? "pointerdown" : "touchstart";
 
     updateViewportState();
     window.addEventListener("resize", updateViewportState);
     window.addEventListener("orientationchange", updateViewportState);
-    window.addEventListener("touchstart", handleFirstInteraction, { passive: true });
-    window.addEventListener("pointerdown", handleFirstInteraction, { passive: true });
+    viewport?.addEventListener("resize", updateViewportState);
+    window.addEventListener(interactionEventName, handleFirstInteraction, { passive: true });
 
     return () => {
       window.removeEventListener("resize", updateViewportState);
       window.removeEventListener("orientationchange", updateViewportState);
-      window.removeEventListener("touchstart", handleFirstInteraction);
-      window.removeEventListener("pointerdown", handleFirstInteraction);
+      viewport?.removeEventListener("resize", updateViewportState);
+      window.removeEventListener(interactionEventName, handleFirstInteraction);
     };
   }, []);
 

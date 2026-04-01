@@ -2,6 +2,16 @@
 @import url("https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;800&display=swap");
 @import "tailwindcss";
 
+:root {
+  --app-screen-height: 100vh;
+}
+
+@supports (height: 100svh) {
+  :root {
+    --app-screen-height: 100svh;
+  }
+}
+
 html,
 body,
 #root {
@@ -10,6 +20,16 @@ body,
   min-height: 100%;
   margin: 0;
   overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body {
+  background: #243322;
+}
+
+.app-screen-height {
+  height: var(--app-screen-height);
+  min-height: var(--app-screen-height);
 }
 
 .font-black-ops {

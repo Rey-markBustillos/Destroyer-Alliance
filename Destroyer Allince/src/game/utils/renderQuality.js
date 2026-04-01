@@ -47,6 +47,7 @@ export const getRenderProfile = () => {
     enableShadows: !lowPerformanceDevice,
     fpsMin: lowPerformanceDevice ? 24 : 30,
     fpsTarget: 60,
+    isMobileLike,
     lowPerformanceDevice,
     powerPreference: "high-performance",
     resolution: Math.min(dpr, resolutionCap),
@@ -203,9 +204,9 @@ export const applyCanvasQuality = (game) => {
   canvas.style.display = "block";
   canvas.style.width = "100%";
   canvas.style.height = "100%";
-  canvas.style.transform = "translateZ(0)";
-  canvas.style.backfaceVisibility = "hidden";
-  canvas.style.willChange = "transform";
+  canvas.style.transform = renderProfile.isMobileLike ? "none" : "translateZ(0)";
+  canvas.style.backfaceVisibility = renderProfile.isMobileLike ? "visible" : "hidden";
+  canvas.style.willChange = renderProfile.isMobileLike ? "auto" : "transform";
   canvas.style.touchAction = "manipulation";
 
   if (renderProfile.lowPerformanceDevice) {

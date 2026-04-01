@@ -21,4 +21,25 @@ export default defineConfig({
   optimizeDeps: {
     include: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime", "framer-motion"],
   },
+  server: {
+    host: "0.0.0.0",
+    port: 5173,
+    strictPort: true,
+    proxy: {
+      "/api": {
+        target: "http://127.0.0.1:5000",
+        changeOrigin: true,
+      },
+      "/socket.io": {
+        target: "http://127.0.0.1:5000",
+        ws: true,
+        changeOrigin: true,
+      },
+    },
+  },
+  preview: {
+    host: "0.0.0.0",
+    port: 4173,
+    strictPort: true,
+  },
 });

@@ -1187,7 +1187,7 @@ export default function GamePage() {
 
   return (
     <main className="font-black-ops min-h-screen bg-[#243322] text-slate-950">
-      <section className="relative h-[100dvh] min-h-screen w-full overflow-hidden bg-[#243322]">
+      <section className="app-screen-height relative w-full overflow-hidden bg-[#243322]">
 
         <Motion.div
           initial={{ opacity: 0, y: -18 }}

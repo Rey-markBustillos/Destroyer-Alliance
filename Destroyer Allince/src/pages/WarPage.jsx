@@ -607,7 +607,7 @@ export default function WarPage() {
   }, [session, totalTroops, handleFindMatch]);
 
   return (
-    <main className="relative h-[100dvh] min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top,#2c5c3f_0%,#173126_48%,#08120e_100%)] text-white">
+    <main className="app-screen-height relative overflow-hidden bg-[radial-gradient(circle_at_top,#2c5c3f_0%,#173126_48%,#08120e_100%)] text-white">
       <div ref={gameRootRef} className="absolute inset-0 h-full w-full overflow-hidden" />
       <MobileLandscapePrompt />
 
