@@ -1,12 +1,24 @@
+import { Suspense, lazy } from "react";
 import { HashRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute";
-import Dashboard from "./pages/Dashboard";
-import GamePage from "./pages/GamePage";
-import ProfilePage from "./pages/ProfilePage";
-import WarPage from "./pages/WarPage";
-import IntroStory from "./pages/IntroStory";
-import Login from "./pages/login";
-import Register from "./pages/register";
+import AuthLoadingScreen from "./components/AuthLoadingScreen";
+
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const GamePage = lazy(() => import("./pages/GamePage"));
+const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+const WarPage = lazy(() => import("./pages/WarPage"));
+const IntroStory = lazy(() => import("./pages/IntroStory"));
+const Login = lazy(() => import("./pages/login"));
+const Register = lazy(() => import("./pages/register"));
+
+function RouteLoadingFallback() {
+  return (
+    <AuthLoadingScreen
+      title="Loading Route..."
+      description="Preparing the next screen and loading only the assets needed for this view."
+    />
+  );
+}
 
 function AppRoutes() {
   const location = useLocation();
@@ -14,57 +26,45 @@ function AppRoutes() {
   const backgroundLocation = state?.backgroundLocation;
 
   return (
-    <>
-      <Routes location={backgroundLocation || location}>
-        <Route path="/" element={<Navigate to="/login" replace />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route
-          path="/intro"
-          element={(
-            <ProtectedRoute>
-              <IntroStory />
-            </ProtectedRoute>
-          )}
-        />
-        <Route
-          path="/dashboard"
-          element={(
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
-          )}
-        />
-        <Route path="/home" element={<Navigate to="/game" replace />} />
-        <Route
-          path="/game"
-          element={(
-            <ProtectedRoute>
-              <GamePage />
-            </ProtectedRoute>
-          )}
-        />
-        <Route
-          path="/war"
-          element={(
-            <ProtectedRoute>
-              <WarPage />
-            </ProtectedRoute>
-          )}
-        />
-        <Route
-          path="/profile"
-          element={(
-            <ProtectedRoute>
-              <ProfilePage />
-            </ProtectedRoute>
-          )}
-        />
-        <Route path="*" element={<Navigate to="/login" replace />} />
-      </Routes>
-
-      {backgroundLocation ? (
-        <Routes>
+    <Suspense fallback={<RouteLoadingFallback />}>
+      <>
+        <Routes location={backgroundLocation || location}>
+          <Route path="/" element={<Navigate to="/login" replace />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route
+            path="/intro"
+            element={(
+              <ProtectedRoute>
+                <IntroStory />
+              </ProtectedRoute>
+            )}
+          />
+          <Route
+            path="/dashboard"
+            element={(
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            )}
+          />
+          <Route path="/home" element={<Navigate to="/game" replace />} />
+          <Route
+            path="/game"
+            element={(
+              <ProtectedRoute>
+                <GamePage />
+              </ProtectedRoute>
+            )}
+          />
+          <Route
+            path="/war"
+            element={(
+              <ProtectedRoute>
+                <WarPage />
+              </ProtectedRoute>
+            )}
+          />
           <Route
             path="/profile"
             element={(
@@ -73,9 +73,23 @@ function AppRoutes() {
               </ProtectedRoute>
             )}
           />
+          <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
-      ) : null}
-    </>
+
+        {backgroundLocation ? (
+          <Routes>
+            <Route
+              path="/profile"
+              element={(
+                <ProtectedRoute>
+                  <ProfilePage />
+                </ProtectedRoute>
+              )}
+            />
+          </Routes>
+        ) : null}
+      </>
+    </Suspense>
   );
 }
 

@@ -3,6 +3,7 @@ import { AnimatePresence, motion as Motion } from "framer-motion";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import BuildingShop from "../components/BuildingShop";
+import PwaInstallButton from "../components/PwaInstallButton";
 import { createGame, destroyGame } from "../game/main";
 import { getBuildingUpgradeCost } from "../game/utils/buildingTypes";
 import { createBattleSocket } from "../services/battleSocket";
@@ -1224,6 +1225,9 @@ export default function GamePage() {
               >
                 {shopOpen ? "Hide Shop" : "Open Shop"}
               </CommandButton>
+              <div className="relative">
+                <PwaInstallButton className="min-h-12 rounded-2xl border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-4 py-3 text-[10px] font-bold uppercase tracking-[0.16em] text-cyan-100 transition duration-200 hover:-translate-y-0.5 hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)] sm:min-h-0 sm:px-2.5" />
+              </div>
               <div className="relative">
                 <CommandButton
                   onClick={handleToggleMusicPanel}
