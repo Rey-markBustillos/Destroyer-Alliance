@@ -207,19 +207,19 @@ export default function ProfilePage() {
     <main
       className={
         isOverlay
-          ? "absolute inset-0 z-30 flex items-center justify-center bg-slate-950/12 px-2 py-2 text-white backdrop-blur-[2px]"
+          ? "absolute inset-0 z-30 flex items-center justify-center overflow-y-auto bg-slate-950/12 px-2 py-2 text-white backdrop-blur-[2px]"
           : "min-h-screen px-2 py-2 text-white"
       }
       onClick={isOverlay ? handleClose : undefined}
     >
-      <div className="mx-auto w-full max-w-184">
+      <div className="mobile-landscape-profile-shell mx-auto w-full max-w-184">
         <div
-          className={`rounded-xl border border-emerald-500/30 p-2 shadow-2xl ${
+          className={`mobile-landscape-profile-card rounded-xl border border-emerald-500/30 p-2 shadow-2xl ${
             isOverlay ? "bg-slate-900/88" : "bg-slate-900/80"
           }`}
           onClick={isOverlay ? (event) => event.stopPropagation() : undefined}
         >
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className="text-[9px] uppercase tracking-[0.22em] text-emerald-300/80">
                 Profile
@@ -253,7 +253,7 @@ export default function ProfilePage() {
             </p>
           )}
 
-          <section className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-[7.25rem_1fr]">
+          <section className="mobile-landscape-profile-layout mt-2 grid grid-cols-1 gap-2 md:grid-cols-[7.25rem_1fr]">
             <div className="md:col-span-1">
               <div className="relative rounded-lg border border-white/10 bg-slate-950/80 p-1.5">
                 <img
@@ -278,14 +278,14 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            <div className="md:col-span-2">
+            <div className="min-w-0">
               <article className="rounded-xl border border-white/10 bg-slate-950/80 p-2.5">
                 <p className="text-xs uppercase tracking-[0.25em] text-slate-400">
                   Player Name
                 </p>
                 {showRenameForm ? (
                   <form onSubmit={handleRenameSubmit} className="mt-1.5 flex flex-col gap-2">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-col gap-2 min-[560px]:flex-row min-[560px]:items-center">
                       <input
                         type="text"
                         value={renameValue}
@@ -426,7 +426,7 @@ export default function ProfilePage() {
                   </section>
                 </div>
                 {showRankList ? (
-                  <section className="absolute inset-x-0 top-0 z-20 rounded-xl border border-amber-400/20 bg-slate-950/95 p-2 shadow-[0_20px_50px_rgba(2,6,23,0.45)] backdrop-blur">
+                  <section className="absolute inset-x-0 top-0 z-20 max-h-[min(26rem,calc(var(--app-screen-height)-8rem))] overflow-y-auto rounded-xl border border-amber-400/20 bg-slate-950/95 p-2 shadow-[0_20px_50px_rgba(2,6,23,0.45)] backdrop-blur">
                     <div className="mb-2 flex items-center justify-between">
                       <p className="text-[10px] uppercase tracking-[0.22em] text-amber-300">Rank List</p>
                       <button
@@ -437,7 +437,7 @@ export default function ProfilePage() {
                         Close
                       </button>
                     </div>
-                    <div className="grid gap-1.5 sm:grid-cols-2">
+                    <div className="mobile-landscape-rank-grid grid gap-1.5 sm:grid-cols-2">
                       {RANK_TIERS.map((tier) => {
                         const isCurrentRank = tier.name === rankName;
 

@@ -138,7 +138,7 @@ export default function Login() {
   };
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-slate-950 text-white">
+    <div className="app-screen-height relative overflow-hidden bg-slate-950 text-white">
       <Motion.div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
         style={{ backgroundImage: "url('/assets/loginbackgound.png')" }}
@@ -204,16 +204,16 @@ export default function Login() {
         ))}
       </div>
 
-      <div className="relative z-10 flex min-h-screen items-center justify-center px-4">
+      <div className="mobile-landscape-auth-shell relative z-10 flex items-center justify-center overflow-y-auto px-4 py-4">
         <Motion.div
-          className="w-full max-w-md"
+          className="mobile-landscape-auth-wrap w-full max-w-md"
           initial="hidden"
           animate="visible"
           variants={cardVariants}
         >
           <Motion.form
             onSubmit={handleSubmit}
-            className="relative overflow-hidden rounded-[1.8rem] border border-white/15 bg-white/10 p-7 shadow-[0_20px_80px_rgba(15,23,42,0.24)] backdrop-blur-2xl"
+            className="mobile-landscape-auth-card relative overflow-hidden rounded-[1.45rem] border border-white/15 bg-white/10 p-5 shadow-[0_20px_80px_rgba(15,23,42,0.24)] backdrop-blur-2xl min-[901px]:rounded-[1.8rem] min-[901px]:p-7"
             initial={false}
             animate="visible"
             variants={cardVariants}
@@ -227,128 +227,133 @@ export default function Login() {
               animate="visible"
               className="relative z-10"
             >
-              <Motion.div
-                initial={{ opacity: 0, y: 18 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.7, ease: cinematicEase }}
-              >
-                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-sky-300/30 bg-sky-400/10 shadow-[0_0_30px_rgba(56,189,248,0.16)]">
-                  <Motion.span
-                    className="text-xl"
-                    animate={{ rotate: [0, 8, -6, 0], scale: [1, 1.04, 1] }}
-                    transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+              <div className="mobile-landscape-auth-content">
+                <Motion.div
+                  initial={{ opacity: 0, y: 18 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.7, ease: cinematicEase }}
+                  className="mobile-landscape-auth-hero"
+                >
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-sky-300/30 bg-sky-400/10 shadow-[0_0_30px_rgba(56,189,248,0.16)] min-[901px]:h-14 min-[901px]:w-14">
+                    <Motion.span
+                      className="text-lg min-[901px]:text-xl"
+                      animate={{ rotate: [0, 8, -6, 0], scale: [1, 1.04, 1] }}
+                      transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                    >
+                      C
+                    </Motion.span>
+                  </div>
+                  <p className="mt-4 text-center text-[0.65rem] font-semibold uppercase tracking-[0.32em] text-sky-300/80 min-[901px]:mt-5 min-[901px]:text-[0.72rem] min-[901px]:tracking-[0.4em]">
+                    Secure Access
+                  </p>
+                  <h1 className="mt-2 text-center text-2xl font-black tracking-tight min-[901px]:mt-3 min-[901px]:text-3xl md:text-[2.25rem]">
+                    Destroyer Alliance
+                  </h1>
+                  <p className="mt-2 text-center text-xs leading-5 text-slate-300 min-[901px]:mt-3 min-[901px]:text-sm min-[901px]:leading-6">
+                    Command your base with a smoother, more cinematic sign-in experience.
+                  </p>
+                </Motion.div>
+
+                <div className="mt-5 min-[901px]:mt-0">
+                  <div className="space-y-3 min-[901px]:space-y-4">
+                    <Motion.div
+                      animate={{
+                        scale: focusedField === "email" || email ? 1.01 : 1,
+                      }}
+                      transition={{ duration: 0.2 }}
+                      className="relative"
+                    >
+                      <label className={floatingLabelClass(focusedField === "email" || Boolean(email))}>
+                        Email
+                      </label>
+                      <Motion.input
+                        type="email"
+                        value={email}
+                        onChange={(event) => setEmail(event.target.value)}
+                        onFocus={() => setFocusedField("email")}
+                        onBlur={() => setFocusedField((current) => (current === "email" ? "" : current))}
+                        disabled={loading}
+                        required
+                        whileFocus={{
+                          boxShadow: "0 0 0 1px rgba(96,165,250,0.85), 0 0 28px rgba(59,130,246,0.26)",
+                        }}
+                        className="w-full rounded-2xl border border-white/10 bg-slate-950/72 px-4 pb-3 pt-6 text-sm text-white outline-none transition placeholder:text-transparent"
+                        placeholder="Email"
+                      />
+                    </Motion.div>
+
+                    <Motion.div
+                      animate={{
+                        scale: focusedField === "password" || password ? 1.01 : 1,
+                      }}
+                      transition={{ duration: 0.2 }}
+                      className="relative"
+                    >
+                      <label className={floatingLabelClass(focusedField === "password" || Boolean(password))}>
+                        Password
+                      </label>
+                      <Motion.input
+                        type="password"
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        onFocus={() => setFocusedField("password")}
+                        onBlur={() => setFocusedField((current) => (current === "password" ? "" : current))}
+                        disabled={loading}
+                        required
+                        whileFocus={{
+                          boxShadow: "0 0 0 1px rgba(167,139,250,0.85), 0 0 28px rgba(139,92,246,0.24)",
+                        }}
+                        className="w-full rounded-2xl border border-white/10 bg-slate-950/72 px-4 pb-3 pt-6 text-sm text-white outline-none transition placeholder:text-transparent"
+                        placeholder="Password"
+                      />
+                    </Motion.div>
+                  </div>
+
+                  <AnimatePresence>
+                    {error ? (
+                      <Motion.p
+                        initial={{ opacity: 0, y: -8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -8 }}
+                        transition={{ duration: 0.25 }}
+                        className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200"
+                      >
+                        {error}
+                      </Motion.p>
+                    ) : null}
+                  </AnimatePresence>
+
+                  <Motion.button
+                    type="submit"
+                    disabled={loading}
+                    whileHover={{
+                      scale: 1.05,
+                      boxShadow: "0 16px 36px rgba(37,99,235,0.38)",
+                    }}
+                    whileTap={{ scale: 0.95 }}
+                    className="mt-5 w-full cursor-pointer rounded-2xl bg-[linear-gradient(120deg,#2563eb_0%,#3b82f6_35%,#60a5fa_60%,#2563eb_100%)] bg-size-[200%_100%] px-4 py-3 text-sm font-bold uppercase tracking-[0.22em] text-white shadow-[0_14px_30px_rgba(37,99,235,0.28)] transition disabled:cursor-not-allowed disabled:opacity-70 min-[901px]:mt-6"
                   >
-                    C
-                  </Motion.span>
+                    <Motion.span
+                      className="block"
+                      animate={{ backgroundPositionX: ["0%", "100%"] }}
+                      transition={{ duration: 2.8, repeat: Infinity, ease: "linear" }}
+                    >
+                      Login
+                    </Motion.span>
+                  </Motion.button>
+
+                  <div className="relative mt-3 flex justify-center">
+                    <PwaInstallButton className="min-h-11 rounded-2xl border border-sky-300/20 bg-sky-400/10 px-4 py-3 text-[11px] font-bold uppercase tracking-[0.18em] text-sky-100 transition duration-200 hover:-translate-y-0.5 hover:bg-sky-400/18" />
+                  </div>
+
+                  <p className="mt-4 text-center text-sm text-slate-300 min-[901px]:mt-5">
+                    Don&apos;t have an account?{" "}
+                    <Link to="/register" className="font-semibold text-sky-300 transition hover:text-sky-200 hover:underline">
+                      Register
+                    </Link>
+                  </p>
                 </div>
-                <p className="mt-5 text-center text-[0.72rem] font-semibold uppercase tracking-[0.4em] text-sky-300/80">
-                  Secure Access
-                </p>
-                <h1 className="mt-3 text-center text-3xl font-black tracking-tight md:text-[2.25rem]">
-                  Destroyer Alliance
-                </h1>
-                <p className="mt-3 text-center text-sm leading-6 text-slate-300">
-                  Command your base with a smoother, more cinematic sign-in experience.
-                </p>
-              </Motion.div>
-
-              <div className="mt-8 space-y-4">
-                <Motion.div
-                  animate={{
-                    scale: focusedField === "email" || email ? 1.01 : 1,
-                  }}
-                  transition={{ duration: 0.2 }}
-                  className="relative"
-                >
-                  <label className={floatingLabelClass(focusedField === "email" || Boolean(email))}>
-                    Email
-                  </label>
-                  <Motion.input
-                    type="email"
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                    onFocus={() => setFocusedField("email")}
-                    onBlur={() => setFocusedField((current) => (current === "email" ? "" : current))}
-                    disabled={loading}
-                    required
-                    whileFocus={{
-                      boxShadow: "0 0 0 1px rgba(96,165,250,0.85), 0 0 28px rgba(59,130,246,0.26)",
-                    }}
-                    className="w-full rounded-2xl border border-white/10 bg-slate-950/72 px-4 pb-3 pt-6 text-sm text-white outline-none transition placeholder:text-transparent"
-                    placeholder="Email"
-                  />
-                </Motion.div>
-
-                <Motion.div
-                  animate={{
-                    scale: focusedField === "password" || password ? 1.01 : 1,
-                  }}
-                  transition={{ duration: 0.2 }}
-                  className="relative"
-                >
-                  <label className={floatingLabelClass(focusedField === "password" || Boolean(password))}>
-                    Password
-                  </label>
-                  <Motion.input
-                    type="password"
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    onFocus={() => setFocusedField("password")}
-                    onBlur={() => setFocusedField((current) => (current === "password" ? "" : current))}
-                    disabled={loading}
-                    required
-                    whileFocus={{
-                      boxShadow: "0 0 0 1px rgba(167,139,250,0.85), 0 0 28px rgba(139,92,246,0.24)",
-                    }}
-                    className="w-full rounded-2xl border border-white/10 bg-slate-950/72 px-4 pb-3 pt-6 text-sm text-white outline-none transition placeholder:text-transparent"
-                    placeholder="Password"
-                  />
-                </Motion.div>
               </div>
-
-              <AnimatePresence>
-                {error ? (
-                  <Motion.p
-                    initial={{ opacity: 0, y: -8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -8 }}
-                    transition={{ duration: 0.25 }}
-                    className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200"
-                  >
-                    {error}
-                  </Motion.p>
-                ) : null}
-              </AnimatePresence>
-
-              <Motion.button
-                type="submit"
-                disabled={loading}
-                whileHover={{
-                  scale: 1.05,
-                  boxShadow: "0 16px 36px rgba(37,99,235,0.38)",
-                }}
-                whileTap={{ scale: 0.95 }}
-                className="mt-6 w-full cursor-pointer rounded-2xl bg-[linear-gradient(120deg,#2563eb_0%,#3b82f6_35%,#60a5fa_60%,#2563eb_100%)] bg-size-[200%_100%] px-4 py-3 text-sm font-bold uppercase tracking-[0.22em] text-white shadow-[0_14px_30px_rgba(37,99,235,0.28)] transition disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                <Motion.span
-                  className="block"
-                  animate={{ backgroundPositionX: ["0%", "100%"] }}
-                  transition={{ duration: 2.8, repeat: Infinity, ease: "linear" }}
-                >
-                  Login
-                </Motion.span>
-              </Motion.button>
-
-              <div className="relative mt-3 flex justify-center">
-                <PwaInstallButton className="min-h-11 rounded-2xl border border-sky-300/20 bg-sky-400/10 px-4 py-3 text-[11px] font-bold uppercase tracking-[0.18em] text-sky-100 transition duration-200 hover:-translate-y-0.5 hover:bg-sky-400/18" />
-              </div>
-
-              <p className="mt-5 text-center text-sm text-slate-300">
-                Don&apos;t have an account?{" "}
-                <Link to="/register" className="font-semibold text-sky-300 transition hover:text-sky-200 hover:underline">
-                  Register
-                </Link>
-              </p>
             </Motion.div>
           </Motion.form>
         </Motion.div>

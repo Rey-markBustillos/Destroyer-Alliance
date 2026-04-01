@@ -1762,14 +1762,14 @@ export default function GamePage() {
 
         {leaderboardOpen ? (
           <div
-            className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs"
+            className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/60 p-2 backdrop-blur-xs min-[901px]:p-4"
             onClick={() => setLeaderboardOpen(false)}
           >
             <div
-              className="w-full max-w-[26rem] rounded-[1rem] border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.88)_0%,rgba(15,23,42,0.74)_100%)] p-3 text-white shadow-[0_20px_60px_rgba(2,6,23,0.34)] min-[901px]:max-w-120 min-[901px]:rounded-[1.4rem] min-[901px]:p-4"
+              className="mobile-landscape-overlay-card flex w-full flex-col rounded-[1rem] border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.88)_0%,rgba(15,23,42,0.74)_100%)] p-3 text-white shadow-[0_20px_60px_rgba(2,6,23,0.34)] min-[901px]:max-w-120 min-[901px]:rounded-[1.4rem] min-[901px]:p-4"
               onClick={(event) => event.stopPropagation()}
             >
-              <div className="flex items-start justify-between gap-2 min-[901px]:gap-4">
+              <div className="flex shrink-0 items-start justify-between gap-2 min-[901px]:gap-4">
                 <div>
                   <p className="text-[0.56rem] uppercase tracking-[0.2em] text-amber-300/70 min-[901px]:text-[0.68rem] min-[901px]:tracking-[0.3em]">Leaderboard</p>
                   <h3 className="mt-1 text-base font-black min-[901px]:text-lg">Top Commanders</h3>
@@ -1788,17 +1788,18 @@ export default function GamePage() {
               </div>
 
               {leaderboardState.currentPlayerRank ? (
-                <p className="mt-2 text-[11px] font-semibold text-amber-200 min-[901px]:mt-3 min-[901px]:text-xs">
+                <p className="mt-2 shrink-0 text-[11px] font-semibold text-amber-200 min-[901px]:mt-3 min-[901px]:text-xs">
                   Your Rank: #{leaderboardState.currentPlayerRank}
                 </p>
               ) : null}
 
-              {leaderboardState.loading ? (
-                <p className="mt-3 text-xs text-slate-300 min-[901px]:mt-4 min-[901px]:text-sm">Loading leaderboard...</p>
-              ) : leaderboardState.error ? (
-                <p className="mt-3 text-xs font-semibold text-rose-300 min-[901px]:mt-4 min-[901px]:text-sm">{leaderboardState.error}</p>
-              ) : (
-                <div className="mt-3 max-h-[58vh] overflow-y-auto rounded-xl border border-white/8 bg-slate-950/45 min-[901px]:mt-4 min-[901px]:max-h-96 min-[901px]:rounded-2xl">
+              <div className="mobile-landscape-overlay-scroll mt-3 min-h-0 flex-1 min-[901px]:mt-4">
+                {leaderboardState.loading ? (
+                  <p className="text-xs text-slate-300 min-[901px]:text-sm">Loading leaderboard...</p>
+                ) : leaderboardState.error ? (
+                  <p className="text-xs font-semibold text-rose-300 min-[901px]:text-sm">{leaderboardState.error}</p>
+                ) : (
+                  <div className="rounded-xl border border-white/8 bg-slate-950/45 min-[901px]:rounded-2xl">
                   <div className="grid grid-cols-[2.4rem_minmax(0,1fr)_2.5rem_2.5rem_2.9rem] gap-1 border-b border-white/8 px-2 py-1.5 text-[8px] font-black uppercase tracking-[0.1em] text-slate-400 min-[901px]:grid-cols-[3rem_minmax(0,1fr)_3.6rem_3.6rem_3.8rem] min-[901px]:gap-2 min-[901px]:px-3 min-[901px]:py-2 min-[901px]:text-[10px] min-[901px]:tracking-[0.18em]">
                     <span>Rank</span>
                     <span>Player</span>
@@ -1828,22 +1829,23 @@ export default function GamePage() {
                   {!leaderboardState.entries.length ? (
                     <p className="px-3 py-4 text-xs text-slate-400 min-[901px]:text-sm">No players found.</p>
                   ) : null}
-                </div>
-              )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         ) : null}
 
         {chatOpen ? (
           <div
-            className="absolute inset-0 z-20 flex justify-end p-2 min-[901px]:p-4"
+            className="absolute inset-0 z-20 flex items-end justify-center p-2 min-[901px]:justify-end min-[901px]:p-4"
             onClick={() => setChatOpen(false)}
           >
             <div
-              className="mt-auto mb-16 w-full max-w-[20rem] rounded-[1rem] border border-white/12 bg-[linear-gradient(180deg,rgba(15,23,42,0.9)_0%,rgba(15,23,42,0.78)_100%)] p-2.5 text-white shadow-[0_18px_50px_rgba(2,6,23,0.34)] backdrop-blur-xl min-[901px]:mb-4 min-[901px]:max-w-88 min-[901px]:rounded-[1.2rem] min-[901px]:p-3"
+              className="mobile-landscape-overlay-card mobile-landscape-chat-card mt-auto mb-16 flex w-full flex-col rounded-[1rem] border border-white/12 bg-[linear-gradient(180deg,rgba(15,23,42,0.9)_0%,rgba(15,23,42,0.78)_100%)] p-2.5 text-white shadow-[0_18px_50px_rgba(2,6,23,0.34)] backdrop-blur-xl min-[901px]:mb-4 min-[901px]:max-w-88 min-[901px]:rounded-[1.2rem] min-[901px]:p-3"
               onClick={(event) => event.stopPropagation()}
             >
-              <div className="flex items-start justify-between gap-2 min-[901px]:gap-4">
+              <div className="flex shrink-0 items-start justify-between gap-2 min-[901px]:gap-4">
                 <div>
                   <p className="text-[0.56rem] uppercase tracking-[0.18em] text-emerald-300/70 min-[901px]:text-[0.65rem] min-[901px]:tracking-[0.26em]">Live Chat</p>
                   <h3 className="mt-1 text-sm font-black min-[901px]:text-base">Online: {onlineCount}</h3>
@@ -1858,7 +1860,7 @@ export default function GamePage() {
                 </button>
               </div>
 
-              <div className="mt-2.5 h-52 overflow-y-auto rounded-xl border border-white/8 bg-slate-950/45 px-2.5 py-2 min-[901px]:mt-3 min-[901px]:h-72 min-[901px]:rounded-2xl min-[901px]:px-3">
+              <div className="mobile-landscape-overlay-scroll mt-2.5 min-h-0 flex-1 rounded-xl border border-white/8 bg-slate-950/45 px-2.5 py-2 min-[901px]:mt-3 min-[901px]:rounded-2xl min-[901px]:px-3">
                 {chatMessages.length ? (
                   chatMessages.map((message) => (
                     <div key={message.id} className="mb-2 last:mb-0">
@@ -1873,7 +1875,7 @@ export default function GamePage() {
                 )}
               </div>
 
-              <div className="mt-2.5 flex gap-1.5 min-[901px]:mt-3 min-[901px]:gap-2">
+              <div className="mt-2.5 flex shrink-0 gap-1.5 min-[901px]:mt-3 min-[901px]:gap-2">
                 <input
                   type="text"
                   value={chatInput}
@@ -1903,7 +1905,7 @@ export default function GamePage() {
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 18 }}
-            className="absolute inset-0 z-10 flex items-end p-2 min-[901px]:p-4"
+            className="absolute inset-0 z-10 flex items-end justify-center p-2 min-[901px]:p-4"
             onClick={() => setShopOpen(false)}
           >
             <div className="w-full" onClick={(event) => event.stopPropagation()}>
