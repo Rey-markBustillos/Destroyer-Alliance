@@ -14,8 +14,8 @@ services:
     name: destroyer-alliance-frontend
     runtime: static
     rootDir: Destroyer Allince
-    buildCommand: npm run build
-    staticPublishPath: ./Destroyer Allince/dist
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
     envVars:
       - key: VITE_API_URL
         value: https://destroyer-alliance-1.onrender.com/api

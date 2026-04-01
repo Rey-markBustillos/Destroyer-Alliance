@@ -1,4 +1,6 @@
 {
+  "private": true,
+  "license": "UNLICENSED",
   "scripts": {
     "dev": "npm --prefix \"Destroyer Allince\" run dev",
     "build": "npm --prefix \"Destroyer Allince\" run build",

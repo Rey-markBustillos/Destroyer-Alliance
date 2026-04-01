@@ -64,19 +64,212 @@ const getChargePercent = (shotsRemaining, maxShots) => {
   return Math.max(0, Math.min(100, Math.round((resolvedShots / resolvedMax) * 100)));
 };
 
-function HudMetric({ label, value, tone = "emerald" }) {
-  const toneClass = {
-    emerald: "text-emerald-50 border-emerald-300/20 bg-[linear-gradient(180deg,rgba(16,185,129,0.22)_0%,rgba(15,23,42,0.34)_100%)]",
-    amber: "text-amber-50 border-amber-300/20 bg-[linear-gradient(180deg,rgba(245,158,11,0.22)_0%,rgba(15,23,42,0.34)_100%)]",
-    sky: "text-sky-50 border-sky-300/20 bg-[linear-gradient(180deg,rgba(56,189,248,0.22)_0%,rgba(15,23,42,0.34)_100%)]",
-    rose: "text-rose-50 border-rose-300/20 bg-[linear-gradient(180deg,rgba(251,113,133,0.22)_0%,rgba(15,23,42,0.34)_100%)]",
+const clampPercent = (value) => Math.max(0, Math.min(100, Math.round(Number(value ?? 0) || 0)));
+
+function StrategyIcon({ icon, className = "" }) {
+  const sharedProps = {
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.8,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    className,
+  };
+
+  switch (icon) {
+    case "gold":
+      return (
+        <svg {...sharedProps}>
+          <circle cx="12" cy="12" r="7.5" />
+          <path d="M9 9.5c.7-.8 1.7-1.2 3-1.2 1.8 0 3 .8 3 2.1 0 2.8-5.9 1.3-5.9 4 0 1.1 1 1.9 2.8 1.9 1.3 0 2.3-.4 3.1-1.1" />
+          <path d="M12 7v10" />
+        </svg>
+      );
+    case "energy":
+      return (
+        <svg {...sharedProps}>
+          <path d="M13 2 6 13h5l-1 9 8-12h-5l1-8Z" />
+        </svg>
+      );
+    case "war":
+      return (
+        <svg {...sharedProps}>
+          <path d="M6 4h11l-2.2 5L17 14H7l2-5L6 4Z" />
+          <path d="M8 18h8" />
+          <path d="M10 14v4" />
+          <path d="M14 14v4" />
+        </svg>
+      );
+    case "troops":
+      return (
+        <svg {...sharedProps}>
+          <path d="M12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+          <path d="M6.5 18.5a5.5 5.5 0 0 1 11 0" />
+          <path d="M5 11a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" />
+          <path d="M19 11a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" />
+        </svg>
+      );
+    case "base":
+      return (
+        <svg {...sharedProps}>
+          <path d="M4 20V9l8-5 8 5v11" />
+          <path d="M9 20v-5h6v5" />
+          <path d="M9 10h6" />
+        </svg>
+      );
+    case "wood":
+      return (
+        <svg {...sharedProps}>
+          <path d="M7 17c0-3.8 2.2-7.2 5-10 2.8 2.8 5 6.2 5 10a5 5 0 1 1-10 0Z" />
+          <path d="M12 9v10" />
+        </svg>
+      );
+    case "chat":
+      return (
+        <svg {...sharedProps}>
+          <path d="M5 6.5h14v9H9l-4 3v-3H5Z" />
+        </svg>
+      );
+    case "leaderboard":
+      return (
+        <svg {...sharedProps}>
+          <path d="M6 20V10" />
+          <path d="M12 20V4" />
+          <path d="M18 20v-8" />
+        </svg>
+      );
+    case "profile":
+      return (
+        <svg {...sharedProps}>
+          <path d="M12 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+          <path d="M5 20a7 7 0 0 1 14 0" />
+        </svg>
+      );
+    case "shop":
+      return (
+        <svg {...sharedProps}>
+          <path d="M4 8h16l-1.2 11H5.2L4 8Z" />
+          <path d="m8 8 1.5-3h5L16 8" />
+        </svg>
+      );
+    case "music":
+      return (
+        <svg {...sharedProps}>
+          <path d="M15 5v9.5a2.5 2.5 0 1 1-2-2.45V7.2L19 6v7.5a2.5 2.5 0 1 1-2-2.45V5.8L15 5Z" />
+        </svg>
+      );
+    case "menu":
+      return (
+        <svg {...sharedProps}>
+          <path d="M4 7h16" />
+          <path d="M4 12h16" />
+          <path d="M4 17h16" />
+        </svg>
+      );
+    case "close":
+      return (
+        <svg {...sharedProps}>
+          <path d="m6 6 12 12" />
+          <path d="M18 6 6 18" />
+        </svg>
+      );
+    default:
+      return (
+        <svg {...sharedProps}>
+          <circle cx="12" cy="12" r="8" />
+        </svg>
+      );
+  }
+}
+
+function ResourceBar({ progress = 0, tone = "emerald", label = "" }) {
+  const palette = {
+    emerald: "from-emerald-300 via-emerald-400 to-teal-200 shadow-[0_0_16px_rgba(52,211,153,0.32)]",
+    sky: "from-sky-300 via-cyan-400 to-blue-200 shadow-[0_0_16px_rgba(56,189,248,0.3)]",
+    amber: "from-amber-300 via-orange-400 to-yellow-200 shadow-[0_0_16px_rgba(251,191,36,0.32)]",
+    rose: "from-rose-300 via-fuchsia-400 to-orange-200 shadow-[0_0_16px_rgba(251,113,133,0.3)]",
+  }[tone] ?? "from-slate-300 via-slate-200 to-white";
+
+  return (
+    <div>
+      <div className="flex items-center justify-between text-[0.58rem] uppercase tracking-[0.18em] text-white/55">
+        <span>Charge</span>
+        <span>{label || `${clampPercent(progress)}%`}</span>
+      </div>
+      <div className="mt-2 h-2.5 overflow-hidden rounded-full border border-white/10 bg-black/35">
+        <Motion.div
+          className={`h-full rounded-full bg-gradient-to-r ${palette}`}
+          initial={false}
+          animate={{ width: `${clampPercent(progress)}%` }}
+          transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ResourceCard({
+  icon,
+  label,
+  value,
+  caption,
+  progress = 0,
+  progressLabel = "",
+  tone = "emerald",
+}) {
+  const toneStyles = {
+    emerald: {
+      shell: "border-emerald-300/18 bg-[linear-gradient(180deg,rgba(7,18,20,0.74)_0%,rgba(3,10,14,0.52)_100%)]",
+      glow: "shadow-[0_16px_30px_rgba(16,185,129,0.16)]",
+      iconWrap: "bg-emerald-400/12 text-emerald-200 ring-1 ring-emerald-300/20",
+    },
+    sky: {
+      shell: "border-sky-300/18 bg-[linear-gradient(180deg,rgba(8,18,28,0.78)_0%,rgba(4,10,18,0.56)_100%)]",
+      glow: "shadow-[0_16px_30px_rgba(56,189,248,0.16)]",
+      iconWrap: "bg-sky-400/12 text-sky-200 ring-1 ring-sky-300/20",
+    },
+    amber: {
+      shell: "border-amber-300/18 bg-[linear-gradient(180deg,rgba(28,20,8,0.8)_0%,rgba(19,11,3,0.56)_100%)]",
+      glow: "shadow-[0_16px_30px_rgba(245,158,11,0.16)]",
+      iconWrap: "bg-amber-400/12 text-amber-200 ring-1 ring-amber-300/20",
+    },
+    rose: {
+      shell: "border-rose-300/18 bg-[linear-gradient(180deg,rgba(28,10,14,0.8)_0%,rgba(15,6,10,0.56)_100%)]",
+      glow: "shadow-[0_16px_30px_rgba(244,63,94,0.16)]",
+      iconWrap: "bg-rose-400/12 text-rose-200 ring-1 ring-rose-300/20",
+    },
   }[tone];
 
   return (
-    <div className={`min-w-0 rounded-[0.8rem] border px-1.5 py-1.5 backdrop-blur-md ${toneClass}`}>
-      <p className="text-[0.42rem] uppercase tracking-[0.2em] text-white/70">{label}</p>
-      <p className="mt-0.5 text-[0.8rem] font-black leading-none tracking-tight">{value}</p>
-    </div>
+    <Motion.div
+      layout
+      whileHover={{ scale: 1.018, y: -2 }}
+      transition={{ duration: 0.2 }}
+      className={`rounded-[1.35rem] border p-3 text-white backdrop-blur-xl max-[480px]:backdrop-blur-md ${toneStyles.shell} ${toneStyles.glow}`}
+    >
+      <div className="flex items-start gap-3">
+        <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-[1rem] ${toneStyles.iconWrap}`}>
+          <StrategyIcon icon={icon} className="h-5 w-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[0.62rem] uppercase tracking-[0.28em] text-white/58">{label}</p>
+          <Motion.p
+            key={`${label}-${value}`}
+            initial={{ opacity: 0.4, scale: 0.96, y: 6 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+            className="mt-1 text-[1.2rem] font-black leading-none tracking-tight text-white"
+          >
+            {value}
+          </Motion.p>
+          <p className="mt-1 text-[0.68rem] leading-4 text-white/58">{caption}</p>
+        </div>
+      </div>
+      <div className="mt-3">
+        <ResourceBar progress={progress} progressLabel={progressLabel} label={progressLabel} tone={tone} />
+      </div>
+    </Motion.div>
   );
 }
 
@@ -136,14 +329,33 @@ function ChargeRing({ percent = 0, label = "Charge", tone = "cyan" }) {
   );
 }
 
-function CommandButton({ children, className = "", ...props }) {
+function TopMenuButton({
+  icon,
+  label,
+  active = false,
+  badge = "",
+  className = "",
+  ...props
+}) {
+  const activeClass = active
+    ? "border-white/22 bg-white/16 text-white shadow-[0_16px_36px_rgba(14,165,233,0.18)]"
+    : "border-white/10 bg-white/8 text-white/82 hover:border-white/18 hover:bg-white/14";
+
   return (
-    <button
+    <Motion.button
       {...props}
-      className={`rounded-2xl px-4 py-3 text-sm font-bold uppercase tracking-[0.16em] transition duration-200 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50 ${className}`}
+      whileHover={{ scale: 1.05, y: -2 }}
+      whileTap={{ scale: 0.98, y: 1 }}
+      className={`relative flex min-h-12 min-w-12 flex-col items-center justify-center gap-1 rounded-full border px-4 py-2 text-[0.62rem] font-bold uppercase tracking-[0.2em] backdrop-blur-xl transition disabled:cursor-not-allowed disabled:opacity-50 max-[480px]:min-h-12 max-[480px]:px-3 ${activeClass} ${className}`}
     >
-      {children}
-    </button>
+      <StrategyIcon icon={icon} className="h-[1.05rem] w-[1.05rem]" />
+      <span>{label}</span>
+      {badge ? (
+        <span className="absolute -right-1 -top-1 rounded-full border border-emerald-200/30 bg-emerald-400/22 px-1.5 py-0.5 text-[0.52rem] tracking-[0.12em] text-emerald-50">
+          {badge}
+        </span>
+      ) : null}
+    </Motion.button>
   );
 }
 
@@ -205,6 +417,8 @@ export default function GamePage() {
   const [showWelcomeBack, setShowWelcomeBack] = useState(() => isWelcomeBackPending());
   const [musicStatus, setMusicStatus] = useState(() => soundManager.getStatus());
   const [musicPanelOpen, setMusicPanelOpen] = useState(false);
+  const [mobileHudOpen, setMobileHudOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -1157,111 +1371,336 @@ export default function GamePage() {
     || (activeSession?.id ? `PLYR-${String(activeSession.id).padStart(6, "0")}` : "-");
   const profileRank = activeSession?.rankName || "Recruit";
   const profileWarPoints = Number(activeSession?.warPoints ?? 0) || 0;
+  const nextRankPoints = Math.max(profileWarPoints + 1, Number(activeSession?.nextRankPoints ?? 100) || 100);
   const musicVolumePercent = musicStatus?.volumePercent ?? Math.round((musicStatus?.volume ?? 0) * 100);
   const canLowerMusicVolume = musicVolumePercent > 0;
   const canRaiseMusicVolume = musicVolumePercent < 100;
+  const woodStored = Math.max(0, Number(gameState.totalMachineGold ?? 0) || 0);
+  const woodCapacity = Math.max(1, Number(gameState.totalMachineCapacity ?? 0) || 1);
+  const goldTarget = Math.max(
+    2000,
+    Number(upgradeCost || 0),
+    Number(selectedPlacedBuilding?.tankCost ?? 0) || 0,
+    Number(selectedPlacedBuilding?.chopperCost ?? 0) || 0
+  );
+  const energyTarget = Math.max(
+    6,
+    Number(gameState.energyMachineLimit ?? 1) * 3,
+    Number(selectedPlacedBuilding?.tankRechargeCost ?? 0) || 0,
+    Number(selectedPlacedBuilding?.chopperRechargeCost ?? 0) || 0
+  );
+  const troopTarget = Math.max(
+    5,
+    ((Number(gameState.tentLimit ?? 0) || 0) * 5)
+      + (Number(gameState.battleTankLimit ?? 0) || 0)
+      + (Number(gameState.skyportLimit ?? 0) || 0)
+  );
+  const commandCenterProgress = clampPercent(((Number(gameState.townHallLevel ?? 1) || 1) / 2) * 100);
+  const resourceCards = [
+    {
+      id: "gold",
+      icon: "gold",
+      label: "Gold",
+      value: formatCompactNumber(gameState.gold),
+      caption: `Battle fund ready for upgrades and recruits`,
+      progress: (Math.max(0, Number(gameState.gold ?? 0) || 0) / goldTarget) * 100,
+      progressLabel: `${formatCompactNumber(gameState.gold)}/${formatCompactNumber(goldTarget)}`,
+      tone: "amber",
+    },
+    {
+      id: "energy",
+      icon: "energy",
+      label: "Energy",
+      value: formatCompactNumber(gameState.energy ?? 0),
+      caption: "Fuel for charges, choppers, and support systems",
+      progress: (Math.max(0, Number(gameState.energy ?? 0) || 0) / energyTarget) * 100,
+      progressLabel: `${formatCompactNumber(gameState.energy ?? 0)}/${formatCompactNumber(energyTarget)}`,
+      tone: "sky",
+    },
+    {
+      id: "wp",
+      icon: "war",
+      label: "War Points",
+      value: formatCompactNumber(profileWarPoints),
+      caption: `Next rank unlocks at ${formatCompactNumber(nextRankPoints)} WP`,
+      progress: (profileWarPoints / nextRankPoints) * 100,
+      progressLabel: `${formatCompactNumber(profileWarPoints)}/${formatCompactNumber(nextRankPoints)}`,
+      tone: "rose",
+    },
+    {
+      id: "troops",
+      icon: "troops",
+      label: "Troops",
+      value: formatCompactNumber(gameState.totalArmyUnits ?? 0),
+      caption: `${gameState.totalTanks ?? 0} tanks • ${gameState.totalHelicopters ?? 0} choppers`,
+      progress: ((Number(gameState.totalArmyUnits ?? 0) || 0) / troopTarget) * 100,
+      progressLabel: `${formatCompactNumber(gameState.totalArmyUnits ?? 0)}/${formatCompactNumber(troopTarget)}`,
+      tone: "emerald",
+    },
+    {
+      id: "base",
+      icon: "base",
+      label: "Command Center",
+      value: `Lv ${gameState.townHallLevel ?? 1}`,
+      caption: `${gameState.commandCenters ?? 0}/${gameState.commandCenterLimit ?? 1} built`,
+      progress: commandCenterProgress,
+      progressLabel: `${gameState.townHallLevel ?? 1}/2`,
+      tone: "amber",
+    },
+    {
+      id: "wood",
+      icon: "wood",
+      label: "Wood Machine",
+      value: gameState.fullWoodMachines > 0
+        ? `${gameState.fullWoodMachines} Full`
+        : `${formatCompactNumber(woodStored)}/${formatCompactNumber(woodCapacity)}`,
+      caption: `${gameState.woodMachines ?? 0}/${gameState.woodMachineLimit ?? 0} active machines`,
+      progress: (woodStored / woodCapacity) * 100,
+      progressLabel: `${formatCompactNumber(woodStored)}/${formatCompactNumber(woodCapacity)}`,
+      tone: "rose",
+    },
+  ];
+  const topMenuItems = [
+    {
+      id: "chat",
+      icon: "chat",
+      label: "Chat",
+      badge: onlineCount > 0 ? String(onlineCount) : "",
+      active: chatOpen,
+      onClick: () => {
+        setChatOpen((open) => !open);
+        setMobileMenuOpen(false);
+      },
+    },
+    {
+      id: "leaderboard",
+      icon: "leaderboard",
+      label: "Board",
+      active: leaderboardOpen,
+      onClick: () => {
+        handleOpenLeaderboard();
+        setMobileMenuOpen(false);
+      },
+    },
+    {
+      id: "profile",
+      icon: "profile",
+      label: "Profile",
+      active: false,
+      onClick: () => {
+        setMobileMenuOpen(false);
+        navigate("/profile", { state: { backgroundLocation: location } });
+      },
+    },
+    {
+      id: "shop",
+      icon: "shop",
+      label: shopOpen ? "Hide" : "Shop",
+      active: shopOpen,
+      onClick: () => {
+        setShopOpen((open) => !open);
+        setMobileMenuOpen(false);
+      },
+    },
+    {
+      id: "music",
+      icon: "music",
+      label: "Music",
+      active: musicPanelOpen,
+      onClick: () => {
+        handleToggleMusicPanel();
+      },
+    },
+  ];
+  const actionButtonBase = "min-h-12 rounded-[1rem] border px-3 py-2 text-[0.68rem] font-black uppercase tracking-[0.16em] transition duration-200 hover:-translate-y-0.5 active:translate-y-[1px] disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-45";
+  const actionButtonStyles = {
+    amber: `${actionButtonBase} border-amber-300/15 bg-amber-400 text-slate-950 shadow-[0_10px_24px_rgba(251,191,36,0.22)] hover:bg-amber-300`,
+    sky: `${actionButtonBase} border-sky-300/15 bg-sky-400 text-sky-950 shadow-[0_10px_24px_rgba(56,189,248,0.2)] hover:bg-sky-300`,
+    emerald: `${actionButtonBase} border-emerald-300/15 bg-emerald-400 text-emerald-950 shadow-[0_10px_24px_rgba(16,185,129,0.22)] hover:bg-emerald-300`,
+    rose: `${actionButtonBase} border-rose-300/18 bg-rose-600 text-white shadow-[0_10px_24px_rgba(225,29,72,0.24)] hover:bg-rose-500`,
+    violet: `${actionButtonBase} border-violet-300/16 bg-violet-500 text-white shadow-[0_10px_24px_rgba(139,92,246,0.22)] hover:bg-violet-400`,
+    cyan: `${actionButtonBase} border-cyan-300/15 bg-cyan-400 text-slate-950 shadow-[0_10px_24px_rgba(34,211,238,0.22)] hover:bg-cyan-300`,
+    orange: `${actionButtonBase} border-orange-300/15 bg-orange-400 text-slate-950 shadow-[0_10px_24px_rgba(251,146,60,0.22)] hover:bg-orange-300`,
+    slate: `${actionButtonBase} border-white/10 bg-white/84 text-slate-950 shadow-[0_10px_24px_rgba(255,255,255,0.12)] hover:bg-white`,
+  };
 
   return (
-    <main className="font-black-ops min-h-screen bg-[#243322] text-slate-950">
-      <section className="relative h-screen w-full overflow-hidden bg-[#243322]">
+    <main className="font-black-ops min-h-screen bg-[#061310] text-white">
+      <section className="relative h-screen w-full overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(34,197,94,0.16),transparent_28%),radial-gradient(circle_at_top_right,rgba(56,189,248,0.18),transparent_26%),linear-gradient(180deg,#11211a_0%,#081410_44%,#06110e_100%)]">
+        <div className="pointer-events-none absolute inset-0 z-[1] bg-[radial-gradient(circle_at_center,transparent_18%,rgba(2,6,23,0.14)_58%,rgba(2,6,23,0.44)_100%)]" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-40 bg-[linear-gradient(180deg,rgba(2,6,23,0.54)_0%,rgba(2,6,23,0)_100%)]" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-52 bg-[linear-gradient(180deg,rgba(2,6,23,0)_0%,rgba(2,6,23,0.56)_100%)]" />
 
         <Motion.div
           initial={{ opacity: 0, y: -18 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="pointer-events-none absolute inset-x-0 top-0 z-10 p-3 sm:p-4"
+          transition={{ duration: 0.52, ease: [0.22, 1, 0.36, 1] }}
+          className="pointer-events-none absolute inset-x-0 top-0 z-20 p-3 sm:p-4"
         >
           <div className="flex items-start justify-between gap-3">
-            <div className="pointer-events-none flex w-[6.7rem] flex-col gap-0.5">
-              <div className="rounded-[0.8rem] border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.56)_0%,rgba(15,23,42,0.38)_100%)] px-1.5 py-1.5 text-white backdrop-blur-sm">
-                <p className="text-[0.42rem] uppercase tracking-[0.26em] text-emerald-300/75">Base</p>
-                <p className="mt-1 text-[0.7rem] font-black leading-tight text-white">{profileName}</p>
-                <p className="mt-0.5 text-[0.4rem] uppercase tracking-[0.1em] text-slate-100/90">{profileId}</p>
-                <p className="mt-0.5 text-[0.4rem] uppercase tracking-[0.2em] text-amber-200/90">{profileRank}</p>
-              </div>
-
-              <HudMetric label="Gold" value={formatCompactNumber(gameState.gold)} tone="emerald" />
-              <HudMetric label="Energy" value={formatCompactNumber(gameState.energy ?? 0)} tone="sky" />
-              <HudMetric label="WP" value={formatCompactNumber(profileWarPoints)} tone="amber" />
-              <HudMetric label="Troops" value={formatCompactNumber(gameState.totalArmyUnits ?? 0)} tone="sky" />
-              <HudMetric label="Command Center" value={`Lv ${gameState.townHallLevel ?? 1}`} tone="amber" />
-
-              {gameState.woodMachines > 0 ? (
-                <HudMetric
-                  label="Wood Machine"
-                  value={
-                    gameState.fullWoodMachines > 0
-                      ? `${gameState.fullWoodMachines} Full`
-                      : `${gameState.totalMachineGold}/${gameState.totalMachineCapacity}`
-                  }
-                  tone="rose"
-                />
-              ) : null}
+            <div className="pointer-events-auto md:hidden">
+              <Motion.button
+                type="button"
+                whileHover={{ scale: 1.04 }}
+                whileTap={{ scale: 0.97 }}
+                onClick={() => setMobileHudOpen((open) => !open)}
+                className="flex min-h-12 items-center gap-2 rounded-full border border-white/12 bg-slate-950/48 px-4 text-[0.68rem] font-bold uppercase tracking-[0.22em] text-white shadow-[0_16px_28px_rgba(2,6,23,0.24)] backdrop-blur-md"
+              >
+                <StrategyIcon icon={mobileHudOpen ? "close" : "menu"} className="h-4 w-4" />
+                HUD
+              </Motion.button>
             </div>
 
-            <div className="pointer-events-auto flex items-center gap-1.5">
-              <CommandButton
-                onClick={() => setChatOpen((open) => !open)}
-                className="border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-2.5 py-1.5 text-[10px] text-emerald-50 backdrop-blur-sm hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)]"
-              >
-                Chat {onlineCount > 0 ? `(${onlineCount})` : ""}
-              </CommandButton>
-              <CommandButton
-                onClick={handleOpenLeaderboard}
-                className="border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-2.5 py-1.5 text-[10px] text-amber-50 backdrop-blur-sm hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)]"
-              >
-                Leaderboard
-              </CommandButton>
-              <CommandButton
-                onClick={() => navigate("/profile", { state: { backgroundLocation: location } })}
-                className="border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-2.5 py-1.5 text-[10px] text-sky-50 backdrop-blur-sm hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)]"
-              >
-                Profile
-              </CommandButton>
-              <CommandButton
-                onClick={() => setShopOpen((open) => !open)}
-                className="border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-2.5 py-1.5 text-[10px] text-white backdrop-blur-sm hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)]"
-              >
-                {shopOpen ? "Hide Shop" : "Open Shop"}
-              </CommandButton>
-              <div className="relative">
-                <CommandButton
-                  onClick={handleToggleMusicPanel}
-                  className="border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-2.5 py-1.5 text-[10px] text-violet-100 backdrop-blur-sm hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)]"
-                >
-                  Music
-                </CommandButton>
+            <Motion.aside
+              initial={false}
+              animate={mobileHudOpen ? { x: 0, opacity: 1 } : { x: -28, opacity: 0 }}
+              transition={{ duration: 0.24 }}
+              className={`pointer-events-auto fixed inset-y-3 left-3 z-30 w-[min(19rem,calc(100vw-1.5rem))] overflow-hidden rounded-[1.75rem] border border-white/12 bg-[linear-gradient(180deg,rgba(8,19,19,0.78)_0%,rgba(5,12,16,0.66)_100%)] p-3 shadow-[0_24px_60px_rgba(2,6,23,0.42)] backdrop-blur-xl max-[480px]:backdrop-blur-md md:static md:w-[18.5rem] md:translate-x-0 md:opacity-100 md:shadow-[0_22px_52px_rgba(2,6,23,0.28)] ${mobileHudOpen ? "" : "max-md:pointer-events-none"}`}
+            >
+              <div className="relative overflow-hidden rounded-[1.5rem] border border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.16),transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.08)_0%,rgba(255,255,255,0.03)_100%)] p-4">
+                <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-emerald-300/10 blur-2xl" />
+                <p className="text-[0.62rem] uppercase tracking-[0.36em] text-emerald-200/78">Base Command</p>
+                <h2 className="mt-2 text-[1.3rem] font-black leading-none text-white">{profileName}</h2>
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-[0.65rem] uppercase tracking-[0.18em] text-white/62">
+                  <span className="rounded-full border border-white/10 bg-white/6 px-2.5 py-1">{profileId}</span>
+                  <span className="rounded-full border border-amber-300/20 bg-amber-400/12 px-2.5 py-1 text-amber-100">{profileRank}</span>
+                </div>
+              </div>
 
+              <div className="mt-3 grid gap-2">
+                {resourceCards.map((item) => (
+                  <ResourceCard
+                    key={item.id}
+                    icon={item.icon}
+                    label={item.label}
+                    value={item.value}
+                    caption={item.caption}
+                    progress={item.progress}
+                    progressLabel={item.progressLabel}
+                    tone={item.tone}
+                  />
+                ))}
+              </div>
+            </Motion.aside>
+
+            <div className="ml-auto flex items-start gap-2">
+              <div className="pointer-events-auto relative md:hidden">
+                <Motion.button
+                  type="button"
+                  whileHover={{ scale: 1.04 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => setMobileMenuOpen((open) => !open)}
+                  className="flex min-h-12 items-center gap-2 rounded-full border border-white/12 bg-slate-950/48 px-4 text-[0.68rem] font-bold uppercase tracking-[0.22em] text-white shadow-[0_16px_28px_rgba(2,6,23,0.24)] backdrop-blur-md"
+                >
+                  <StrategyIcon icon={mobileMenuOpen ? "close" : "menu"} className="h-4 w-4" />
+                  Menu
+                </Motion.button>
+
+                <AnimatePresence>
+                  {mobileMenuOpen ? (
+                    <Motion.div
+                      initial={{ opacity: 0, y: -10, scale: 0.96 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -10, scale: 0.96 }}
+                      className="absolute right-0 top-full mt-3 w-[min(19rem,calc(100vw-1.5rem))] rounded-[1.6rem] border border-white/12 bg-slate-950/72 p-3 shadow-[0_24px_60px_rgba(2,6,23,0.44)] backdrop-blur-xl"
+                    >
+                      <div className="grid grid-cols-3 gap-2">
+                        {topMenuItems.map((item) => (
+                          <TopMenuButton
+                            key={item.id}
+                            icon={item.icon}
+                            label={item.label}
+                            badge={item.badge}
+                            active={item.active}
+                            onClick={item.onClick}
+                            className="w-full"
+                          />
+                        ))}
+                      </div>
+
+                      {musicPanelOpen ? (
+                        <div className="mt-3 rounded-[1.2rem] border border-white/10 bg-black/22 p-3">
+                          <button
+                            type="button"
+                            onClick={handleToggleMusicMute}
+                            className="min-h-12 w-full rounded-[1rem] border border-white/10 bg-white/6 px-3 py-2 text-[0.68rem] font-bold uppercase tracking-[0.16em] text-violet-100 transition hover:bg-white/10"
+                          >
+                            {musicStatus?.isMuted ? "Unmute Audio" : "Mute Audio"}
+                          </button>
+
+                          <div className="mt-2 grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={handleLowerMusicVolume}
+                              disabled={!canLowerMusicVolume}
+                              className="min-h-12 rounded-[1rem] border border-white/10 bg-white/6 px-3 py-2 text-[0.68rem] font-bold uppercase tracking-[0.16em] text-cyan-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              Volume -
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleRaiseMusicVolume}
+                              disabled={!canRaiseMusicVolume}
+                              className="min-h-12 rounded-[1rem] border border-white/10 bg-white/6 px-3 py-2 text-[0.68rem] font-bold uppercase tracking-[0.16em] text-cyan-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              Volume +
+                            </button>
+                          </div>
+
+                          <p className="mt-3 text-center text-[0.66rem] font-semibold uppercase tracking-[0.16em] text-white/64">
+                            {musicStatus?.isMuted ? "Muted" : `Volume ${musicVolumePercent}%`}
+                          </p>
+                        </div>
+                      ) : null}
+                    </Motion.div>
+                  ) : null}
+                </AnimatePresence>
+              </div>
+
+              <div className="pointer-events-auto hidden items-center gap-2 md:flex">
+                {topMenuItems.map((item) => (
+                  <TopMenuButton
+                    key={item.id}
+                    icon={item.icon}
+                    label={item.label}
+                    badge={item.badge}
+                    active={item.active}
+                    onClick={item.onClick}
+                  />
+                ))}
+              </div>
+
+              <div className="pointer-events-auto relative hidden md:block">
                 {musicPanelOpen ? (
-                  <div className="absolute right-0 top-full z-20 mt-1.5 min-w-[9.5rem] rounded-xl border border-white/10 bg-slate-950/90 p-2 shadow-[0_14px_36px_rgba(2,6,23,0.35)] backdrop-blur-md">
+                  <div className="absolute right-0 top-full z-20 mt-3 min-w-[12rem] rounded-[1.35rem] border border-white/10 bg-slate-950/86 p-3 shadow-[0_18px_40px_rgba(2,6,23,0.35)] backdrop-blur-xl">
                     <button
                       type="button"
                       onClick={handleToggleMusicMute}
-                      className="w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-violet-100 transition hover:bg-white/10"
+                      className="min-h-12 w-full rounded-[1rem] border border-white/10 bg-white/6 px-3 py-2 text-[0.68rem] font-bold uppercase tracking-[0.16em] text-violet-100 transition hover:bg-white/10"
                     >
-                      {musicStatus?.isMuted ? "Unmute" : "Mute"}
+                      {musicStatus?.isMuted ? "Unmute Audio" : "Mute Audio"}
                     </button>
 
-                    <div className="mt-2 flex items-center gap-1">
+                    <div className="mt-2 grid grid-cols-2 gap-2">
                       <button
                         type="button"
                         onClick={handleLowerMusicVolume}
                         disabled={!canLowerMusicVolume}
-                        className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-semibold text-cyan-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="min-h-12 rounded-[1rem] border border-white/10 bg-white/6 px-3 py-2 text-[0.68rem] font-bold uppercase tracking-[0.16em] text-cyan-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        Vol -
+                        Volume -
                       </button>
                       <button
                         type="button"
                         onClick={handleRaiseMusicVolume}
                         disabled={!canRaiseMusicVolume}
-                        className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-semibold text-cyan-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="min-h-12 rounded-[1rem] border border-white/10 bg-white/6 px-3 py-2 text-[0.68rem] font-bold uppercase tracking-[0.16em] text-cyan-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        Vol +
+                        Volume +
                       </button>
                     </div>
 
-                    <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-200">
+                    <p className="mt-3 text-center text-[0.66rem] font-semibold uppercase tracking-[0.16em] text-white/64">
                       {musicStatus?.isMuted ? "Muted" : `Volume ${musicVolumePercent}%`}
                     </p>
                   </div>
@@ -1271,7 +1710,10 @@ export default function GamePage() {
           </div>
         </Motion.div>
 
-        <div ref={gameRootRef} className="h-full w-full overflow-hidden" />
+        <div
+          ref={gameRootRef}
+          className="relative z-10 h-full w-full overflow-hidden pt-18 md:pt-0"
+        />
 
         <AnimatePresence>
         {selectedPlacedBuilding ? (
@@ -1280,35 +1722,38 @@ export default function GamePage() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 12 }}
             transition={{ duration: 0.22 }}
-            className="pointer-events-none absolute inset-x-0 bottom-2.5 z-10 flex justify-center px-3"
+            className="pointer-events-none absolute inset-x-0 bottom-22 z-20 flex justify-center px-3 md:bottom-4"
           >
-            <div className="pointer-events-auto w-full max-w-59 rounded-[0.8rem] border border-white/10 bg-[rgba(20,30,40,0.85)] p-1.5 text-white shadow-[0_8px_20px_rgba(0,0,0,0.5)] backdrop-blur-[10px]">
-              <div className="flex items-start justify-between gap-2">
+            <div
+              className="pointer-events-auto w-full max-w-[24rem] rounded-[1.7rem] border border-white/12 bg-[linear-gradient(180deg,rgba(8,17,23,0.9)_0%,rgba(4,10,16,0.78)_100%)] p-3 text-white shadow-[0_22px_60px_rgba(2,6,23,0.38)] backdrop-blur-xl max-[480px]:rounded-[1.5rem] max-[480px]:p-3"
+              style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 0.9rem)" }}
+            >
+              <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-[10px] uppercase tracking-[0.16em] text-slate-400">Selected</p>
-                  <h3 className="mt-0.5 truncate text-[12px] font-bold text-white">{selectedPlacedBuilding.name}</h3>
+                  <p className="text-[0.6rem] uppercase tracking-[0.28em] text-cyan-200/72">Selected Structure</p>
+                  <h3 className="mt-1 truncate text-[1rem] font-black text-white">{selectedPlacedBuilding.name}</h3>
                 </div>
-                <span className="shrink-0 rounded-full border border-sky-300/20 bg-sky-400/10 px-1.5 py-0.5 text-[9px] font-semibold text-sky-100">
-                  Lv.{selectedPlacedBuilding.level ?? 1}
+                <span className="shrink-0 rounded-full border border-cyan-300/20 bg-cyan-400/12 px-3 py-1 text-[0.64rem] font-bold uppercase tracking-[0.16em] text-cyan-100">
+                  Lv {selectedPlacedBuilding.level ?? 1}
                 </span>
               </div>
 
-              <div className="mt-1.5">
-                <div className="mb-1 flex items-center justify-between text-[10px] text-slate-400">
+              <div className="mt-3">
+                <div className="mb-1.5 flex items-center justify-between text-[0.68rem] uppercase tracking-[0.16em] text-white/58">
                   <span>HP</span>
-                  <span className="font-bold text-[10px] text-white">{selectedPlacedBuilding.currentHp ?? 0}/{selectedPlacedBuilding.maxHp ?? 0}</span>
+                  <span className="font-bold text-[0.74rem] text-white">{selectedPlacedBuilding.currentHp ?? 0}/{selectedPlacedBuilding.maxHp ?? 0}</span>
                 </div>
-                <div className="relative h-1.5 overflow-hidden rounded-full bg-slate-950/80">
+                <div className="relative h-2.5 overflow-hidden rounded-full border border-white/8 bg-black/40">
                   <div
-                    className="h-full rounded-full bg-[linear-gradient(90deg,#22c55e_0%,#86efac_100%)] transition-all duration-300"
+                    className="h-full rounded-full bg-[linear-gradient(90deg,#22c55e_0%,#86efac_42%,#d9f99d_100%)] shadow-[0_0_18px_rgba(34,197,94,0.24)] transition-all duration-500"
                     style={{ width: `${Math.max(0, Math.min(100, selectedPlacedBuilding.hpPercent ?? 100))}%` }}
                   />
                 </div>
               </div>
 
-              <div className="mt-1.5 grid gap-0.5 text-[10px]">
+              <div className="mt-3 grid gap-1 text-[0.74rem]">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-slate-400">Status</span>
+                  <span className="text-white/55">Status</span>
                   <span className="font-bold text-white">
                     {isMoveMode
                       ? "Moving"
@@ -1329,7 +1774,7 @@ export default function GamePage() {
                 ) : null}
                 {selectedPlacedBuilding.type === "wood-machine" ? (
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-slate-400">Stored Gold</span>
+                    <span className="text-white/55">Stored Gold</span>
                     <span className="font-bold text-white">
                       {selectedPlacedBuilding.machineGold ?? 0}/{selectedPlacedBuilding.maxGold ?? 250}
                     </span>
@@ -1337,7 +1782,7 @@ export default function GamePage() {
                 ) : null}
                 {selectedPlacedBuilding.type === "energy-machine" ? (
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-slate-400">Stored Energy</span>
+                    <span className="text-white/55">Stored Energy</span>
                     <span className="font-bold text-white">
                       {selectedPlacedBuilding.machineGold ?? 0}/{selectedPlacedBuilding.maxGold ?? 3}
                     </span>
@@ -1345,7 +1790,7 @@ export default function GamePage() {
                 ) : null}
                 {selectedPlacedBuilding.type === "battle-tank" ? (
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-slate-400">Cost</span>
+                    <span className="text-white/55">Tank</span>
                     <span className="font-bold text-white">
                       {selectedPlacedBuilding.hasTank ? "Tank Ready" : `${selectedPlacedBuilding.tankCost ?? 5000} gold`}
                     </span>
@@ -1353,7 +1798,7 @@ export default function GamePage() {
                 ) : null}
                 {selectedPlacedBuilding.type === "battle-tank" ? (
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-slate-400">Charge</span>
+                    <span className="text-white/55">Charge</span>
                     <span className="font-bold text-cyan-200">{tankEnergyPercent}%</span>
                   </div>
                 ) : null}
@@ -1367,7 +1812,7 @@ export default function GamePage() {
                 ) : null}
                 {selectedPlacedBuilding.type === "skyport" ? (
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-slate-400">Cost</span>
+                    <span className="text-white/55">Chopper</span>
                     <span className="font-bold text-white">
                       {selectedPlacedBuilding.hasChopper ? "Chopper Ready" : `${selectedPlacedBuilding.chopperCost ?? 0} gold`}
                     </span>
@@ -1375,7 +1820,7 @@ export default function GamePage() {
                 ) : null}
                 {selectedPlacedBuilding.type === "skyport" ? (
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-slate-400">Charge</span>
+                    <span className="text-white/55">Charge</span>
                     <span className="font-bold text-cyan-200">{helicopterEnergyPercent}%</span>
                   </div>
                 ) : null}
@@ -1440,24 +1885,24 @@ export default function GamePage() {
               </div>
 
               {selectedPlacedBuilding.type === "tent" ? (
-                <div className="mt-1.5">
-                  <label className="mb-1 block text-[10px] text-slate-400">Remove Count</label>
+                <div className="mt-3">
+                  <label className="mb-1.5 block text-[0.68rem] uppercase tracking-[0.16em] text-white/52">Remove Count</label>
                   <input
                     type="number"
                     min="1"
                     max={Math.max(1, selectedPlacedBuilding.soldierCount ?? 1)}
                     value={removeSoldierCount}
                     onChange={(event) => setRemoveSoldierCount(event.target.value)}
-                    className="w-full rounded-[9px] border border-white/10 bg-slate-950/80 px-2 py-0.5 text-[10px] font-bold text-white outline-none transition focus:border-rose-400"
+                    className="h-12 w-full rounded-[1rem] border border-white/10 bg-black/35 px-3 text-sm font-bold text-white outline-none transition focus:border-rose-400"
                   />
                 </div>
               ) : null}
 
-              <div className="mt-1.5 grid grid-cols-2 gap-1">
+              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
                 <button
                   type="button"
                   onClick={handleMoveBuilding}
-                  className="rounded-[9px] bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-slate-950 transition hover:-translate-y-0.5 hover:bg-amber-300"
+                  className={actionButtonStyles.amber}
                 >
                   Move
                 </button>
@@ -1466,7 +1911,7 @@ export default function GamePage() {
                   type="button"
                   onClick={handleUpgradeBuilding}
                   disabled={!canUpgrade}
-                  className="rounded-[9px] bg-sky-400 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-sky-950 transition hover:-translate-y-0.5 hover:bg-sky-300 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
+                  className={actionButtonStyles.sky}
                 >
                   {selectedPlacedBuilding.isUpgrading
                     ? "Upgrading"
@@ -1479,7 +1924,7 @@ export default function GamePage() {
                   <button
                     type="button"
                     onClick={handleCancelUpgrade}
-                    className="rounded-[9px] bg-slate-200 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-slate-950 transition hover:-translate-y-0.5 hover:bg-white"
+                    className={actionButtonStyles.slate}
                   >
                     Cancel
                   </button>
@@ -1491,7 +1936,7 @@ export default function GamePage() {
                       type="button"
                       onClick={handleCollectGold}
                       disabled={(selectedPlacedBuilding.machineGold ?? 0) <= 0 || selectedPlacedBuilding.isUpgrading}
-                      className="rounded-[9px] bg-emerald-400 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-emerald-950 transition hover:-translate-y-0.5 hover:bg-emerald-300 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
+                      className={actionButtonStyles.emerald}
                     >
                       Collect
                     </button>
@@ -1499,7 +1944,7 @@ export default function GamePage() {
                       type="button"
                       onClick={handleCollectAllWoodMachineGold}
                       disabled={selectedPlacedBuilding.isUpgrading}
-                      className="rounded-[9px] bg-yellow-400 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-yellow-950 transition hover:-translate-y-0.5 hover:bg-yellow-300 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
+                      className={actionButtonStyles.amber}
                     >
                       Collect All
                     </button>
@@ -1511,7 +1956,7 @@ export default function GamePage() {
                     type="button"
                     onClick={handleCollectEnergy}
                     disabled={(selectedPlacedBuilding.machineGold ?? 0) <= 0 || selectedPlacedBuilding.isUpgrading}
-                    className="rounded-[9px] bg-cyan-400 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-slate-950 transition hover:-translate-y-0.5 hover:bg-cyan-300 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
+                    className={actionButtonStyles.cyan}
                   >
                     Collect Energy
                   </button>
@@ -1523,7 +1968,7 @@ export default function GamePage() {
                       type="button"
                       onClick={handleHireSoldier}
                       disabled={!canRecruitSoldier}
-                      className="rounded-[9px] bg-violet-500 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-white transition hover:-translate-y-0.5 hover:bg-violet-400 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
+                      className={actionButtonStyles.violet}
                     >
                       Recruit
                     </button>
@@ -1531,7 +1976,7 @@ export default function GamePage() {
                       type="button"
                       onClick={handleRemoveSoldiers}
                       disabled={!canRemoveSoldier || parsedRemoveSoldierCount > (selectedPlacedBuilding.soldierCount ?? 0)}
-                      className="rounded-[9px] bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-white transition hover:-translate-y-0.5 hover:bg-rose-400 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
+                      className={actionButtonStyles.rose}
                     >
                       Remove
                     </button>
@@ -1539,7 +1984,7 @@ export default function GamePage() {
                       type="button"
                       onClick={handleToggleSoldierSleep}
                       disabled={!canToggleSoldierSleep}
-                      className="rounded-[9px] bg-sky-500 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-white transition hover:-translate-y-0.5 hover:bg-sky-400 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
+                      className={actionButtonStyles.sky}
                     >
                       {selectedPlacedBuilding.isSleeping ? "Wake" : "Sleep"}
                     </button>
@@ -1547,7 +1992,7 @@ export default function GamePage() {
                       type="button"
                       onClick={handleFeedSoldiers}
                       disabled={!canFeedSoldiers}
-                      className="rounded-[9px] bg-emerald-400 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-slate-950 transition hover:-translate-y-0.5 hover:bg-emerald-300 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
+                      className={actionButtonStyles.emerald}
                     >
                       Feed
                     </button>
@@ -1560,7 +2005,7 @@ export default function GamePage() {
                       type="button"
                       onClick={handleHireSoldier}
                       disabled={!canRecruitSoldier}
-                      className="rounded-[9px] bg-violet-500 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-white transition hover:-translate-y-0.5 hover:bg-violet-400 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
+                      className={actionButtonStyles.violet}
                     >
                       Recruit
                     </button>
@@ -1568,7 +2013,7 @@ export default function GamePage() {
                       type="button"
                       onClick={handleToggleSoldierSleep}
                       disabled={!canToggleSoldierSleep}
-                      className="rounded-[9px] bg-sky-500 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-white transition hover:-translate-y-0.5 hover:bg-sky-400 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
+                      className={actionButtonStyles.sky}
                     >
                       {selectedPlacedBuilding.isSleeping ? "Wake All" : "Sleep All"}
                     </button>
@@ -1576,7 +2021,7 @@ export default function GamePage() {
                       type="button"
                       onClick={handleFeedSoldiers}
                       disabled={!canFeedSoldiers}
-                      className="rounded-[9px] bg-emerald-400 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-slate-950 transition hover:-translate-y-0.5 hover:bg-emerald-300 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
+                      className={actionButtonStyles.emerald}
                     >
                       Feed All
                     </button>
@@ -1589,7 +2034,7 @@ export default function GamePage() {
                       type="button"
                       onClick={handleRechargeTank}
                       disabled={!canRechargeTank}
-                      className="rounded-[9px] bg-cyan-400 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-slate-950 transition hover:-translate-y-0.5 hover:bg-cyan-300 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
+                      className={actionButtonStyles.cyan}
                     >
                       {(selectedPlacedBuilding.tankShotsRemaining ?? 0) >= (selectedPlacedBuilding.tankMaxShots ?? 10)
                         ? "Tank Full"
@@ -1600,7 +2045,7 @@ export default function GamePage() {
                       type="button"
                       onClick={handleBuyTank}
                       disabled={!canBuyTank}
-                      className="rounded-[9px] bg-cyan-400 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-slate-950 transition hover:-translate-y-0.5 hover:bg-cyan-300 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
+                      className={actionButtonStyles.cyan}
                     >
                       Buy Tank
                     </button>
@@ -1614,7 +2059,7 @@ export default function GamePage() {
                         type="button"
                         onClick={handleRechargeChopper}
                         disabled={!canRechargeChopper}
-                        className="rounded-[9px] bg-cyan-400 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-slate-950 transition hover:-translate-y-0.5 hover:bg-cyan-300 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
+                        className={actionButtonStyles.cyan}
                       >
                         {(selectedPlacedBuilding.chopperShotsRemaining ?? 0) >= (selectedPlacedBuilding.chopperMaxShots ?? 15)
                           ? "Chopper Full"
@@ -1624,7 +2069,7 @@ export default function GamePage() {
                         type="button"
                         onClick={handleSellChopper}
                         disabled={!canSellChopper}
-                        className="rounded-[9px] bg-orange-400 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-slate-950 transition hover:-translate-y-0.5 hover:bg-orange-300 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
+                        className={actionButtonStyles.orange}
                       >
                         Sell Chop
                       </button>
@@ -1634,7 +2079,7 @@ export default function GamePage() {
                       type="button"
                       onClick={handleBuyChopper}
                       disabled={!canBuyChopper}
-                      className="rounded-[9px] bg-cyan-400 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-slate-950 transition hover:-translate-y-0.5 hover:bg-cyan-300 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
+                      className={actionButtonStyles.cyan}
                     >
                       Buy Chop
                     </button>
@@ -1645,7 +2090,7 @@ export default function GamePage() {
                   <button
                     type="button"
                     onClick={handleSellBuilding}
-                    className="rounded-[9px] bg-rose-600 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-white transition hover:-translate-y-0.5 hover:bg-rose-500"
+                    className={actionButtonStyles.rose}
                   >
                     Sell
                   </button>
@@ -1658,18 +2103,55 @@ export default function GamePage() {
 
         <Motion.div
           initial={{ opacity: 0, x: -16 }}
-          animate={{ opacity: 1, x: 0 }}
+          animate={{
+            opacity: 1,
+            x: 0,
+            scale: canStartWar ? [1, 1.03, 1] : 1,
+            boxShadow: canStartWar
+              ? [
+                "0 18px 36px rgba(244,63,94,0.28)",
+                "0 24px 52px rgba(249,115,22,0.42)",
+                "0 18px 36px rgba(244,63,94,0.28)",
+              ]
+              : "0 18px 36px rgba(100,116,139,0.18)",
+          }}
           transition={{ duration: 0.45, delay: 0.12 }}
-          className="pointer-events-none absolute bottom-8 left-4 z-10 sm:bottom-10 sm:left-5"
+          className="pointer-events-none absolute bottom-5 left-1/2 z-20 -translate-x-1/2 md:bottom-10 md:left-5 md:translate-x-0"
         >
-          <button
+          <Motion.button
             type="button"
             onClick={handleStartWar}
             disabled={!canStartWar}
-            className="pointer-events-auto rounded-[1.35rem] border border-rose-300/20 bg-[linear-gradient(135deg,rgba(225,29,72,0.92)_0%,rgba(244,63,94,0.9)_100%)] px-6 py-4 text-sm font-black uppercase tracking-[0.24em] text-white shadow-[0_22px_40px_rgba(190,24,93,0.28)] transition hover:-translate-y-0.5 hover:shadow-[0_26px_50px_rgba(190,24,93,0.36)] disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
+            animate={canStartWar
+              ? {
+                scale: [1, 1.03, 1],
+                boxShadow: [
+                  "0 22px 52px rgba(244,63,94,0.32)",
+                  "0 28px 62px rgba(249,115,22,0.46)",
+                  "0 22px 52px rgba(244,63,94,0.32)",
+                ],
+              }
+              : {
+                scale: 1,
+                boxShadow: "0 16px 34px rgba(100,116,139,0.18)",
+              }}
+            transition={{
+              duration: canStartWar ? 1.8 : 0.2,
+              repeat: canStartWar ? Infinity : 0,
+              ease: "easeInOut",
+            }}
+            whileHover={canStartWar ? { scale: 1.05, y: -3 } : undefined}
+            whileTap={canStartWar ? { scale: 0.97, y: 2 } : undefined}
+            className="pointer-events-auto relative min-h-14 min-w-[14rem] overflow-hidden rounded-[1.45rem] border border-orange-200/26 bg-[linear-gradient(135deg,rgba(239,68,68,0.96)_0%,rgba(249,115,22,0.96)_62%,rgba(251,191,36,0.88)_100%)] px-7 py-4 text-sm font-black uppercase tracking-[0.28em] text-white shadow-[0_22px_52px_rgba(244,63,94,0.32)] transition disabled:cursor-not-allowed disabled:opacity-45 md:min-w-[12rem]"
+            style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 1rem)" }}
           >
-            Start War
-          </button>
+            <span className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.18)_0%,rgba(255,255,255,0)_38%,rgba(127,29,29,0.18)_100%)]" />
+            <span className="absolute inset-[2px] rounded-[1.3rem] border border-white/14" />
+            <span className="relative flex items-center justify-center gap-2">
+              <StrategyIcon icon="war" className="h-[1.05rem] w-[1.05rem]" />
+              Start War
+            </span>
+          </Motion.button>
         </Motion.div>
 
         {hireModalOpen && selectedPlacedBuilding?.type === "tent" ? (

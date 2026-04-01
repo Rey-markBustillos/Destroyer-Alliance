@@ -1026,11 +1026,18 @@ export default class BattleScene extends Phaser.Scene {
     graphics.clear();
 
     if (current <= 0 || max <= 0) {
+      graphics.displayProgress = 0;
       graphics.setVisible(false);
       return;
     }
 
-    const progress = clamp(current / max, 0, 1);
+    const targetProgress = clamp(current / max, 0, 1);
+    const progress = Phaser.Math.Linear(
+      Number.isFinite(graphics.displayProgress) ? graphics.displayProgress : targetProgress,
+      targetProgress,
+      0.24
+    );
+    graphics.displayProgress = progress;
     graphics.fillStyle(colors.back, 0.88);
     graphics.fillRoundedRect(x - graphics.barWidth / 2, y, graphics.barWidth, 7, 4);
     graphics.fillStyle(progress < 0.35 ? 0xef4444 : progress < 0.7 ? 0xf59e0b : colors.fill, 1);
@@ -1570,8 +1577,11 @@ export default class BattleScene extends Phaser.Scene {
       entry.life -= dt;
 
       if (entry.type === "float-text") {
-        entry.display.y -= 24 * dt;
+        entry.display.y -= (entry.riseSpeed ?? 24) * dt;
+        entry.display.x += (entry.driftX ?? 0) * dt;
         entry.display.setAlpha(Math.max(0, entry.life / entry.totalLife));
+        const progress = 1 - (entry.life / entry.totalLife);
+        entry.display.setScale(0.92 + (Math.sin(Math.min(1, progress) * Math.PI) * 0.18));
       } else if (entry.type === "smoke") {
         entry.display.scale += dt * 0.3;
         entry.display.setAlpha(Math.max(0, entry.life / entry.totalLife) * 0.55);
@@ -2023,7 +2033,7 @@ export default class BattleScene extends Phaser.Scene {
   createFloatingText(text, x, y, color = "#ffffff") {
     const display = this.add.text(x, y, text, {
       fontFamily: "Verdana",
-      fontSize: "12px",
+      fontSize: "14px",
       fontStyle: "bold",
       color,
       stroke: "#0f172a",
@@ -2031,12 +2041,16 @@ export default class BattleScene extends Phaser.Scene {
     });
     display.setOrigin(0.5, 0.5);
     display.setDepth(9200);
+    display.setScale(0.9);
+    display.setRotation(Phaser.Math.FloatBetween(-0.04, 0.04));
     this.effectLayer.add(display);
     this.raid.effects.push({
       type: "float-text",
       display,
-      life: 0.8,
-      totalLife: 0.8,
+      life: 0.84,
+      totalLife: 0.84,
+      driftX: Phaser.Math.FloatBetween(-5, 5),
+      riseSpeed: Phaser.Math.FloatBetween(26, 34),
     });
   }
 

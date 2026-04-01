@@ -104,6 +104,9 @@ export default class Building extends Phaser.GameObjects.Container {
     this.isStructure = true;
     this.resourceLabel = null;
     this.resourceIcon = null;
+    this.levelBadge = null;
+    this.levelBadgeBackground = null;
+    this.levelBadgeGlow = null;
     this.levelLabel = null;
     this.skyportSprite = null;
     this.battleTankSprite = null;
@@ -473,22 +476,28 @@ export default class Building extends Phaser.GameObjects.Container {
       this.add(this.builderSprite);
     }
 
-    this.levelLabel = scene.add.text(0, getLevelLabelOffsetY(buildingType.id, roofY), "Lv.1", {
+    this.levelBadge = scene.add.container(0, getLevelLabelOffsetY(buildingType.id, roofY));
+    this.levelBadgeGlow = scene.add.rectangle(0, 0, 46, 13, 0xfde68a, 0.14);
+    this.levelBadgeGlow.setAngle(-6);
+    this.levelBadgeBackground = scene.add.graphics();
+    this.levelLabel = scene.add.text(0, 0, "Lv.1", {
       fontFamily: "Verdana",
-      fontSize: "12px",
+      fontSize: "11px",
       fontStyle: "bold",
-      color: "#fef3c7",
-      stroke: "#422006",
-      strokeThickness: 4,
+      color: "#fefce8",
+      stroke: "#1f2937",
+      strokeThickness: 3,
       align: "center",
     });
     this.levelLabel.setOrigin(0.5, 0.5);
+    this.levelBadge.add([this.levelBadgeGlow, this.levelBadgeBackground, this.levelLabel]);
+    this.refreshLevelBadge();
 
     if (buildingType.id === "town-hall") {
-      this.levelLabel.setVisible(false);
+      this.levelBadge.setVisible(false);
     }
 
-    this.add(this.levelLabel);
+    this.add(this.levelBadge);
 
     this.battleHealthLabel = scene.add.text(0, roofY - roofHeight - 24, "", {
       fontFamily: "Verdana",
@@ -538,6 +547,7 @@ export default class Building extends Phaser.GameObjects.Container {
 
     if (this.levelLabel) {
       this.levelLabel.setText(`Lv.${this.level}`);
+      this.refreshLevelBadge();
     }
   }
 
@@ -589,6 +599,26 @@ export default class Building extends Phaser.GameObjects.Container {
       this.levelLabel.setText(
         this.isUpgrading ? `Lv.${this.level} -> Lv.${this.level + 1}` : `Lv.${this.level}`
       );
+      this.refreshLevelBadge();
+    }
+  }
+
+  refreshLevelBadge() {
+    if (!this.levelBadgeBackground || !this.levelLabel) {
+      return;
+    }
+
+    const badgeWidth = Math.max(48, Math.ceil(this.levelLabel.width + 20));
+    const badgeHeight = 20;
+    this.levelBadgeBackground.clear();
+    this.levelBadgeBackground.fillStyle(this.isUpgrading ? 0x5b3b11 : 0x0f172a, this.isUpgrading ? 0.92 : 0.86);
+    this.levelBadgeBackground.lineStyle(1.2, this.isUpgrading ? 0xfcd34d : 0x67e8f9, this.isUpgrading ? 0.8 : 0.38);
+    this.levelBadgeBackground.fillRoundedRect(-badgeWidth / 2, -badgeHeight / 2, badgeWidth, badgeHeight, 8);
+    this.levelBadgeBackground.strokeRoundedRect(-badgeWidth / 2, -badgeHeight / 2, badgeWidth, badgeHeight, 8);
+
+    if (this.levelBadgeGlow) {
+      this.levelBadgeGlow.setDisplaySize(Math.max(26, badgeWidth - 12), 10);
+      this.levelBadgeGlow.setFillStyle(this.isUpgrading ? 0xf59e0b : 0x22d3ee, this.isUpgrading ? 0.18 : 0.12);
     }
   }
 
