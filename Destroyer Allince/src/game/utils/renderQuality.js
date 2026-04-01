@@ -3,6 +3,57 @@ import Phaser from "phaser";
 export const MAX_RENDER_DEVICE_PIXEL_RATIO = 3;
 export const SHADOW_COLOR = 0x020617;
 export const SHADOW_ANGLE = -6;
+const MOBILE_DEVICE_PATTERN = /Android|webOS|iPhone|iPad|iPod|Mobile|Opera Mini|IEMobile/i;
+
+export const getRenderProfile = () => {
+  const hasWindow = typeof window !== "undefined";
+  const hasNavigator = typeof navigator !== "undefined";
+  const viewportWidth = hasWindow ? Number(window.innerWidth ?? 0) || 0 : 0;
+  const viewportHeight = hasWindow ? Number(window.innerHeight ?? 0) || 0 : 0;
+  const shortEdge = Math.min(
+    viewportWidth || Number.POSITIVE_INFINITY,
+    viewportHeight || Number.POSITIVE_INFINITY
+  );
+  const dpr = hasWindow ? Math.max(1, Number(window.devicePixelRatio ?? 1) || 1) : 1;
+  const hardwareConcurrency = hasNavigator ? Number(navigator.hardwareConcurrency ?? 0) || 0 : 0;
+  const deviceMemory = hasNavigator ? Number(navigator.deviceMemory ?? 0) || 0 : 0;
+  const maxTouchPoints = hasNavigator ? Number(navigator.maxTouchPoints ?? 0) || 0 : 0;
+  const userAgent = hasNavigator ? String(navigator.userAgent ?? "") : "";
+  const isTouchCapable = maxTouchPoints > 0 || (hasWindow && "ontouchstart" in window);
+  const isMobileLike = MOBILE_DEVICE_PATTERN.test(userAgent)
+    || (isTouchCapable && Number.isFinite(shortEdge) && shortEdge <= 900);
+  const lowCpu = hardwareConcurrency > 0 && hardwareConcurrency <= 4;
+  const veryLowCpu = hardwareConcurrency > 0 && hardwareConcurrency <= 2;
+  const lowMemory = deviceMemory > 0 && deviceMemory <= 4;
+  const veryLowMemory = deviceMemory > 0 && deviceMemory <= 2;
+  const heavyHiDpi = dpr >= 2.5;
+  const lowPerformanceDevice = veryLowCpu
+    || veryLowMemory
+    || (isMobileLike && (lowCpu || lowMemory || heavyHiDpi));
+  const ultraLowPerformanceDevice = veryLowCpu || veryLowMemory;
+  const resolutionCap = ultraLowPerformanceDevice
+    ? 1
+    : lowPerformanceDevice
+      ? 1.1
+      : isMobileLike
+        ? 1.35
+        : MAX_RENDER_DEVICE_PIXEL_RATIO;
+
+  return {
+    antialias: !lowPerformanceDevice,
+    antialiasGL: !lowPerformanceDevice,
+    desynchronized: isMobileLike,
+    enableAmbientLighting: !lowPerformanceDevice,
+    enableShadows: !lowPerformanceDevice,
+    fpsMin: lowPerformanceDevice ? 24 : 30,
+    fpsTarget: 60,
+    lowPerformanceDevice,
+    powerPreference: "high-performance",
+    resolution: Math.min(dpr, resolutionCap),
+    shadowAlphaMultiplier: ultraLowPerformanceDevice ? 0 : lowPerformanceDevice ? 0.45 : 1,
+    useShadowBlendMode: !lowPerformanceDevice,
+  };
+};
 
 export const getTextureSourceSize = (scene, textureKey) => {
   const texture = scene?.textures?.get(textureKey);
@@ -82,11 +133,28 @@ export const createSoftShadow = (
     color = SHADOW_COLOR,
   } = {}
 ) => {
-  const shadow = scene.add.ellipse(x, y, width, height, color, alpha);
+  const renderProfile = getRenderProfile();
+
+  if (!renderProfile.enableShadows) {
+    const placeholder = scene.add.zone(x, y, width, height);
+    placeholder.setDepth(-1);
+    return placeholder;
+  }
+
+  const shadow = scene.add.ellipse(
+    x,
+    y,
+    width,
+    height,
+    color,
+    Math.max(0, alpha * renderProfile.shadowAlphaMultiplier)
+  );
   shadow.setAngle(angle);
   shadow.setScale(1, 0.82);
   shadow.setDepth(-1);
-  shadow.setBlendMode(Phaser.BlendModes.MULTIPLY);
+  if (renderProfile.useShadowBlendMode) {
+    shadow.setBlendMode(Phaser.BlendModes.MULTIPLY);
+  }
   return shadow;
 };
 
@@ -101,6 +169,12 @@ export const createAmbientWorldLighting = (
     depth = -80,
   }
 ) => {
+  const renderProfile = getRenderProfile();
+
+  if (!renderProfile.enableAmbientLighting) {
+    return null;
+  }
+
   const container = scene.add.container(0, 0);
   container.setDepth(depth);
 
@@ -123,10 +197,18 @@ export const applyCanvasQuality = (game) => {
     return;
   }
 
+  const renderProfile = getRenderProfile();
+
   canvas.style.imageRendering = "auto";
   canvas.style.display = "block";
   canvas.style.width = "100%";
   canvas.style.height = "100%";
   canvas.style.transform = "translateZ(0)";
   canvas.style.backfaceVisibility = "hidden";
+  canvas.style.willChange = "transform";
+  canvas.style.touchAction = "manipulation";
+
+  if (renderProfile.lowPerformanceDevice) {
+    canvas.style.filter = "none";
+  }
 };

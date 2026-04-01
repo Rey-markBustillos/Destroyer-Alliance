@@ -210,12 +210,14 @@ export default function ProfilePage() {
           ? "absolute inset-0 z-30 flex items-center justify-center bg-slate-950/12 px-2 py-2 text-white backdrop-blur-[2px]"
           : "min-h-screen px-2 py-2 text-white"
       }
+      onClick={isOverlay ? handleClose : undefined}
     >
       <div className="mx-auto w-full max-w-184">
         <div
           className={`rounded-xl border border-emerald-500/30 p-2 shadow-2xl ${
             isOverlay ? "bg-slate-900/88" : "bg-slate-900/80"
           }`}
+          onClick={isOverlay ? (event) => event.stopPropagation() : undefined}
         >
           <div className="flex items-center justify-between">
             <div>

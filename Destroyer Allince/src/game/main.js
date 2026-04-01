@@ -7,7 +7,7 @@ import BattleScene from "./scenes/BattleScene";
 import UIScene from "./scenes/UIScene";
 import { GAME_HEIGHT, GAME_WIDTH } from "./utils/config";
 import { GAME_RENDER_CONFIG } from "./tilemap/layoutConfig";
-import { applyCanvasQuality } from "./utils/renderQuality";
+import { applyCanvasQuality, getRenderProfile } from "./utils/renderQuality";
 import soundManager from "../services/soundManager";
 
 const phaserConfig = {
@@ -38,6 +38,7 @@ const phaserConfig = {
 
 export const createGame = (parentElement, options = {}) => {
 	soundManager.preloadBackgroundMusic();
+	const renderProfile = getRenderProfile();
 
 	const existingCanvas = parentElement.querySelector("canvas");
 	if (existingCanvas) {
@@ -52,7 +53,18 @@ export const createGame = (parentElement, options = {}) => {
 
 	const game = new Phaser.Game({
 		...phaserConfig,
+		antialias: renderProfile.antialias,
+		antialiasGL: renderProfile.antialiasGL,
 		parent: parentElement,
+		resolution: renderProfile.resolution,
+		desynchronized: renderProfile.desynchronized,
+		fps: {
+			target: renderProfile.fpsTarget,
+			min: renderProfile.fpsMin,
+			forceSetTimeOut: false,
+			smoothStep: !renderProfile.lowPerformanceDevice,
+		},
+		powerPreference: renderProfile.powerPreference,
 		scene: scenes,
 	});
 

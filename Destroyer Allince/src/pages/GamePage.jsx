@@ -74,9 +74,9 @@ function HudMetric({ label, value, tone = "emerald" }) {
   }[tone];
 
   return (
-    <div className={`min-w-0 rounded-[0.7rem] border px-1 py-1 backdrop-blur-md sm:rounded-[0.8rem] sm:px-1.5 sm:py-1.5 ${toneClass}`}>
-      <p className="text-[0.34rem] uppercase tracking-[0.14em] text-white/70 sm:text-[0.42rem] sm:tracking-[0.2em]">{label}</p>
-      <p className="mt-0.5 text-[0.68rem] font-black leading-none tracking-tight sm:text-[0.8rem]">{value}</p>
+    <div className={`min-w-0 rounded-[0.64rem] border px-1 py-0.5 backdrop-blur-md min-[901px]:rounded-[0.8rem] min-[901px]:px-1.5 min-[901px]:py-1.5 ${toneClass}`}>
+      <p className="text-[0.32rem] uppercase tracking-[0.12em] text-white/70 min-[901px]:text-[0.42rem] min-[901px]:tracking-[0.2em]">{label}</p>
+      <p className="mt-0.5 text-[0.62rem] font-black leading-none tracking-tight min-[901px]:text-[0.8rem]">{value}</p>
     </div>
   );
 }
@@ -141,7 +141,7 @@ function CommandButton({ children, className = "", ...props }) {
   return (
     <button
       {...props}
-      className={`rounded-xl px-2 py-1.5 text-[8px] leading-tight font-bold uppercase tracking-[0.08em] transition duration-200 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50 sm:rounded-2xl sm:px-4 sm:py-3 sm:text-sm sm:tracking-[0.16em] ${className}`}
+      className={`rounded-lg px-1.5 py-1 text-[8px] leading-tight font-bold uppercase tracking-[0.06em] transition duration-200 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50 min-[901px]:rounded-2xl min-[901px]:px-4 min-[901px]:py-3 min-[901px]:text-sm min-[901px]:tracking-[0.16em] ${className}`}
     >
       {children}
     </button>
@@ -154,6 +154,7 @@ export default function GamePage() {
   const gameRootRef = useRef(null);
   const gameRef = useRef(null);
   const chatSocketRef = useRef(null);
+  const musicPanelRef = useRef(null);
   const backendRetryAfterRef = useRef(0);
   const backendWarningShownRef = useRef(false);
   const activeSession = getSession();
@@ -216,6 +217,28 @@ export default function GamePage() {
       window.clearInterval(timer);
     };
   }, []);
+
+  useEffect(() => {
+    if (!musicPanelOpen) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event) => {
+      if (musicPanelRef.current?.contains(event.target)) {
+        return;
+      }
+
+      setMusicPanelOpen(false);
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("touchstart", handlePointerDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("touchstart", handlePointerDown);
+    };
+  }, [musicPanelOpen]);
 
   useEffect(() => {
     const unsubscribe = soundManager.subscribe((status) => {
@@ -1170,15 +1193,15 @@ export default function GamePage() {
           initial={{ opacity: 0, y: -18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="pointer-events-none absolute inset-x-0 top-0 z-10 p-2 sm:p-4"
+          className="pointer-events-none absolute inset-x-0 top-0 z-10 p-2 min-[901px]:p-4"
         >
-          <div className="flex items-start justify-between gap-2 sm:gap-3">
-            <div className="pointer-events-none flex w-[4.45rem] flex-col gap-0.5 sm:w-[6.7rem]">
-              <div className="rounded-[0.7rem] border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.56)_0%,rgba(15,23,42,0.38)_100%)] px-1 py-1 text-white backdrop-blur-sm sm:rounded-[0.8rem] sm:px-1.5 sm:py-1.5">
-                <p className="text-[0.34rem] uppercase tracking-[0.2em] text-emerald-300/75 sm:text-[0.42rem] sm:tracking-[0.26em]">Base</p>
-                <p className="mt-0.5 text-[0.62rem] font-black leading-tight text-white sm:mt-1 sm:text-[0.7rem]">{profileName}</p>
-                <p className="mt-0.5 text-[0.32rem] uppercase tracking-[0.08em] text-slate-100/90 sm:text-[0.4rem] sm:tracking-[0.1em]">{profileId}</p>
-                <p className="mt-0.5 text-[0.32rem] uppercase tracking-[0.14em] text-amber-200/90 sm:text-[0.4rem] sm:tracking-[0.2em]">{profileRank}</p>
+          <div className="flex items-start justify-between gap-1.5 min-[901px]:gap-3">
+            <div className="pointer-events-none flex w-[4rem] flex-col gap-0.5 min-[901px]:w-[6.7rem]">
+              <div className="rounded-[0.64rem] border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.56)_0%,rgba(15,23,42,0.38)_100%)] px-1 py-0.75 text-white backdrop-blur-sm min-[901px]:rounded-[0.8rem] min-[901px]:px-1.5 min-[901px]:py-1.5">
+                <p className="text-[0.32rem] uppercase tracking-[0.14em] text-emerald-300/75 min-[901px]:text-[0.42rem] min-[901px]:tracking-[0.26em]">Base</p>
+                <p className="mt-0.5 text-[0.56rem] font-black leading-tight text-white min-[901px]:mt-1 min-[901px]:text-[0.7rem]">{profileName}</p>
+                <p className="mt-0.5 text-[0.3rem] uppercase tracking-[0.05em] text-slate-100/90 min-[901px]:text-[0.4rem] min-[901px]:tracking-[0.1em]">{profileId}</p>
+                <p className="mt-0.5 text-[0.3rem] uppercase tracking-[0.1em] text-amber-200/90 min-[901px]:text-[0.4rem] min-[901px]:tracking-[0.2em]">{profileRank}</p>
               </div>
 
               <HudMetric label="Gold" value={formatCompactNumber(gameState.gold)} tone="emerald" />
@@ -1200,35 +1223,35 @@ export default function GamePage() {
               ) : null}
             </div>
 
-            <div className="pointer-events-auto grid w-[min(15rem,calc(100vw-5.55rem))] grid-cols-3 gap-1 sm:flex sm:w-auto sm:max-w-none sm:gap-1.5 sm:flex-nowrap">
+            <div className="pointer-events-auto grid w-[min(12.5rem,calc(100vw-4.9rem))] grid-cols-3 gap-1 min-[901px]:flex min-[901px]:w-auto min-[901px]:max-w-none min-[901px]:gap-1.5 min-[901px]:flex-nowrap">
               <CommandButton
                 onClick={() => setChatOpen((open) => !open)}
-                className="min-h-8 border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-1.5 py-1 text-[8px] tracking-[0.06em] text-emerald-50 backdrop-blur-sm hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)] sm:min-h-0 sm:px-2.5 sm:py-3 sm:text-[10px] sm:tracking-[0.16em]"
+                className="min-h-7 border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-1 py-0.75 text-[7px] tracking-[0.04em] text-emerald-50 backdrop-blur-sm hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)] min-[901px]:min-h-0 min-[901px]:px-2.5 min-[901px]:py-3 min-[901px]:text-[10px] min-[901px]:tracking-[0.16em]"
               >
                 Chat {onlineCount > 0 ? `(${onlineCount})` : ""}
               </CommandButton>
               <CommandButton
                 onClick={handleOpenLeaderboard}
-                className="min-h-8 border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-1.5 py-1 text-[8px] tracking-[0.05em] text-amber-50 backdrop-blur-sm hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)] sm:min-h-0 sm:px-2.5 sm:py-3 sm:text-[10px] sm:tracking-[0.16em]"
+                className="min-h-7 border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-1 py-0.75 text-[7px] tracking-[0.04em] text-amber-50 backdrop-blur-sm hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)] min-[901px]:min-h-0 min-[901px]:px-2.5 min-[901px]:py-3 min-[901px]:text-[10px] min-[901px]:tracking-[0.16em]"
               >
                 Leaderboard
               </CommandButton>
               <CommandButton
                 onClick={() => navigate("/profile", { state: { backgroundLocation: location } })}
-                className="min-h-8 border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-1.5 py-1 text-[8px] tracking-[0.06em] text-sky-50 backdrop-blur-sm hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)] sm:min-h-0 sm:px-2.5 sm:py-3 sm:text-[10px] sm:tracking-[0.16em]"
+                className="min-h-7 border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-1 py-0.75 text-[7px] tracking-[0.04em] text-sky-50 backdrop-blur-sm hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)] min-[901px]:min-h-0 min-[901px]:px-2.5 min-[901px]:py-3 min-[901px]:text-[10px] min-[901px]:tracking-[0.16em]"
               >
                 Profile
               </CommandButton>
               <CommandButton
                 onClick={() => setShopOpen((open) => !open)}
-                className="min-h-8 border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-1.5 py-1 text-[8px] tracking-[0.05em] text-white backdrop-blur-sm hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)] sm:min-h-0 sm:px-2.5 sm:py-3 sm:text-[10px] sm:tracking-[0.16em]"
+                className="min-h-7 border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-1 py-0.75 text-[7px] tracking-[0.04em] text-white backdrop-blur-sm hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)] min-[901px]:min-h-0 min-[901px]:px-2.5 min-[901px]:py-3 min-[901px]:text-[10px] min-[901px]:tracking-[0.16em]"
               >
                 {shopOpen ? "Hide Shop" : "Open Shop"}
               </CommandButton>
-              <div className="relative">
+              <div ref={musicPanelRef} className="relative">
                 <CommandButton
                   onClick={handleToggleMusicPanel}
-                  className="min-h-8 border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-1.5 py-1 text-[8px] tracking-[0.05em] text-violet-100 backdrop-blur-sm hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)] sm:min-h-0 sm:px-2.5 sm:py-3 sm:text-[10px] sm:tracking-[0.16em]"
+                  className="min-h-7 border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-1 py-0.75 text-[7px] tracking-[0.04em] text-violet-100 backdrop-blur-sm hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)] min-[901px]:min-h-0 min-[901px]:px-2.5 min-[901px]:py-3 min-[901px]:text-[10px] min-[901px]:tracking-[0.16em]"
                 >
                   Music
                 </CommandButton>
@@ -1738,13 +1761,19 @@ export default function GamePage() {
         ) : null}
 
         {leaderboardOpen ? (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs">
-            <div className="w-full max-w-120 rounded-[1.4rem] border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.88)_0%,rgba(15,23,42,0.74)_100%)] p-4 text-white shadow-[0_20px_60px_rgba(2,6,23,0.34)]">
-              <div className="flex items-start justify-between gap-4">
+          <div
+            className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs"
+            onClick={() => setLeaderboardOpen(false)}
+          >
+            <div
+              className="w-full max-w-[26rem] rounded-[1rem] border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.88)_0%,rgba(15,23,42,0.74)_100%)] p-3 text-white shadow-[0_20px_60px_rgba(2,6,23,0.34)] min-[901px]:max-w-120 min-[901px]:rounded-[1.4rem] min-[901px]:p-4"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-2 min-[901px]:gap-4">
                 <div>
-                  <p className="text-[0.68rem] uppercase tracking-[0.3em] text-amber-300/70">Leaderboard</p>
-                  <h3 className="mt-1 text-lg font-black">Top Commanders</h3>
-                  <p className="mt-1 text-xs text-slate-400">
+                  <p className="text-[0.56rem] uppercase tracking-[0.2em] text-amber-300/70 min-[901px]:text-[0.68rem] min-[901px]:tracking-[0.3em]">Leaderboard</p>
+                  <h3 className="mt-1 text-base font-black min-[901px]:text-lg">Top Commanders</h3>
+                  <p className="mt-1 text-[11px] leading-tight text-slate-400 min-[901px]:text-xs">
                     Rank, soldiers, tanks, and choppers per player.
                   </p>
                 </div>
@@ -1752,25 +1781,25 @@ export default function GamePage() {
                 <button
                   type="button"
                   onClick={() => setLeaderboardOpen(false)}
-                  className="rounded-2xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10"
+                  className="rounded-xl border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-slate-200 transition hover:bg-white/10 min-[901px]:rounded-2xl min-[901px]:px-3 min-[901px]:py-1.5 min-[901px]:text-xs"
                 >
                   Close
                 </button>
               </div>
 
               {leaderboardState.currentPlayerRank ? (
-                <p className="mt-3 text-xs font-semibold text-amber-200">
+                <p className="mt-2 text-[11px] font-semibold text-amber-200 min-[901px]:mt-3 min-[901px]:text-xs">
                   Your Rank: #{leaderboardState.currentPlayerRank}
                 </p>
               ) : null}
 
               {leaderboardState.loading ? (
-                <p className="mt-4 text-sm text-slate-300">Loading leaderboard...</p>
+                <p className="mt-3 text-xs text-slate-300 min-[901px]:mt-4 min-[901px]:text-sm">Loading leaderboard...</p>
               ) : leaderboardState.error ? (
-                <p className="mt-4 text-sm font-semibold text-rose-300">{leaderboardState.error}</p>
+                <p className="mt-3 text-xs font-semibold text-rose-300 min-[901px]:mt-4 min-[901px]:text-sm">{leaderboardState.error}</p>
               ) : (
-                <div className="mt-4 max-h-96 overflow-y-auto rounded-2xl border border-white/8 bg-slate-950/45">
-                  <div className="grid grid-cols-[3rem_minmax(0,1fr)_3.6rem_3.6rem_3.8rem] gap-2 border-b border-white/8 px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                <div className="mt-3 max-h-[58vh] overflow-y-auto rounded-xl border border-white/8 bg-slate-950/45 min-[901px]:mt-4 min-[901px]:max-h-96 min-[901px]:rounded-2xl">
+                  <div className="grid grid-cols-[2.4rem_minmax(0,1fr)_2.5rem_2.5rem_2.9rem] gap-1 border-b border-white/8 px-2 py-1.5 text-[8px] font-black uppercase tracking-[0.1em] text-slate-400 min-[901px]:grid-cols-[3rem_minmax(0,1fr)_3.6rem_3.6rem_3.8rem] min-[901px]:gap-2 min-[901px]:px-3 min-[901px]:py-2 min-[901px]:text-[10px] min-[901px]:tracking-[0.18em]">
                     <span>Rank</span>
                     <span>Player</span>
                     <span>Soldier</span>
@@ -1781,12 +1810,12 @@ export default function GamePage() {
                   {leaderboardState.entries.map((entry) => (
                     <div
                       key={entry.id}
-                      className="grid grid-cols-[3rem_minmax(0,1fr)_3.6rem_3.6rem_3.8rem] gap-2 border-b border-white/6 px-3 py-2 text-xs last:border-b-0"
+                      className="grid grid-cols-[2.4rem_minmax(0,1fr)_2.5rem_2.5rem_2.9rem] gap-1 border-b border-white/6 px-2 py-1.5 text-[10px] last:border-b-0 min-[901px]:grid-cols-[3rem_minmax(0,1fr)_3.6rem_3.6rem_3.8rem] min-[901px]:gap-2 min-[901px]:px-3 min-[901px]:py-2 min-[901px]:text-xs"
                     >
                       <span className="font-black text-amber-200">#{entry.rank}</span>
                       <div className="min-w-0">
                         <p className="truncate font-bold text-white">{entry.name}</p>
-                        <p className="truncate text-[10px] text-slate-400">
+                        <p className="truncate text-[8px] text-slate-400 min-[901px]:text-[10px]">
                           {entry.rankName} • {entry.warPoints} WP
                         </p>
                       </div>
@@ -1797,7 +1826,7 @@ export default function GamePage() {
                   ))}
 
                   {!leaderboardState.entries.length ? (
-                    <p className="px-3 py-4 text-sm text-slate-400">No players found.</p>
+                    <p className="px-3 py-4 text-xs text-slate-400 min-[901px]:text-sm">No players found.</p>
                   ) : null}
                 </div>
               )}
@@ -1806,39 +1835,45 @@ export default function GamePage() {
         ) : null}
 
         {chatOpen ? (
-          <div className="pointer-events-none absolute bottom-20 left-2 right-2 z-20 flex justify-end sm:bottom-4 sm:left-auto sm:right-4 sm:w-full sm:max-w-88">
-            <div className="pointer-events-auto w-full rounded-[1.2rem] border border-white/12 bg-[linear-gradient(180deg,rgba(15,23,42,0.9)_0%,rgba(15,23,42,0.78)_100%)] p-3 text-white shadow-[0_18px_50px_rgba(2,6,23,0.34)] backdrop-blur-xl">
-              <div className="flex items-start justify-between gap-4">
+          <div
+            className="absolute inset-0 z-20 flex justify-end p-2 min-[901px]:p-4"
+            onClick={() => setChatOpen(false)}
+          >
+            <div
+              className="mt-auto mb-16 w-full max-w-[20rem] rounded-[1rem] border border-white/12 bg-[linear-gradient(180deg,rgba(15,23,42,0.9)_0%,rgba(15,23,42,0.78)_100%)] p-2.5 text-white shadow-[0_18px_50px_rgba(2,6,23,0.34)] backdrop-blur-xl min-[901px]:mb-4 min-[901px]:max-w-88 min-[901px]:rounded-[1.2rem] min-[901px]:p-3"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-2 min-[901px]:gap-4">
                 <div>
-                  <p className="text-[0.65rem] uppercase tracking-[0.26em] text-emerald-300/70">Live Chat</p>
-                  <h3 className="mt-1 text-base font-black">Online: {onlineCount}</h3>
+                  <p className="text-[0.56rem] uppercase tracking-[0.18em] text-emerald-300/70 min-[901px]:text-[0.65rem] min-[901px]:tracking-[0.26em]">Live Chat</p>
+                  <h3 className="mt-1 text-sm font-black min-[901px]:text-base">Online: {onlineCount}</h3>
                 </div>
 
                 <button
                   type="button"
                   onClick={() => setChatOpen(false)}
-                  className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-slate-200 transition hover:bg-white/10"
+                  className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-semibold text-slate-200 transition hover:bg-white/10 min-[901px]:rounded-xl min-[901px]:px-3 min-[901px]:py-1.5 min-[901px]:text-[11px]"
                 >
                   Close
                 </button>
               </div>
 
-              <div className="mt-3 h-72 overflow-y-auto rounded-2xl border border-white/8 bg-slate-950/45 px-3 py-2">
+              <div className="mt-2.5 h-52 overflow-y-auto rounded-xl border border-white/8 bg-slate-950/45 px-2.5 py-2 min-[901px]:mt-3 min-[901px]:h-72 min-[901px]:rounded-2xl min-[901px]:px-3">
                 {chatMessages.length ? (
                   chatMessages.map((message) => (
                     <div key={message.id} className="mb-2 last:mb-0">
-                      <p className="text-[10px] font-black uppercase tracking-[0.12em] text-emerald-200">
+                      <p className="text-[9px] font-black uppercase tracking-[0.08em] text-emerald-200 min-[901px]:text-[10px] min-[901px]:tracking-[0.12em]">
                         {message.name}
                       </p>
-                      <p className="mt-0.5 wrap-break-word text-sm text-slate-100">{message.text}</p>
+                      <p className="mt-0.5 wrap-break-word text-[12px] leading-tight text-slate-100 min-[901px]:text-sm">{message.text}</p>
                     </div>
                   ))
                 ) : (
-                  <p className="text-sm text-slate-400">No messages yet.</p>
+                  <p className="text-xs text-slate-400 min-[901px]:text-sm">No messages yet.</p>
                 )}
               </div>
 
-              <div className="mt-3 flex gap-2">
+              <div className="mt-2.5 flex gap-1.5 min-[901px]:mt-3 min-[901px]:gap-2">
                 <input
                   type="text"
                   value={chatInput}
@@ -1849,12 +1884,12 @@ export default function GamePage() {
                     }
                   }}
                   placeholder="Type message..."
-                  className="min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2 text-sm text-white outline-none transition focus:border-emerald-400"
+                  className="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-950/70 px-2.5 py-1.5 text-[12px] text-white outline-none transition focus:border-emerald-400 min-[901px]:rounded-xl min-[901px]:px-3 min-[901px]:py-2 min-[901px]:text-sm"
                 />
                 <button
                   type="button"
                   onClick={handleSendChat}
-                  className="rounded-xl bg-emerald-400 px-4 py-2 text-sm font-black uppercase tracking-[0.12em] text-slate-950 transition hover:bg-emerald-300"
+                  className="rounded-lg bg-emerald-400 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.08em] text-slate-950 transition hover:bg-emerald-300 min-[901px]:rounded-xl min-[901px]:px-4 min-[901px]:py-2 min-[901px]:text-sm min-[901px]:tracking-[0.12em]"
                 >
                   Send
                 </button>
@@ -1868,29 +1903,32 @@ export default function GamePage() {
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 18 }}
-            className="absolute inset-x-0 bottom-16 z-10 p-2 sm:bottom-0 sm:p-4"
+            className="absolute inset-0 z-10 flex items-end p-2 min-[901px]:p-4"
+            onClick={() => setShopOpen(false)}
           >
-            <BuildingShop
-              gold={gameState.gold}
-              townHallLevel={gameState.townHallLevel}
-              woodMachineCount={gameState.woodMachines}
-              woodMachineLimit={gameState.woodMachineLimit}
-              energyMachineCount={gameState.energyMachines}
-              energyMachineLimit={gameState.energyMachineLimit}
-              commandCenterCount={gameState.commandCenters}
-              commandCenterLimit={gameState.commandCenterLimit}
-              tentCount={gameState.tents}
-              tentLimit={gameState.tentLimit}
-              battleTankCount={gameState.battleTankBuildings}
-              battleTankLimit={gameState.battleTankLimit}
-              skyportCount={gameState.skyports}
-              skyportLimit={gameState.skyportLimit}
-              airDefenseCount={gameState.airDefenseBuildings}
-              airDefenseLimit={gameState.airDefenseLimit}
-              onSelectBuilding={handleSelectBuilding}
-              selectedBuilding={selectedBuilding}
-              onClose={() => setShopOpen(false)}
-            />
+            <div className="w-full" onClick={(event) => event.stopPropagation()}>
+              <BuildingShop
+                gold={gameState.gold}
+                townHallLevel={gameState.townHallLevel}
+                woodMachineCount={gameState.woodMachines}
+                woodMachineLimit={gameState.woodMachineLimit}
+                energyMachineCount={gameState.energyMachines}
+                energyMachineLimit={gameState.energyMachineLimit}
+                commandCenterCount={gameState.commandCenters}
+                commandCenterLimit={gameState.commandCenterLimit}
+                tentCount={gameState.tents}
+                tentLimit={gameState.tentLimit}
+                battleTankCount={gameState.battleTankBuildings}
+                battleTankLimit={gameState.battleTankLimit}
+                skyportCount={gameState.skyports}
+                skyportLimit={gameState.skyportLimit}
+                airDefenseCount={gameState.airDefenseBuildings}
+                airDefenseLimit={gameState.airDefenseLimit}
+                onSelectBuilding={handleSelectBuilding}
+                selectedBuilding={selectedBuilding}
+                onClose={() => setShopOpen(false)}
+              />
+            </div>
           </Motion.div>
         ) : null}
 
