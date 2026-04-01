@@ -1,9 +1,9 @@
-const CACHE_NAME = "destroyer-alliance-v1";
+const CACHE_NAME = "destroyer-alliance-v2";
 const APP_SHELL = [
   "/",
   "/index.html",
   "/manifest.webmanifest",
-  "/favicon.svg",
+  "/pwa/icon-32.png",
   "/pwa/icon-180.png",
   "/pwa/icon-192.png",
   "/pwa/icon-512.png",
