@@ -15,6 +15,8 @@ const MAP_ROWS = 15;
 const MAP_COLS = 15;
 const STARTING_GOLD = 1200;
 const MIN_ZOOM_FLOOR = 0.55;
+const TABLET_MIN_ZOOM_FLOOR = 0.64;
+const MOBILE_MIN_ZOOM_FLOOR = 0.8;
 const MAX_ZOOM = 2.2;
 const ZOOM_STEP = 0.1;
 const CAMERA_EDGE_SCROLL_MARGIN = 56;
@@ -141,6 +143,20 @@ const getCameraSafeBounds = (scene) => {
   };
 };
 
+const getResponsiveMinZoomFloor = (scene) => {
+  const viewportWidth = Number(scene?.scale?.width ?? 1280) || 1280;
+
+  if (viewportWidth <= 480) {
+    return MOBILE_MIN_ZOOM_FLOOR;
+  }
+
+  if (viewportWidth <= 768) {
+    return TABLET_MIN_ZOOM_FLOOR;
+  }
+
+  return MIN_ZOOM_FLOOR;
+};
+
 const getSixteenBySixteenViewZoom = (scene) => {
   const viewportWidth = Number(scene?.scale?.width ?? 1280) || 1280;
   const viewportHeight = Number(scene?.scale?.height ?? 720) || 720;
@@ -160,7 +176,7 @@ const getSixteenBySixteenViewZoom = (scene) => {
   );
   const resolvedZoom = Math.max(requestedZoom, mapCoverZoom * CAMERA_COVER_ZOOM_GUARD);
 
-  return Phaser.Math.Clamp(resolvedZoom, MIN_ZOOM_FLOOR, MAX_ZOOM);
+  return Phaser.Math.Clamp(resolvedZoom, getResponsiveMinZoomFloor(scene), MAX_ZOOM);
 };
 
 export default class GameScene extends Phaser.Scene {

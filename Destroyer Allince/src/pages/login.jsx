@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion as Motion } from "framer-motion";
 
 import AuthLoadingScreen, { primeAuthLoadingScreen } from "../components/AuthLoadingScreen";
+import PwaInstallButton from "../components/PwaInstallButton";
 import { login } from "../services/auth";
 import { markWelcomeBackPending, saveSession } from "../services/session";
 
@@ -337,6 +338,10 @@ export default function Login() {
                   Login
                 </Motion.span>
               </Motion.button>
+
+              <div className="relative mt-3 flex justify-center">
+                <PwaInstallButton className="min-h-11 rounded-2xl border border-sky-300/20 bg-sky-400/10 px-4 py-3 text-[11px] font-bold uppercase tracking-[0.18em] text-sky-100 transition duration-200 hover:-translate-y-0.5 hover:bg-sky-400/18" />
+              </div>
 
               <p className="mt-5 text-center text-sm text-slate-300">
                 Don&apos;t have an account?{" "}

@@ -3,7 +3,7 @@ import { AnimatePresence, motion as Motion } from "framer-motion";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import BuildingShop from "../components/BuildingShop";
-import PwaInstallButton from "../components/PwaInstallButton";
+import MobileLandscapePrompt from "../components/MobileLandscapePrompt";
 import { createGame, destroyGame } from "../game/main";
 import { getBuildingUpgradeCost } from "../game/utils/buildingTypes";
 import { createBattleSocket } from "../services/battleSocket";
@@ -74,9 +74,9 @@ function HudMetric({ label, value, tone = "emerald" }) {
   }[tone];
 
   return (
-    <div className={`min-w-0 rounded-[0.8rem] border px-1.5 py-1.5 backdrop-blur-md ${toneClass}`}>
-      <p className="text-[0.42rem] uppercase tracking-[0.2em] text-white/70">{label}</p>
-      <p className="mt-0.5 text-[0.8rem] font-black leading-none tracking-tight">{value}</p>
+    <div className={`min-w-0 rounded-[0.7rem] border px-1 py-1 backdrop-blur-md sm:rounded-[0.8rem] sm:px-1.5 sm:py-1.5 ${toneClass}`}>
+      <p className="text-[0.34rem] uppercase tracking-[0.14em] text-white/70 sm:text-[0.42rem] sm:tracking-[0.2em]">{label}</p>
+      <p className="mt-0.5 text-[0.68rem] font-black leading-none tracking-tight sm:text-[0.8rem]">{value}</p>
     </div>
   );
 }
@@ -141,7 +141,7 @@ function CommandButton({ children, className = "", ...props }) {
   return (
     <button
       {...props}
-      className={`rounded-2xl px-2.5 py-2 text-[10px] font-bold uppercase tracking-[0.12em] transition duration-200 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50 sm:px-4 sm:py-3 sm:text-sm sm:tracking-[0.16em] ${className}`}
+      className={`rounded-xl px-2 py-1.5 text-[8px] leading-tight font-bold uppercase tracking-[0.08em] transition duration-200 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50 sm:rounded-2xl sm:px-4 sm:py-3 sm:text-sm sm:tracking-[0.16em] ${className}`}
     >
       {children}
     </button>
@@ -1164,21 +1164,21 @@ export default function GamePage() {
 
   return (
     <main className="font-black-ops min-h-screen bg-[#243322] text-slate-950">
-      <section className="relative h-screen w-full overflow-hidden bg-[#243322]">
+      <section className="relative h-[100dvh] min-h-screen w-full overflow-hidden bg-[#243322]">
 
         <Motion.div
           initial={{ opacity: 0, y: -18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="pointer-events-none absolute inset-x-0 top-0 z-10 p-3 sm:p-4"
+          className="pointer-events-none absolute inset-x-0 top-0 z-10 p-2 sm:p-4"
         >
-          <div className="flex items-start justify-between gap-3">
-            <div className="pointer-events-none flex w-[5.75rem] flex-col gap-0.5 sm:w-[6.7rem]">
-              <div className="rounded-[0.8rem] border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.56)_0%,rgba(15,23,42,0.38)_100%)] px-1.5 py-1.5 text-white backdrop-blur-sm">
-                <p className="text-[0.42rem] uppercase tracking-[0.26em] text-emerald-300/75">Base</p>
-                <p className="mt-1 text-[0.7rem] font-black leading-tight text-white">{profileName}</p>
-                <p className="mt-0.5 text-[0.4rem] uppercase tracking-[0.1em] text-slate-100/90">{profileId}</p>
-                <p className="mt-0.5 text-[0.4rem] uppercase tracking-[0.2em] text-amber-200/90">{profileRank}</p>
+          <div className="flex items-start justify-between gap-2 sm:gap-3">
+            <div className="pointer-events-none flex w-[4.45rem] flex-col gap-0.5 sm:w-[6.7rem]">
+              <div className="rounded-[0.7rem] border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.56)_0%,rgba(15,23,42,0.38)_100%)] px-1 py-1 text-white backdrop-blur-sm sm:rounded-[0.8rem] sm:px-1.5 sm:py-1.5">
+                <p className="text-[0.34rem] uppercase tracking-[0.2em] text-emerald-300/75 sm:text-[0.42rem] sm:tracking-[0.26em]">Base</p>
+                <p className="mt-0.5 text-[0.62rem] font-black leading-tight text-white sm:mt-1 sm:text-[0.7rem]">{profileName}</p>
+                <p className="mt-0.5 text-[0.32rem] uppercase tracking-[0.08em] text-slate-100/90 sm:text-[0.4rem] sm:tracking-[0.1em]">{profileId}</p>
+                <p className="mt-0.5 text-[0.32rem] uppercase tracking-[0.14em] text-amber-200/90 sm:text-[0.4rem] sm:tracking-[0.2em]">{profileRank}</p>
               </div>
 
               <HudMetric label="Gold" value={formatCompactNumber(gameState.gold)} tone="emerald" />
@@ -1200,38 +1200,35 @@ export default function GamePage() {
               ) : null}
             </div>
 
-            <div className="pointer-events-auto flex max-w-[calc(100vw-7rem)] flex-wrap justify-end gap-1 sm:max-w-none sm:gap-1.5 sm:flex-nowrap">
+            <div className="pointer-events-auto grid w-[min(15rem,calc(100vw-5.55rem))] grid-cols-3 gap-1 sm:flex sm:w-auto sm:max-w-none sm:gap-1.5 sm:flex-nowrap">
               <CommandButton
                 onClick={() => setChatOpen((open) => !open)}
-                className="min-h-9 rounded-xl border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-2 py-1.5 text-[9px] tracking-[0.1em] text-emerald-50 backdrop-blur-sm hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)] sm:min-h-0 sm:rounded-2xl sm:px-2.5 sm:py-3 sm:text-[10px] sm:tracking-[0.16em]"
+                className="min-h-8 border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-1.5 py-1 text-[8px] tracking-[0.06em] text-emerald-50 backdrop-blur-sm hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)] sm:min-h-0 sm:px-2.5 sm:py-3 sm:text-[10px] sm:tracking-[0.16em]"
               >
                 Chat {onlineCount > 0 ? `(${onlineCount})` : ""}
               </CommandButton>
               <CommandButton
                 onClick={handleOpenLeaderboard}
-                className="min-h-9 rounded-xl border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-2 py-1.5 text-[9px] tracking-[0.1em] text-amber-50 backdrop-blur-sm hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)] sm:min-h-0 sm:rounded-2xl sm:px-2.5 sm:py-3 sm:text-[10px] sm:tracking-[0.16em]"
+                className="min-h-8 border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-1.5 py-1 text-[8px] tracking-[0.05em] text-amber-50 backdrop-blur-sm hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)] sm:min-h-0 sm:px-2.5 sm:py-3 sm:text-[10px] sm:tracking-[0.16em]"
               >
                 Leaderboard
               </CommandButton>
               <CommandButton
                 onClick={() => navigate("/profile", { state: { backgroundLocation: location } })}
-                className="min-h-9 rounded-xl border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-2 py-1.5 text-[9px] tracking-[0.1em] text-sky-50 backdrop-blur-sm hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)] sm:min-h-0 sm:rounded-2xl sm:px-2.5 sm:py-3 sm:text-[10px] sm:tracking-[0.16em]"
+                className="min-h-8 border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-1.5 py-1 text-[8px] tracking-[0.06em] text-sky-50 backdrop-blur-sm hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)] sm:min-h-0 sm:px-2.5 sm:py-3 sm:text-[10px] sm:tracking-[0.16em]"
               >
                 Profile
               </CommandButton>
               <CommandButton
                 onClick={() => setShopOpen((open) => !open)}
-                className="min-h-9 rounded-xl border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-2 py-1.5 text-[9px] tracking-[0.1em] text-white backdrop-blur-sm hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)] sm:min-h-0 sm:rounded-2xl sm:px-2.5 sm:py-3 sm:text-[10px] sm:tracking-[0.16em]"
+                className="min-h-8 border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-1.5 py-1 text-[8px] tracking-[0.05em] text-white backdrop-blur-sm hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)] sm:min-h-0 sm:px-2.5 sm:py-3 sm:text-[10px] sm:tracking-[0.16em]"
               >
                 {shopOpen ? "Hide Shop" : "Open Shop"}
               </CommandButton>
               <div className="relative">
-                <PwaInstallButton className="min-h-9 rounded-xl border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-2 py-1.5 text-[9px] font-bold uppercase tracking-[0.1em] text-cyan-100 transition duration-200 hover:-translate-y-0.5 hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)] sm:min-h-0 sm:rounded-2xl sm:px-2.5 sm:py-3 sm:text-[10px] sm:tracking-[0.16em]" />
-              </div>
-              <div className="relative">
                 <CommandButton
                   onClick={handleToggleMusicPanel}
-                  className="min-h-9 rounded-xl border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-2 py-1.5 text-[9px] tracking-[0.1em] text-violet-100 backdrop-blur-sm hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)] sm:min-h-0 sm:rounded-2xl sm:px-2.5 sm:py-3 sm:text-[10px] sm:tracking-[0.16em]"
+                  className="min-h-8 border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-1.5 py-1 text-[8px] tracking-[0.05em] text-violet-100 backdrop-blur-sm hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)] sm:min-h-0 sm:px-2.5 sm:py-3 sm:text-[10px] sm:tracking-[0.16em]"
                 >
                   Music
                 </CommandButton>
@@ -1276,6 +1273,7 @@ export default function GamePage() {
         </Motion.div>
 
         <div ref={gameRootRef} className="h-full w-full overflow-hidden" />
+        <MobileLandscapePrompt />
 
         <AnimatePresence>
         {selectedPlacedBuilding ? (
@@ -1664,13 +1662,13 @@ export default function GamePage() {
           initial={{ opacity: 0, x: -16 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.45, delay: 0.12 }}
-          className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 sm:bottom-10 sm:left-5 sm:translate-x-0"
+          className="pointer-events-none absolute bottom-2 left-1/2 z-10 -translate-x-1/2 sm:bottom-10 sm:left-5 sm:translate-x-0"
         >
           <button
             type="button"
             onClick={handleStartWar}
             disabled={!canStartWar}
-            className="pointer-events-auto min-h-10 rounded-[1rem] border border-rose-300/20 bg-[linear-gradient(135deg,rgba(225,29,72,0.92)_0%,rgba(244,63,94,0.9)_100%)] px-4 py-2.5 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-[0_14px_28px_rgba(190,24,93,0.24)] transition hover:-translate-y-0.5 hover:shadow-[0_20px_38px_rgba(190,24,93,0.3)] disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50 sm:min-h-12 sm:rounded-[1.35rem] sm:px-6 sm:py-4 sm:text-sm sm:tracking-[0.24em] sm:shadow-[0_22px_40px_rgba(190,24,93,0.28)] sm:hover:shadow-[0_26px_50px_rgba(190,24,93,0.36)]"
+            className="pointer-events-auto min-h-8 rounded-[0.95rem] border border-rose-300/20 bg-[linear-gradient(135deg,rgba(225,29,72,0.92)_0%,rgba(244,63,94,0.9)_100%)] px-3.5 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-[0_12px_24px_rgba(190,24,93,0.22)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_34px_rgba(190,24,93,0.28)] disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50 sm:min-h-12 sm:rounded-[1.35rem] sm:px-6 sm:py-4 sm:text-sm sm:tracking-[0.24em] sm:shadow-[0_22px_40px_rgba(190,24,93,0.28)] sm:hover:shadow-[0_26px_50px_rgba(190,24,93,0.36)]"
           >
             Start War
           </button>

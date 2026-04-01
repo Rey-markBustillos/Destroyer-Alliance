@@ -16,8 +16,13 @@ export default function Navbar() {
     <header className="border-b border-white/10 bg-slate-950/85 backdrop-blur-xl">
       <div className="mx-auto flex w-full max-w-350 items-center justify-between px-4 py-4 text-white sm:px-6 lg:px-8">
         <Link to={session ? "/game" : "/"} className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-emerald-400/30 bg-emerald-500/10 text-sm font-black tracking-[0.3em] text-emerald-300">
-            DA
+          <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-2xl border border-emerald-400/30 bg-emerald-500/10">
+            <img
+              src="/assets/logo.png"
+              alt="Destroyer Alliance logo"
+              className="h-full w-full object-cover"
+              draggable="false"
+            />
           </div>
           <div>
             <p className="text-[0.7rem] uppercase tracking-[0.35em] text-slate-400">

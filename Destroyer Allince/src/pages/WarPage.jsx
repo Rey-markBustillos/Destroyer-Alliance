@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { createGame, destroyGame } from "../game/main";
+import MobileLandscapePrompt from "../components/MobileLandscapePrompt";
 import { applyWarResolution, fetchWarTarget, syncGameSnapshot } from "../services/game";
 import { getBattleRecords, saveBattleRecord } from "../services/battleRecordStorage";
 import { getGameSnapshot, saveGameSnapshot } from "../services/gameStorage";
@@ -606,8 +607,9 @@ export default function WarPage() {
   }, [session, totalTroops, handleFindMatch]);
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top,#2c5c3f_0%,#173126_48%,#08120e_100%)] text-white">
+    <main className="relative h-[100dvh] min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top,#2c5c3f_0%,#173126_48%,#08120e_100%)] text-white">
       <div ref={gameRootRef} className="absolute inset-0 h-full w-full overflow-hidden" />
+      <MobileLandscapePrompt />
 
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(2,6,23,0.32)_0%,rgba(2,6,23,0.04)_22%,rgba(2,6,23,0.04)_78%,rgba(2,6,23,0.36)_100%)]" />
 
