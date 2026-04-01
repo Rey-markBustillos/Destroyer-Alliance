@@ -1,6 +1,9 @@
 {
   "scripts": {
-    "dev": "cd \"Destroyer Allince\" && npm run dev"
+    "dev": "npm --prefix \"Destroyer Allince\" run dev",
+    "build": "npm --prefix \"Destroyer Allince\" run build",
+    "backend:dev": "npm --prefix backend run dev",
+    "backend:start": "npm --prefix backend run start"
   },
   "dependencies": {
     "framer-motion": "^12.38.0",

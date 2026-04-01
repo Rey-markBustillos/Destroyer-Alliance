@@ -1136,11 +1136,11 @@ export default function GamePage() {
     && gameState.gold >= (selectedPlacedBuilding.tankCost ?? 0);
   const canRechargeTank = selectedPlacedBuilding?.type === "battle-tank"
     && selectedPlacedBuilding.hasTank
-    && (selectedPlacedBuilding.tankShotsRemaining ?? 0) <= 0
+    && (selectedPlacedBuilding.tankShotsRemaining ?? 0) < (selectedPlacedBuilding.tankMaxShots ?? 10)
     && gameState.energy >= (selectedPlacedBuilding.tankRechargeCost ?? TANK_ENERGY_COST);
   const canRechargeChopper = selectedPlacedBuilding?.type === "skyport"
     && selectedPlacedBuilding.hasChopper
-    && (selectedPlacedBuilding.chopperShotsRemaining ?? 0) <= 0
+    && (selectedPlacedBuilding.chopperShotsRemaining ?? 0) < (selectedPlacedBuilding.chopperMaxShots ?? 15)
     && gameState.energy >= (selectedPlacedBuilding.chopperRechargeCost ?? HELICOPTER_ENERGY_COST);
   const canSellBuilding = selectedPlacedBuilding?.type !== "command-center";
   const tankEnergyPercent = getChargePercent(
@@ -1591,8 +1591,8 @@ export default function GamePage() {
                       disabled={!canRechargeTank}
                       className="rounded-[9px] bg-cyan-400 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-slate-950 transition hover:-translate-y-0.5 hover:bg-cyan-300 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
                     >
-                      {(selectedPlacedBuilding.tankShotsRemaining ?? 0) > 0
-                        ? "Tank Charged"
+                      {(selectedPlacedBuilding.tankShotsRemaining ?? 0) >= (selectedPlacedBuilding.tankMaxShots ?? 10)
+                        ? "Tank Full"
                         : `Charge ${selectedPlacedBuilding.tankRechargeCost ?? TANK_ENERGY_COST}E`}
                     </button>
                   ) : (
@@ -1616,8 +1616,8 @@ export default function GamePage() {
                         disabled={!canRechargeChopper}
                         className="rounded-[9px] bg-cyan-400 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-slate-950 transition hover:-translate-y-0.5 hover:bg-cyan-300 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
                       >
-                        {(selectedPlacedBuilding.chopperShotsRemaining ?? 0) > 0
-                          ? "Chopper Charged"
+                        {(selectedPlacedBuilding.chopperShotsRemaining ?? 0) >= (selectedPlacedBuilding.chopperMaxShots ?? 15)
+                          ? "Chopper Full"
                           : `Charge ${selectedPlacedBuilding.chopperRechargeCost ?? HELICOPTER_ENERGY_COST}E`}
                       </button>
                       <button

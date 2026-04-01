@@ -47,7 +47,7 @@ const BUILDING_UPGRADE_DURATION_MS = 1800000;
 const BUILDING_MAX_LEVEL = 2;
 const WOOD_MACHINE_BASE_LIMIT = 4;
 const WOOD_MACHINE_LIMIT_PER_TOWN_HALL_LEVEL = 2;
-const ENERGY_MACHINE_BASE_LIMIT = 2;
+const ENERGY_MACHINE_BASE_LIMIT = 1;
 const ENERGY_MACHINE_LIMIT_PER_TOWN_HALL_LEVEL = 1;
 const TENT_BASE_LIMIT = 4;
 const TENT_LIMIT_PER_TOWN_HALL_LEVEL = 4;
@@ -3054,8 +3054,17 @@ export default class GameScene extends Phaser.Scene {
     }
 
     const building = this.selectedPlacedBuilding;
+    const tankShotsRemaining = clampStoredShots(
+      building.tankShotsRemaining,
+      TANK_MAX_SHOTS,
+      building.hasTank
+    );
 
-    if (!building.hasTank || (building.tankShotsRemaining ?? 0) > 0 || this.energy < TANK_RECHARGE_ENERGY_COST) {
+    if (
+      !building.hasTank
+      || tankShotsRemaining >= TANK_MAX_SHOTS
+      || this.energy < TANK_RECHARGE_ENERGY_COST
+    ) {
       return;
     }
 
@@ -3079,8 +3088,17 @@ export default class GameScene extends Phaser.Scene {
     }
 
     const building = this.selectedPlacedBuilding;
+    const chopperShotsRemaining = clampStoredShots(
+      building.chopperShotsRemaining,
+      HELICOPTER_MAX_SHOTS,
+      building.hasChopper
+    );
 
-    if (!building.hasChopper || (building.chopperShotsRemaining ?? 0) > 0 || this.energy < HELICOPTER_RECHARGE_ENERGY_COST) {
+    if (
+      !building.hasChopper
+      || chopperShotsRemaining >= HELICOPTER_MAX_SHOTS
+      || this.energy < HELICOPTER_RECHARGE_ENERGY_COST
+    ) {
       return;
     }
 

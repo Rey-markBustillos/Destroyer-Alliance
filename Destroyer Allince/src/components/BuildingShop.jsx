@@ -134,7 +134,7 @@ export default function BuildingShop({
       </div>
 
       <p className="mt-4 text-center text-xs leading-5 text-slate-300/75">
-        Main base is limited to 1. Wood Machine is 4 at Command Center level 1 and 6 at level 2. Energy Machine is 2 at Command Center level 1 and 3 at level 2. Soldier Tent cap is {tentLimit} at Command Center level {townHallLevel}. Chopper Bay and Battle Tank unlock at Command Center level 2 with a 1-building cap, and Air Defense also unlocks at Command Center level 2 with a 1-building cap.
+        Main base is limited to 1. Wood Machine is 4 at Command Center level 1 and 6 at level 2. Energy Machine is 1 at Command Center level 1 and 2 at level 2. Soldier Tent cap is {tentLimit} at Command Center level {townHallLevel}. Chopper Bay and Battle Tank unlock at Command Center level 2 with a 1-building cap, and Air Defense also unlocks at Command Center level 2 with a 1-building cap.
       </p>
     </Motion.div>
   );
