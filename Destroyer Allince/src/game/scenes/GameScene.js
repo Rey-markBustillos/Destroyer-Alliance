@@ -232,8 +232,6 @@ export default class GameScene extends Phaser.Scene {
     this.scale.on("resize", this.handleResize, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off("resize", this.handleResize, this);
-      this.placementIndicatorPulse?.remove();
-      this.placementIndicatorPulse = null;
     });
     this.bindInput();
     if (!this.isWarMode) {
@@ -721,16 +719,7 @@ export default class GameScene extends Phaser.Scene {
   createPlacementIndicator() {
     this.placementIndicator = this.add.graphics();
     this.placementIndicator.setDepth(1000);
-    this.placementIndicator.setBlendMode(Phaser.BlendModes.SCREEN);
     this.overlayLayer.add(this.placementIndicator);
-    this.placementIndicatorPulse = this.tweens.add({
-      targets: this.placementIndicator,
-      alpha: { from: 0.72, to: 1 },
-      duration: 860,
-      yoyo: true,
-      repeat: -1,
-      ease: "Sine.easeInOut",
-    });
   }
 
   createCamera() {
@@ -2896,10 +2885,10 @@ export default class GameScene extends Phaser.Scene {
     this.drawTileOverlay(
       this.placementIndicator,
       { row: building.row, col: building.col, buildingType: building.buildingType },
-      0x38bdf8,
-      0.34,
-      0xfef08a,
-      3
+      0xf59e0b,
+      0.28,
+      0xfde68a,
+      2
     );
   }
 
