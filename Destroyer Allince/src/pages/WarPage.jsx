@@ -127,6 +127,51 @@ const formatCountdown = (value) => {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 };
 
+function DeploymentOptionCard({
+  label,
+  imageSrc,
+  imageAlt,
+  count,
+  toneClass,
+  isSelected,
+  disabled,
+  onClick,
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`mobile-landscape-war-deploy-button flex min-w-[5.2rem] items-center gap-2 rounded-xl border px-2 py-1.5 text-left transition disabled:cursor-not-allowed disabled:opacity-40 min-[901px]:min-w-[7rem] min-[901px]:gap-2.5 min-[901px]:rounded-2xl min-[901px]:px-3 min-[901px]:py-2.5 ${
+        isSelected
+          ? `${toneClass} border-transparent text-slate-950 shadow-[0_10px_24px_rgba(15,23,42,0.18)]`
+          : "border-white/10 bg-white/5 text-white hover:bg-white/10"
+      }`}
+    >
+      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${
+        isSelected ? "border-black/10 bg-white/20" : "border-white/10 bg-slate-950/60"
+      } min-[901px]:h-10 min-[901px]:w-10`}>
+        <img
+          src={imageSrc}
+          alt={imageAlt}
+          className="h-5 w-5 object-contain min-[901px]:h-6 min-[901px]:w-6"
+          draggable="false"
+        />
+      </div>
+      <div className="min-w-0">
+        <p className="truncate text-[10px] font-black uppercase tracking-[0.12em] min-[901px]:text-xs min-[901px]:tracking-[0.16em]">
+          {label}
+        </p>
+        <p className={`mt-0.5 text-[11px] font-semibold min-[901px]:text-sm ${
+          isSelected ? "text-slate-900/80" : "text-slate-300"
+        }`}>
+          {count} ready
+        </p>
+      </div>
+    </button>
+  );
+}
+
 const applyRaidLossesToSnapshot = (snapshot, summary) => {
   if (!snapshot || !summary) {
     return snapshot;
@@ -615,6 +660,18 @@ export default function WarPage() {
     : raidState.phase === "active"
       ? `Attack ${raidTimerLabel}`
       : "Attack";
+  const canChooseDeployment = Boolean(target) && ["ready", "planning", "active"].includes(raidState.phase);
+  const deploymentCounts = {
+    soldier: raidState.phase === "planning" || raidState.phase === "active"
+      ? (raidState.reserves?.soldiers ?? 0)
+      : (army.soldiers ?? 0),
+    tank: raidState.phase === "planning" || raidState.phase === "active"
+      ? (raidState.reserves?.tanks ?? 0)
+      : (army.tanks ?? 0),
+    helicopter: raidState.phase === "planning" || raidState.phase === "active"
+      ? (raidState.reserves?.helicopters ?? 0)
+      : (army.helicopters ?? 0),
+  };
 
   useEffect(() => {
     if (autoSearchTriggeredRef.current) {
@@ -638,47 +695,47 @@ export default function WarPage() {
 
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(2,6,23,0.32)_0%,rgba(2,6,23,0.04)_22%,rgba(2,6,23,0.04)_78%,rgba(2,6,23,0.36)_100%)]" />
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 px-2 py-2 min-[901px]:px-4 min-[901px]:py-3">
-        <div className="flex flex-wrap items-start justify-between gap-2 min-[901px]:gap-4">
-          <div className="mobile-landscape-war-top-card pointer-events-auto flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-slate-950/72 px-2.5 py-1.5 shadow-[0_14px_36px_rgba(2,6,23,0.3)] min-[901px]:gap-3 min-[901px]:rounded-[1.2rem] min-[901px]:bg-slate-950/54 min-[901px]:px-3 min-[901px]:py-2 min-[901px]:backdrop-blur">
-            <div className="min-w-22 min-[901px]:min-w-32">
-              <p className="mobile-landscape-war-kicker text-[0.55rem] uppercase tracking-[0.24em] text-emerald-300/70 min-[901px]:text-[0.65rem] min-[901px]:tracking-[0.3em]">Player</p>
-              <p className="mobile-landscape-war-name mt-0.5 text-[13px] font-black text-white min-[901px]:mt-1 min-[901px]:text-base">{playerName}</p>
-              <p className="mobile-landscape-war-meta text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400 min-[901px]:text-[11px] min-[901px]:tracking-[0.16em]">{playerId}</p>
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 px-1.5 py-1.5 min-[901px]:px-4 min-[901px]:py-3">
+        <div className="flex flex-wrap items-start justify-between gap-1.5 min-[901px]:gap-4">
+          <div className="mobile-landscape-war-top-card pointer-events-auto flex flex-wrap items-center gap-1.5 rounded-xl border border-white/10 bg-slate-950/72 px-2 py-1 shadow-[0_10px_28px_rgba(2,6,23,0.28)] min-[901px]:gap-3 min-[901px]:rounded-[1.2rem] min-[901px]:bg-slate-950/54 min-[901px]:px-3 min-[901px]:py-2 min-[901px]:backdrop-blur">
+            <div className="min-w-19 min-[901px]:min-w-32">
+              <p className="mobile-landscape-war-kicker text-[0.46rem] uppercase tracking-[0.18em] text-emerald-300/70 min-[901px]:text-[0.65rem] min-[901px]:tracking-[0.3em]">Player</p>
+              <p className="mobile-landscape-war-name mt-0.5 text-[11px] font-black text-white min-[901px]:mt-1 min-[901px]:text-base">{playerName}</p>
+              <p className="mobile-landscape-war-meta text-[8px] font-semibold uppercase tracking-[0.08em] text-slate-400 min-[901px]:text-[11px] min-[901px]:tracking-[0.16em]">{playerId}</p>
             </div>
-            <div className="mobile-landscape-war-divider h-8 w-px bg-white/10 min-[901px]:h-10" />
+            <div className="mobile-landscape-war-divider h-7 w-px bg-white/10 min-[901px]:h-10" />
             <div>
-              <p className="mobile-landscape-war-kicker text-[0.55rem] uppercase tracking-[0.24em] text-amber-300/70 min-[901px]:text-[0.65rem] min-[901px]:tracking-[0.3em]">Loot Gained</p>
-              <p className="mobile-landscape-war-value mt-0.5 text-base font-black text-amber-200 min-[901px]:mt-1 min-[901px]:text-xl">{raidState.loot ?? 0}</p>
+              <p className="mobile-landscape-war-kicker text-[0.46rem] uppercase tracking-[0.18em] text-amber-300/70 min-[901px]:text-[0.65rem] min-[901px]:tracking-[0.3em]">Loot</p>
+              <p className="mobile-landscape-war-value mt-0.5 text-sm font-black text-amber-200 min-[901px]:mt-1 min-[901px]:text-xl">{raidState.loot ?? 0}</p>
             </div>
-            <div className="mobile-landscape-war-divider h-8 w-px bg-white/10 min-[901px]:h-10" />
+            <div className="mobile-landscape-war-divider h-7 w-px bg-white/10 min-[901px]:h-10" />
             <div>
-              <p className="mobile-landscape-war-kicker text-[0.55rem] uppercase tracking-[0.24em] text-sky-300/70 min-[901px]:text-[0.65rem] min-[901px]:tracking-[0.3em]">Energy</p>
-              <p className="mobile-landscape-war-value mt-0.5 text-base font-black text-sky-100 min-[901px]:mt-1 min-[901px]:text-xl">{raidState.energy ?? army.energy ?? 0}</p>
+              <p className="mobile-landscape-war-kicker text-[0.46rem] uppercase tracking-[0.18em] text-sky-300/70 min-[901px]:text-[0.65rem] min-[901px]:tracking-[0.3em]">Energy</p>
+              <p className="mobile-landscape-war-value mt-0.5 text-sm font-black text-sky-100 min-[901px]:mt-1 min-[901px]:text-xl">{raidState.energy ?? army.energy ?? 0}</p>
             </div>
-            <div className="mobile-landscape-war-divider h-8 w-px bg-white/10 min-[901px]:h-10" />
+            <div className="mobile-landscape-war-divider h-7 w-px bg-white/10 min-[901px]:h-10" />
             <div>
-              <p className="mobile-landscape-war-kicker text-[0.55rem] uppercase tracking-[0.24em] text-rose-300/70 min-[901px]:text-[0.65rem] min-[901px]:tracking-[0.3em]">Destruction</p>
-              <p className="mobile-landscape-war-value mt-0.5 text-base font-black text-rose-200 min-[901px]:mt-1 min-[901px]:text-xl">{raidState.destructionPercent ?? 0}%</p>
+              <p className="mobile-landscape-war-kicker text-[0.46rem] uppercase tracking-[0.18em] text-rose-300/70 min-[901px]:text-[0.65rem] min-[901px]:tracking-[0.3em]">Damage</p>
+              <p className="mobile-landscape-war-value mt-0.5 text-sm font-black text-rose-200 min-[901px]:mt-1 min-[901px]:text-xl">{raidState.destructionPercent ?? 0}%</p>
             </div>
             {target ? (
                 <>
-                <div className="mobile-landscape-war-divider h-8 w-px bg-white/10 min-[901px]:h-10" />
+                <div className="mobile-landscape-war-divider h-7 w-px bg-white/10 min-[901px]:h-10" />
                 <div className="mobile-landscape-war-top-enemy">
-                  <p className="mobile-landscape-war-kicker text-[0.55rem] uppercase tracking-[0.24em] text-cyan-300/70 min-[901px]:text-[0.65rem] min-[901px]:tracking-[0.3em]">Enemy</p>
-                  <p className="mobile-landscape-war-name mt-0.5 text-[13px] font-black text-cyan-100 min-[901px]:mt-1 min-[901px]:text-base">{target.name}</p>
-                  <p className="mobile-landscape-war-meta text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400 min-[901px]:text-[11px] min-[901px]:tracking-[0.16em]">{target.playerId}</p>
-                  <p className="mobile-landscape-war-meta mt-0.5 text-[9px] font-semibold text-amber-200 min-[901px]:mt-1 min-[901px]:text-[11px]">Lootable: {target.loot ?? 0}</p>
+                  <p className="mobile-landscape-war-kicker text-[0.46rem] uppercase tracking-[0.18em] text-cyan-300/70 min-[901px]:text-[0.65rem] min-[901px]:tracking-[0.3em]">Enemy</p>
+                  <p className="mobile-landscape-war-name mt-0.5 text-[11px] font-black text-cyan-100 min-[901px]:mt-1 min-[901px]:text-base">{target.name}</p>
+                  <p className="mobile-landscape-war-meta text-[8px] font-semibold uppercase tracking-[0.08em] text-slate-400 min-[901px]:text-[11px] min-[901px]:tracking-[0.16em]">{target.playerId}</p>
+                  <p className="mobile-landscape-war-meta mt-0.5 text-[8px] font-semibold text-amber-200 min-[901px]:mt-1 min-[901px]:text-[11px]">Lootable: {target.loot ?? 0}</p>
                 </div>
               </>
             ) : null}
           </div>
 
-          <div className="mobile-landscape-war-actions pointer-events-auto flex items-center gap-1.5 rounded-2xl border border-white/10 bg-slate-950/72 px-1.5 py-1.5 shadow-[0_14px_36px_rgba(2,6,23,0.3)] min-[901px]:gap-2 min-[901px]:rounded-[1.1rem] min-[901px]:bg-slate-950/54 min-[901px]:px-2 min-[901px]:py-2 min-[901px]:backdrop-blur">
+          <div className="mobile-landscape-war-actions pointer-events-auto flex items-center gap-1 rounded-xl border border-white/10 bg-slate-950/72 px-1 py-1 shadow-[0_10px_28px_rgba(2,6,23,0.28)] min-[901px]:gap-2 min-[901px]:rounded-[1.1rem] min-[901px]:bg-slate-950/54 min-[901px]:px-2 min-[901px]:py-2 min-[901px]:backdrop-blur">
             <button
               type="button"
               onClick={handleBackToBase}
-              className="mobile-landscape-war-button rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[11px] font-semibold text-white transition hover:bg-white/10 min-[901px]:rounded-xl min-[901px]:px-3 min-[901px]:py-2 min-[901px]:text-sm"
+              className="mobile-landscape-war-button rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-semibold text-white transition hover:bg-white/10 min-[901px]:rounded-xl min-[901px]:px-3 min-[901px]:py-2 min-[901px]:text-sm"
             >
               Exit Raid
             </button>
@@ -686,7 +743,7 @@ export default function WarPage() {
               <button
                 type="button"
                 onClick={handleToggleMusicPanel}
-                className="mobile-landscape-war-button rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[11px] font-semibold text-violet-100 transition hover:bg-white/10 min-[901px]:rounded-xl min-[901px]:px-3 min-[901px]:py-2 min-[901px]:text-sm"
+                className="mobile-landscape-war-button rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-semibold text-violet-100 transition hover:bg-white/10 min-[901px]:rounded-xl min-[901px]:px-3 min-[901px]:py-2 min-[901px]:text-sm"
               >
                 Music
               </button>
@@ -776,48 +833,45 @@ export default function WarPage() {
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 px-2 pb-2 min-[901px]:px-4 min-[901px]:pb-4">
         <div className="mobile-landscape-war-bottom-bar pointer-events-auto mx-auto max-w-lg rounded-2xl border border-white/10 bg-slate-950/74 px-2.5 py-2 shadow-[0_14px_36px_rgba(2,6,23,0.3)] min-[901px]:max-w-3xl min-[901px]:rounded-[1.2rem] min-[901px]:bg-slate-950/54 min-[901px]:px-4 min-[901px]:py-3 min-[901px]:backdrop-blur">
-          <div className="flex flex-wrap items-center justify-end gap-2 min-[901px]:gap-4">
-
-            {raidState.phase === "active" ? (
-              <div className="flex flex-wrap justify-end gap-1.5 min-[901px]:gap-2">
-                <button
-                  type="button"
+          <div className="flex flex-wrap items-center justify-between gap-2 min-[901px]:gap-4">
+            {canChooseDeployment ? (
+              <div className="flex flex-wrap gap-1.5 min-[901px]:gap-2">
+                <DeploymentOptionCard
+                  label="Riflemen"
+                  imageSrc="/assets/army/front/firing.png"
+                  imageAlt="Riflemen"
+                  count={deploymentCounts.soldier}
+                  toneClass="bg-sky-300"
+                  isSelected={raidState.selectedDeploymentType === "soldier"}
+                  disabled={deploymentCounts.soldier <= 0}
                   onClick={() => handleSelectDeploymentType("soldier")}
-                  disabled={(raidState.reserves?.soldiers ?? 0) <= 0}
-                  className={`mobile-landscape-war-deploy-button rounded-lg px-2 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] transition disabled:cursor-not-allowed disabled:opacity-40 min-[901px]:rounded-xl min-[901px]:px-3 min-[901px]:py-2 min-[901px]:text-xs min-[901px]:tracking-[0.16em] ${
-                    raidState.selectedDeploymentType === "soldier"
-                      ? "bg-sky-300 text-slate-950"
-                      : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
-                  }`}
-                >
-                  Soldier ({raidState.reserves?.soldiers ?? 0})
-                </button>
-                <button
-                  type="button"
+                />
+                <DeploymentOptionCard
+                  label="Tank"
+                  imageSrc="/assets/tank/tank1.png"
+                  imageAlt="Tank"
+                  count={deploymentCounts.tank}
+                  toneClass="bg-amber-300"
+                  isSelected={raidState.selectedDeploymentType === "tank"}
+                  disabled={deploymentCounts.tank <= 0}
                   onClick={() => handleSelectDeploymentType("tank")}
-                  disabled={!canDeployTank}
-                  className={`mobile-landscape-war-deploy-button rounded-lg px-2 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] transition disabled:cursor-not-allowed disabled:opacity-40 min-[901px]:rounded-xl min-[901px]:px-3 min-[901px]:py-2 min-[901px]:text-xs min-[901px]:tracking-[0.16em] ${
-                    raidState.selectedDeploymentType === "tank"
-                      ? "bg-amber-300 text-slate-950"
-                      : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
-                  }`}
-                >
-                  Tank ({raidState.reserves?.tanks ?? 0})
-                </button>
-                <button
-                  type="button"
+                />
+                <DeploymentOptionCard
+                  label="Helicopter"
+                  imageSrc="/assets/parkingchopper-Photoroom.png"
+                  imageAlt="Helicopter"
+                  count={deploymentCounts.helicopter}
+                  toneClass="bg-emerald-300"
+                  isSelected={raidState.selectedDeploymentType === "helicopter"}
+                  disabled={deploymentCounts.helicopter <= 0}
                   onClick={() => handleSelectDeploymentType("helicopter")}
-                  disabled={!canDeployHelicopter}
-                  className={`mobile-landscape-war-deploy-button rounded-lg px-2 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] transition disabled:cursor-not-allowed disabled:opacity-40 min-[901px]:rounded-xl min-[901px]:px-3 min-[901px]:py-2 min-[901px]:text-xs min-[901px]:tracking-[0.16em] ${
-                    raidState.selectedDeploymentType === "helicopter"
-                      ? "bg-emerald-300 text-slate-950"
-                      : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
-                  }`}
-                >
-                  Chopper ({raidState.reserves?.helicopters ?? 0})
-                </button>
+                />
               </div>
-            ) : null}
+            ) : (
+              <p className="mobile-landscape-war-note text-[11px] font-semibold leading-tight text-slate-400 min-[901px]:text-xs">
+                Find a target first to choose which unit attacks first.
+              </p>
+            )}
           </div>
           {raidState.phase === "planning" ? (
             <p className="mobile-landscape-war-note mt-2 text-[11px] font-semibold leading-tight text-amber-200 min-[901px]:mt-3 min-[901px]:text-xs">
@@ -826,7 +880,7 @@ export default function WarPage() {
           ) : null}
           {raidState.phase === "active" ? (
             <p className="mobile-landscape-war-note mt-2 text-[11px] font-semibold leading-tight text-slate-300 min-[901px]:mt-3 min-[901px]:text-xs">
-              Tank uses stored charge with {TANK_SHOTS_PER_DEPLOY} shots max. Chopper uses stored charge with {HELICOPTER_SHOTS_PER_DEPLOY} shots max.
+              Tap a unit card to decide what goes first, then place it on the battlefield. Tank uses {TANK_SHOTS_PER_DEPLOY} shots max and Chopper uses {HELICOPTER_SHOTS_PER_DEPLOY} shots max.
             </p>
           ) : null}
         </div>
