@@ -32,6 +32,7 @@ const SOLDIER_WALK_BOB_AMPLITUDE = 1.2;
 const SOLDIER_WALK_BOB_SPEED = 0.016;
 const SOLDIER_DIRECTION_DEADZONE = 4;
 const SOLDIER_DIRECTION_SWITCH_RATIO = 1.18;
+const RANGER_HIT_REACTION_MS = 180;
 const AIR_DEFENSE_TARGET_PRIORITY = ["rocket", "jet", "helicopter"];
 const DEPLOYABLE_MIN_ROW = MAP_ROWS - 3;
 const SOLDIER_WALK_TEXTURES = {
@@ -1438,6 +1439,7 @@ export default class BattleScene extends Phaser.Scene {
       walkFrameIndex: 0,
       walkFrameElapsed: 0,
       firingUntil: 0,
+      hitUntil: 0,
       isMoving: false,
       detectRange: config.detectRange ?? (config.range + 48),
       focusTargetId: null,
@@ -1572,11 +1574,27 @@ export default class BattleScene extends Phaser.Scene {
     }
 
     const direction = unit.direction ?? "front";
+    const isHitReacting = unit.type === "ranger" && this.time.now < Number(unit.hitUntil ?? 0);
     const isFiring = this.time.now < Number(unit.firingUntil ?? 0);
     const walkTextureSet = unit.type === "ranger" ? RANGER_WALK_TEXTURES : SOLDIER_WALK_TEXTURES;
     const firingTextureSet = unit.type === "ranger" ? RANGER_FIRING_TEXTURES : SOLDIER_FIRING_TEXTURES;
     const walkTextures = walkTextureSet[direction] ?? walkTextureSet.front;
     const firingTexture = firingTextureSet[direction] ?? firingTextureSet.front;
+
+    if (isHitReacting) {
+      if (unit.visualState !== "hit" || unit.sprite.texture?.key !== firingTexture) {
+        unit.visualState = "hit";
+        unit.sprite.setTexture(firingTexture);
+        configureHdSprite(unit.sprite, {
+          scene: this,
+          maxWidth: 26,
+          maxHeight: 38,
+        });
+        unit.sprite.setTint(unit.type === "guard" ? 0xffc0c0 : 0xffffff);
+      }
+      unit.sprite.setY(0);
+      return;
+    }
 
     if (isFiring) {
       if (unit.visualState !== "firing" || unit.sprite.texture?.key !== firingTexture) {
@@ -2294,6 +2312,18 @@ export default class BattleScene extends Phaser.Scene {
     unit.health = Math.max(0, unit.health - resolvedAmount);
     if (source?.id && source.id !== unit.id) {
       unit.focusTargetId = source.id;
+    }
+    if (unit.type === "ranger") {
+      if (Number.isFinite(Number(source?.x)) && Number.isFinite(Number(source?.y))) {
+        unit.direction = resolveStableDirection(
+          unit.direction,
+          Number(source.x) - unit.x,
+          Number(source.y) - unit.y
+        );
+      }
+      unit.hitUntil = this.time.now + RANGER_HIT_REACTION_MS;
+      unit.visualState = "hit";
+      this.updateUnitVisual(unit, 0);
     }
     this.createFloatingText(`-${Math.round(resolvedAmount)}`, unit.x, unit.y - 44, "#ffffff");
 
