@@ -7,4 +7,5 @@ export const loadLoginPage = () => import("../pages/login");
 export const loadRegisterPage = () => import("../pages/register");
 
 export const primeGameRoute = () => loadGamePage();
+export const primeWarRoute = () => loadWarPage();
 export const primeIntroRoute = () => loadIntroStoryPage();

@@ -22,6 +22,7 @@ import {
   isWelcomeBackPending,
 } from "../services/session";
 import soundManager from "../services/soundManager";
+import { primeWarRoute } from "../utils/routePreload";
 
 const shouldPreferLocalSnapshot = (localSnapshot, serverSnapshot) => {
   const localBuildings = Array.isArray(localSnapshot?.buildings) ? localSnapshot.buildings : [];
@@ -1169,7 +1170,9 @@ export default function GamePage() {
       saveGameSnapshot(gameScene.getPersistedSnapshot(), activeSession);
     }
 
-    navigate("/war");
+    void primeWarRoute().finally(() => {
+      navigate("/war");
+    });
   };
 
   const upgradeCost = selectedPlacedBuilding

@@ -87,7 +87,7 @@ export default function BuildingShop({
                 disabled={!canBuy}
                 whileHover={canBuy ? { scale: 1.05, y: -2 } : undefined}
                 whileTap={canBuy ? { scale: 0.98 } : undefined}
-                className={`rounded-[1rem] border px-2.5 py-2.5 text-left transition duration-200 min-[901px]:rounded-[1.05rem] min-[901px]:px-3 min-[901px]:py-3 ${
+                className={`rounded-2xl border px-2.5 py-2.5 text-left transition duration-200 min-[901px]:rounded-[1.05rem] min-[901px]:px-3 min-[901px]:py-3 ${
                   isSelected
                     ? "border-cyan-300/60 bg-[linear-gradient(180deg,rgba(34,211,238,0.18)_0%,rgba(15,23,42,0.5)_100%)] shadow-[0_0_0_1px_rgba(125,211,252,0.4),0_14px_28px_rgba(34,211,238,0.12)]"
                     : canBuy
@@ -106,7 +106,7 @@ export default function BuildingShop({
                 </div>
               )}
               <p className="font-orbitron text-[0.9rem] font-bold text-white min-[901px]:text-[0.95rem]">{building.name}</p>
-              <p className="mt-1 min-h-[2.25rem] text-[10px] leading-4 text-slate-300/80 min-[901px]:min-h-[2.5rem] min-[901px]:text-[11px] min-[901px]:leading-5">
+              <p className="mt-1 min-h-9 text-[10px] leading-4 text-slate-300/80 min-[901px]:min-h-10 min-[901px]:text-[11px] min-[901px]:leading-5">
                 {woodMachineCapReached
                   ? `${woodMachineCount}/${woodMachineLimit} Wood Machines`
                   : energyMachineCapReached

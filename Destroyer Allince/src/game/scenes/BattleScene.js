@@ -16,8 +16,17 @@ const INITIAL_ZOOM = 0.9;
 const BATTLE_CAMERA_PADDING_X = 220;
 const BATTLE_CAMERA_PADDING_Y = 220;
 const RAID_PREVIEW_READY_DELAY_MS = 1800;
-const RAID_TIME_LIMIT_MS = 180000;
+const RAID_PLANNING_TIME_LIMIT_MS = 60000;
+const RAID_TIME_LIMIT_MS = 120000;
 const RAID_DEPLOY_INTERVAL_MS = 180;
+const RAID_UI_EMIT_INTERVAL_MS = 220;
+const MAX_CAMERA_ZOOM = 2.1;
+const MIN_CAMERA_ZOOM = 0.72;
+const CAMERA_ZOOM_STEP = 0.12;
+const CAMERA_DRAG_THRESHOLD = 6;
+const CAMERA_INERTIA_DAMPING = 10;
+const CAMERA_SCROLL_LERP = 14;
+const CAMERA_ZOOM_LERP = 12;
 const SOLDIER_WALK_FRAME_MS = 130;
 const SOLDIER_WALK_BOB_AMPLITUDE = 1.2;
 const SOLDIER_WALK_BOB_SPEED = 0.016;
@@ -369,6 +378,20 @@ export default class BattleScene extends Phaser.Scene {
       startY: 0,
       cameraScrollX: 0,
       cameraScrollY: 0,
+      lastScrollX: 0,
+      lastScrollY: 0,
+    };
+    this.cameraController = {
+      defaultZoom: INITIAL_ZOOM,
+      minZoom: MIN_CAMERA_ZOOM,
+      maxZoom: MAX_CAMERA_ZOOM,
+      targetZoom: INITIAL_ZOOM,
+      targetScrollX: 0,
+      targetScrollY: 0,
+      velocityX: 0,
+      velocityY: 0,
+      lastPointerX: this.scale.width / 2,
+      lastPointerY: this.scale.height / 2,
     };
     this.lastDeployAt = 0;
     this.worldBounds = null;
@@ -420,6 +443,7 @@ export default class BattleScene extends Phaser.Scene {
       summary: null,
       energySpent: 0,
       lastUiEmitAt: 0,
+      planningStartedAt: 0,
       startedAt: 0,
     };
   }
@@ -576,23 +600,243 @@ export default class BattleScene extends Phaser.Scene {
     camera.centerOn(this.iso.originX, this.iso.originY + this.iso.rows * this.iso.tileHeight / 2);
     camera.setZoom(INITIAL_ZOOM);
     camera.roundPixels = false;
+    this.cameraController.targetZoom = INITIAL_ZOOM;
+    this.cameraController.targetScrollX = Number(camera.scrollX ?? 0) || 0;
+    this.cameraController.targetScrollY = Number(camera.scrollY ?? 0) || 0;
+  }
+
+  getCameraScrollBounds(zoom = this.cameraController.targetZoom) {
+    const viewportWidth = this.scale.width / zoom;
+    const viewportHeight = this.scale.height / zoom;
+    let minScrollX = this.worldBounds.minX;
+    let maxScrollX = this.worldBounds.maxX - viewportWidth;
+    let minScrollY = this.worldBounds.minY;
+    let maxScrollY = this.worldBounds.maxY - viewportHeight;
+
+    if (maxScrollX < minScrollX) {
+      const centeredX = this.worldBounds.minX + ((this.worldBounds.width - viewportWidth) / 2);
+      minScrollX = centeredX;
+      maxScrollX = centeredX;
+    }
+
+    if (maxScrollY < minScrollY) {
+      const centeredY = this.worldBounds.minY + ((this.worldBounds.height - viewportHeight) / 2);
+      minScrollY = centeredY;
+      maxScrollY = centeredY;
+    }
+
+    return {
+      minScrollX,
+      maxScrollX,
+      minScrollY,
+      maxScrollY,
+    };
+  }
+
+  clampCameraScroll(scrollX, scrollY, zoom = this.cameraController.targetZoom) {
+    const bounds = this.getCameraScrollBounds(zoom);
+
+    return {
+      scrollX: clamp(scrollX, bounds.minScrollX, bounds.maxScrollX),
+      scrollY: clamp(scrollY, bounds.minScrollY, bounds.maxScrollY),
+    };
+  }
+
+  getWorldPointForCameraState(screenX, screenY, scrollX, scrollY, zoom) {
+    return {
+      x: scrollX + (screenX / zoom),
+      y: scrollY + (screenY / zoom),
+    };
+  }
+
+  getScrollForWorldPoint(worldX, worldY, zoom = this.cameraController.targetZoom, screenX = null, screenY = null) {
+    const anchorX = screenX ?? (this.scale.width / 2);
+    const anchorY = screenY ?? (this.scale.height / 2);
+
+    return this.clampCameraScroll(
+      worldX - (anchorX / zoom),
+      worldY - (anchorY / zoom),
+      zoom
+    );
+  }
+
+  setCameraZoomTarget(nextZoom, screenX = null, screenY = null, options = {}) {
+    const camera = this.cameras.main;
+    const { snap = false } = options;
+    const zoom = clamp(nextZoom, this.cameraController.minZoom, this.cameraController.maxZoom);
+    const anchorX = screenX ?? this.scale.width / 2;
+    const anchorY = screenY ?? this.scale.height / 2;
+    const baseZoom = Number(this.cameraController.targetZoom ?? camera.zoom) || camera.zoom;
+    const baseScrollX = Number.isFinite(this.cameraController.targetScrollX)
+      ? this.cameraController.targetScrollX
+      : camera.scrollX;
+    const baseScrollY = Number.isFinite(this.cameraController.targetScrollY)
+      ? this.cameraController.targetScrollY
+      : camera.scrollY;
+    const pointerWorld = this.getWorldPointForCameraState(
+      anchorX,
+      anchorY,
+      baseScrollX,
+      baseScrollY,
+      baseZoom
+    );
+    const nextScroll = this.getScrollForWorldPoint(pointerWorld.x, pointerWorld.y, zoom, anchorX, anchorY);
+
+    this.cameraController.targetZoom = zoom;
+    this.cameraController.targetScrollX = nextScroll.scrollX;
+    this.cameraController.targetScrollY = nextScroll.scrollY;
+
+    if (snap) {
+      camera.setZoom(zoom);
+      camera.setScroll(nextScroll.scrollX, nextScroll.scrollY);
+      this.cameraController.velocityX = 0;
+      this.cameraController.velocityY = 0;
+    }
+  }
+
+  handleCameraDrag(pointer) {
+    if (!this.pointerDrag.active) {
+      return;
+    }
+
+    const dragDistance = Phaser.Math.Distance.Between(
+      this.pointerDrag.startX,
+      this.pointerDrag.startY,
+      pointer.x,
+      pointer.y
+    );
+
+    if (dragDistance < CAMERA_DRAG_THRESHOLD && !this.pointerDrag.moved) {
+      return;
+    }
+
+    this.pointerDrag.moved = true;
+
+    const camera = this.cameras.main;
+    const nextScrollX =
+      this.pointerDrag.cameraScrollX - ((pointer.x - this.pointerDrag.startX) / camera.zoom);
+    const nextScrollY =
+      this.pointerDrag.cameraScrollY - ((pointer.y - this.pointerDrag.startY) / camera.zoom);
+    const clampedScroll = this.clampCameraScroll(nextScrollX, nextScrollY, camera.zoom);
+    const deltaSeconds = Math.max(0.001, (this.game.loop.delta || 16) / 1000);
+
+    this.cameraController.targetScrollX = clampedScroll.scrollX;
+    this.cameraController.targetScrollY = clampedScroll.scrollY;
+    this.cameraController.velocityX =
+      (clampedScroll.scrollX - this.pointerDrag.lastScrollX) / deltaSeconds;
+    this.cameraController.velocityY =
+      (clampedScroll.scrollY - this.pointerDrag.lastScrollY) / deltaSeconds;
+
+    this.pointerDrag.lastScrollX = clampedScroll.scrollX;
+    this.pointerDrag.lastScrollY = clampedScroll.scrollY;
+    camera.scrollX = clampedScroll.scrollX;
+    camera.scrollY = clampedScroll.scrollY;
+  }
+
+  updateCameraController(delta) {
+    const camera = this.cameras.main;
+
+    if (!camera || !this.cameraController) {
+      return;
+    }
+
+    if ((camera.panEffect?.isRunning || camera.zoomEffect?.isRunning) && !this.pointerDrag.active) {
+      this.cameraController.targetZoom = Number(camera.zoom ?? INITIAL_ZOOM) || INITIAL_ZOOM;
+      this.cameraController.targetScrollX = Number(camera.scrollX ?? 0) || 0;
+      this.cameraController.targetScrollY = Number(camera.scrollY ?? 0) || 0;
+      this.cameraController.velocityX = 0;
+      this.cameraController.velocityY = 0;
+      return;
+    }
+
+    const deltaSeconds = Math.max(0.001, Math.min(0.05, (delta || 16) / 1000));
+    const zoomLerp = 1 - Math.exp(-CAMERA_ZOOM_LERP * deltaSeconds);
+    const scrollLerp = 1 - Math.exp(-CAMERA_SCROLL_LERP * deltaSeconds);
+    const damping = Math.exp(-CAMERA_INERTIA_DAMPING * deltaSeconds);
+
+    this.cameraController.targetZoom = clamp(
+      this.cameraController.targetZoom,
+      this.cameraController.minZoom,
+      this.cameraController.maxZoom
+    );
+
+    if (!this.pointerDrag.active) {
+      this.cameraController.targetScrollX += this.cameraController.velocityX * deltaSeconds;
+      this.cameraController.targetScrollY += this.cameraController.velocityY * deltaSeconds;
+      this.cameraController.velocityX *= damping;
+      this.cameraController.velocityY *= damping;
+
+      if (Math.abs(this.cameraController.velocityX) < 4) {
+        this.cameraController.velocityX = 0;
+      }
+
+      if (Math.abs(this.cameraController.velocityY) < 4) {
+        this.cameraController.velocityY = 0;
+      }
+    }
+
+    const clampedTarget = this.clampCameraScroll(
+      this.cameraController.targetScrollX,
+      this.cameraController.targetScrollY,
+      this.cameraController.targetZoom
+    );
+
+    this.cameraController.targetScrollX = clampedTarget.scrollX;
+    this.cameraController.targetScrollY = clampedTarget.scrollY;
+
+    camera.setZoom(Phaser.Math.Linear(camera.zoom, this.cameraController.targetZoom, zoomLerp));
+    camera.scrollX = Phaser.Math.Linear(camera.scrollX, this.cameraController.targetScrollX, scrollLerp);
+    camera.scrollY = Phaser.Math.Linear(camera.scrollY, this.cameraController.targetScrollY, scrollLerp);
+
+    const clampedCamera = this.clampCameraScroll(camera.scrollX, camera.scrollY, camera.zoom);
+    camera.scrollX = clampedCamera.scrollX;
+    camera.scrollY = clampedCamera.scrollY;
   }
 
   bindInput() {
-    this.input.on("pointerdown", (pointer) => {
-      if (this.raid?.phase !== "active") {
-        return;
-      }
+    this.input.setTopOnly(true);
 
-      this.handleBattlefieldDeploy(pointer.worldX, pointer.worldY);
+    this.input.on("pointermove", (pointer) => {
+      this.cameraController.lastPointerX = pointer.x;
+      this.cameraController.lastPointerY = pointer.y;
+
+      if (pointer.isDown) {
+        this.handleCameraDrag(pointer);
+      }
+    });
+
+    this.input.on("pointerdown", (pointer) => {
+      this.pointerDrag.active = true;
+      this.pointerDrag.moved = false;
+      this.pointerDrag.startX = pointer.x;
+      this.pointerDrag.startY = pointer.y;
+      this.pointerDrag.cameraScrollX = this.cameras.main.scrollX;
+      this.pointerDrag.cameraScrollY = this.cameras.main.scrollY;
+      this.pointerDrag.lastScrollX = this.cameras.main.scrollX;
+      this.pointerDrag.lastScrollY = this.cameras.main.scrollY;
+      this.cameraController.velocityX = 0;
+      this.cameraController.velocityY = 0;
     });
 
     this.input.on("pointerup", (pointer) => {
-      if (this.raid?.phase !== "active") {
-        return;
-      }
+      const wasDrag = this.pointerDrag.moved;
+      this.pointerDrag.active = false;
 
-      this.handleBattlefieldDeploy(pointer.worldX, pointer.worldY);
+      if (!wasDrag && this.raid?.phase === "active") {
+        this.handleBattlefieldDeploy(pointer.worldX, pointer.worldY);
+      }
+    });
+
+    this.input.on("wheel", (pointer, _objects, _deltaX, deltaY) => {
+      const direction = deltaY > 0 ? -1 : 1;
+      const nextZoom = clamp(
+        this.cameraController.targetZoom + (direction * CAMERA_ZOOM_STEP),
+        this.cameraController.minZoom,
+        this.cameraController.maxZoom
+      );
+      this.cameraController.lastPointerX = pointer.x;
+      this.cameraController.lastPointerY = pointer.y;
+      this.setCameraZoomTarget(nextZoom, pointer.x, pointer.y, { snap: true });
     });
   }
 
@@ -1168,7 +1412,7 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   startRaidAttack() {
-    if (!this.raid.target || this.raid.phase === "active") {
+    if (!this.raid.target || this.raid.phase === "planning" || this.raid.phase === "active") {
       return;
     }
 
@@ -1185,8 +1429,6 @@ export default class BattleScene extends Phaser.Scene {
     this.raid.energySpent = 0;
     this.raid.defenderLosses = {};
     this.raid.summary = null;
-    this.raid.startedAt = this.time.now;
-    this.raid.phase = "active";
     this.raid.reserves = {
       energy: this.getAvailableRaidEnergy(),
       soldiers: this.raid.army.soldiers,
@@ -1198,13 +1440,43 @@ export default class BattleScene extends Phaser.Scene {
         : [],
     };
     this.raid.selectedDeploymentType = this.getFirstAvailableDeploymentType();
+    this.raid.planningStartedAt = this.time.now;
+    this.raid.startedAt = 0;
+    this.raid.phase = "planning";
+    this.centerCameraOnVillage(560, 1.02);
+    this.emitRaidState(true);
+  }
+
+  activateRaidAttack() {
+    if (!this.raid.target || this.raid.phase !== "planning") {
+      return;
+    }
+
+    this.raid.startedAt = this.time.now;
+    this.raid.phase = "active";
     this.spawnBaseDefenders();
     this.centerCameraOnVillage(560, 1.02);
     this.emitRaidState(true);
   }
 
   update(_time, delta) {
-    if (!this.raid || this.raid.phase !== "active") {
+    this.updateCameraController(delta);
+
+    if (!this.raid) {
+      return;
+    }
+
+    if (this.raid.phase === "planning") {
+      if (this.time.now - this.raid.planningStartedAt >= RAID_PLANNING_TIME_LIMIT_MS) {
+        this.activateRaidAttack();
+        return;
+      }
+
+      this.emitRaidState();
+      return;
+    }
+
+    if (this.raid.phase !== "active") {
       return;
     }
 
@@ -2242,6 +2514,7 @@ export default class BattleScene extends Phaser.Scene {
     ];
 
     this.raid.phase = "finished";
+    this.raid.planningStartedAt = 0;
     this.raid.summary = {
       outcome,
       reason,
@@ -2257,8 +2530,20 @@ export default class BattleScene extends Phaser.Scene {
     this.emitRaidState(true);
   }
 
+  getRaidTimeRemainingMs() {
+    if (this.raid.phase === "planning") {
+      return Math.max(0, RAID_PLANNING_TIME_LIMIT_MS - (this.time.now - this.raid.planningStartedAt));
+    }
+
+    if (this.raid.phase === "active") {
+      return Math.max(0, RAID_TIME_LIMIT_MS - (this.time.now - this.raid.startedAt));
+    }
+
+    return 0;
+  }
+
   emitRaidState(force = false) {
-    if (!force && this.time.now - this.raid.lastUiEmitAt < 120) {
+    if (!force && this.time.now - this.raid.lastUiEmitAt < RAID_UI_EMIT_INTERVAL_MS) {
       return;
     }
 
@@ -2276,6 +2561,7 @@ export default class BattleScene extends Phaser.Scene {
       },
       energy: this.getAvailableRaidEnergy(),
       selectedDeploymentType: this.raid.selectedDeploymentType ?? "soldier",
+      timeRemainingMs: this.getRaidTimeRemainingMs(),
       target: this.raid.target,
       attackersRemaining: this.raid.attackers.filter((entry) => !entry.destroyed).length,
       defendersRemaining: this.raid.defenders.filter((entry) => !entry.destroyed).length
