@@ -2,6 +2,7 @@ import prisma from "../prismaClient.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { buildRankPayload, getRankName } from "../utils/rankSystem.js";
+import { getLeaderboardBuildingSelect, hasRangerTalaColumn } from "../utils/buildingSchemaSupport.js";
 
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
@@ -218,6 +219,7 @@ export const updateProfileName = async (req, res) => {
 
 export const getLeaderboard = async (req, res) => {
   try {
+    const supportsRangerTalaColumn = await hasRangerTalaColumn();
     const users = await prisma.user.findMany({
       orderBy: [
         { warPoints: "desc" },
@@ -231,13 +233,7 @@ export const getLeaderboard = async (req, res) => {
         warPoints: true,
         rankName: true,
         buildings: {
-          select: {
-            type: true,
-            soldierCount: true,
-            rangerTalaCount: true,
-            hasTank: true,
-            hasChopper: true,
-          },
+          select: getLeaderboardBuildingSelect(supportsRangerTalaColumn),
         },
       },
     });

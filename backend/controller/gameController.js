@@ -1,5 +1,10 @@
 import prisma from "../prismaClient.js";
 import { buildRankPayload, getRankName, getWarPointReward } from "../utils/rankSystem.js";
+import {
+  getBuildingSelect,
+  hasRangerTalaColumn,
+  stripUnsupportedBuildingFields,
+} from "../utils/buildingSchemaSupport.js";
 
 const DEFAULT_GOLD = 1200;
 const DEFAULT_ENERGY = 0;
@@ -44,7 +49,7 @@ const parseOptionalDate = (value) => {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
-const normalizeBuildingPayload = (building) => {
+const normalizeBuildingPayload = (building, supportsRangerTalaColumn = true) => {
   const type = typeof building?.type === "string" ? building.type.trim() : "";
   const x = Number(building?.x ?? building?.col);
   const y = Number(building?.y ?? building?.row);
@@ -59,7 +64,7 @@ const normalizeBuildingPayload = (building) => {
     return null;
   }
 
-  return {
+  return stripUnsupportedBuildingFields({
     type,
     x: Math.floor(x),
     y: Math.floor(y),
@@ -81,10 +86,11 @@ const normalizeBuildingPayload = (building) => {
     chopperShotsRemaining: hasChopper
       ? Math.max(0, Math.min(15, Math.floor(Number(building?.chopperShotsRemaining ?? 15) || 15)))
       : 0,
-  };
+  }, supportsRangerTalaColumn);
 };
 
 const getVillageSnapshotForUser = async (userId) => {
+  const supportsRangerTalaColumn = await hasRangerTalaColumn();
   const user = await prisma.user.findUnique({
     where: {
       id: userId,
@@ -93,6 +99,7 @@ const getVillageSnapshotForUser = async (userId) => {
       gold: true,
       energy: true,
       buildings: {
+        select: getBuildingSelect(supportsRangerTalaColumn),
         orderBy: [
           { y: "asc" },
           { x: "asc" },
@@ -184,7 +191,8 @@ export const updateGameState = async (req, res) => {
 
 // ADD BUILDING
 export const addBuilding = async (req, res) => {
-  const normalizedBuilding = normalizeBuildingPayload(req.body);
+  const supportsRangerTalaColumn = await hasRangerTalaColumn();
+  const normalizedBuilding = normalizeBuildingPayload(req.body, supportsRangerTalaColumn);
 
   if (!normalizedBuilding) {
     return res.status(400).json({ message: "Invalid building payload" });
@@ -195,6 +203,7 @@ export const addBuilding = async (req, res) => {
       ...normalizedBuilding,
       userId: req.user.id,
     },
+    select: getBuildingSelect(supportsRangerTalaColumn),
   });
 
   res.json(serializeBuilding(building));
@@ -202,10 +211,12 @@ export const addBuilding = async (req, res) => {
 
 // GET USER BUILDINGS
 export const getBuildings = async (req, res) => {
+  const supportsRangerTalaColumn = await hasRangerTalaColumn();
   const buildings = await prisma.building.findMany({
     where: {
       userId: req.user.id,
     },
+    select: getBuildingSelect(supportsRangerTalaColumn),
   });
 
   res.json(buildings.map(serializeBuilding));
@@ -213,6 +224,7 @@ export const getBuildings = async (req, res) => {
 
 export const syncGameSnapshot = async (req, res) => {
   try {
+    const supportsRangerTalaColumn = await hasRangerTalaColumn();
     const nextGold = Number(req.body?.gold);
     const hasEnergy = req.body?.energy !== undefined && req.body?.energy !== null;
     const nextEnergy = hasEnergy ? Number(req.body?.energy) : null;
@@ -228,7 +240,7 @@ export const syncGameSnapshot = async (req, res) => {
     }
 
     const normalizedBuildings = incomingBuildings
-      .map(normalizeBuildingPayload)
+      .map((building) => normalizeBuildingPayload(building, supportsRangerTalaColumn))
       .filter(Boolean);
 
     if (normalizedBuildings.length !== incomingBuildings.length) {
@@ -255,7 +267,7 @@ export const syncGameSnapshot = async (req, res) => {
       if (normalizedBuildings.length > 0) {
         await tx.building.createMany({
           data: normalizedBuildings.map((building) => ({
-            ...building,
+            ...stripUnsupportedBuildingFields(building, supportsRangerTalaColumn),
             userId: req.user.id,
           })),
         });
@@ -272,6 +284,7 @@ export const syncGameSnapshot = async (req, res) => {
 
 export const getWarTarget = async (req, res) => {
   try {
+    const supportsRangerTalaColumn = await hasRangerTalaColumn();
     const requestedPlayerId = String(req.query.playerId ?? "").trim();
     let target = null;
 
@@ -301,6 +314,7 @@ export const getWarTarget = async (req, res) => {
           email: true,
           gold: true,
           buildings: {
+            select: getBuildingSelect(supportsRangerTalaColumn),
             orderBy: [
               { y: "asc" },
               { x: "asc" },
@@ -329,6 +343,7 @@ export const getWarTarget = async (req, res) => {
           email: true,
           gold: true,
           buildings: {
+            select: getBuildingSelect(supportsRangerTalaColumn),
             orderBy: [
               { y: "asc" },
               { x: "asc" },
@@ -353,6 +368,7 @@ export const getWarTarget = async (req, res) => {
 
 export const getWarEnemies = async (req, res) => {
   try {
+    const supportsRangerTalaColumn = await hasRangerTalaColumn();
     const opponents = await prisma.user.findMany({
       where: {
         id: {
@@ -369,6 +385,7 @@ export const getWarEnemies = async (req, res) => {
         email: true,
         gold: true,
         buildings: {
+          select: getBuildingSelect(supportsRangerTalaColumn),
           orderBy: [
             { y: "asc" },
             { x: "asc" },
@@ -403,6 +420,7 @@ export const getWarEnemies = async (req, res) => {
 
 export const applyWarResolution = async (req, res) => {
   try {
+    const supportsRangerTalaColumn = await hasRangerTalaColumn();
     const targetUserId = Number(req.body?.targetUserId);
     const requestedLoot = Math.max(0, Math.floor(Number(req.body?.loot ?? 0) || 0));
     const destructionPercent = Math.max(0, Math.floor(Number(req.body?.destructionPercent ?? 0) || 0));
@@ -432,7 +450,7 @@ export const applyWarResolution = async (req, res) => {
           select: {
             id: true,
             soldierCount: true,
-            rangerTalaCount: true,
+            ...(supportsRangerTalaColumn ? { rangerTalaCount: true } : {}),
           },
         },
       },
@@ -472,7 +490,7 @@ export const applyWarResolution = async (req, res) => {
           where: {
             id: building.id,
           },
-          data: {
+          data: stripUnsupportedBuildingFields({
             soldierCount: Math.max(
               0,
               Number(building.soldierCount ?? 0) - Math.min(
@@ -487,7 +505,7 @@ export const applyWarResolution = async (req, res) => {
                 loss - Math.max(0, Number(building.soldierCount ?? 0) || 0)
               )
             ),
-          },
+          }, supportsRangerTalaColumn),
         });
       }
 
@@ -545,6 +563,7 @@ export const applyWarResolution = async (req, res) => {
 };
 
 export const updateBuilding = async (req, res) => {
+  const supportsRangerTalaColumn = await hasRangerTalaColumn();
   const buildingId = Number(req.params.id);
   const { x, y, level, isUpgrading, upgradeCompleteAt } = req.body;
 
@@ -552,6 +571,9 @@ export const updateBuilding = async (req, res) => {
     where: {
       id: buildingId,
       userId: req.user.id,
+    },
+    select: {
+      id: true,
     },
   });
 
@@ -595,7 +617,7 @@ export const updateBuilding = async (req, res) => {
     nextData.soldierCount = Math.max(0, Math.floor(Number(req.body.soldierCount)));
   }
 
-  if (Number.isFinite(Number(req.body.rangerTalaCount))) {
+  if (supportsRangerTalaColumn && Number.isFinite(Number(req.body.rangerTalaCount))) {
     nextData.rangerTalaCount = Math.max(0, Math.floor(Number(req.body.rangerTalaCount)));
   }
 
@@ -631,7 +653,8 @@ export const updateBuilding = async (req, res) => {
     where: {
       id: buildingId,
     },
-    data: nextData,
+    data: stripUnsupportedBuildingFields(nextData, supportsRangerTalaColumn),
+    select: getBuildingSelect(supportsRangerTalaColumn),
   });
 
   res.json(serializeBuilding(updatedBuilding));
@@ -649,6 +672,9 @@ export const deleteBuilding = async (req, res) => {
       where: {
         id: buildingId,
         userId: req.user.id,
+      },
+      select: {
+        id: true,
       },
     });
 
