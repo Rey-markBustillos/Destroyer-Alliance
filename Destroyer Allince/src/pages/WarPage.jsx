@@ -4,7 +4,6 @@ import { useNavigate } from "react-router-dom";
 import { createGame, destroyGame } from "../game/main";
 import MobileLandscapePrompt from "../components/MobileLandscapePrompt";
 import { applyWarResolution, fetchWarTarget, syncGameSnapshot } from "../services/game";
-import { getBattleRecords, saveBattleRecord } from "../services/battleRecordStorage";
 import { getGameSnapshot, saveGameSnapshot } from "../services/gameStorage";
 import { getSession, saveSession } from "../services/session";
 import soundManager from "../services/soundManager";
@@ -241,7 +240,6 @@ export default function WarPage() {
   const [lookupState, setLookupState] = useState("idle");
   const [lookupError, setLookupError] = useState("");
   const [target, setTarget] = useState(null);
-  const [battleRecords, setBattleRecords] = useState(() => getBattleRecords(session));
   const [musicStatus, setMusicStatus] = useState(() => soundManager.getStatus());
   const [musicPanelOpen, setMusicPanelOpen] = useState(false);
   const [raidState, setRaidState] = useState({
@@ -418,18 +416,7 @@ export default function WarPage() {
             });
           }
 
-          if (savedSummaryRef.current !== recordSignature) {
-            savedSummaryRef.current = recordSignature;
-            setBattleRecords(saveBattleRecord({
-              targetId: targetRef.current.id,
-              targetName: targetRef.current.name,
-              targetPlayerId: targetRef.current.playerId,
-              outcome: nextState.summary.outcome,
-              loot: nextState.summary.loot,
-              destructionPercent: nextState.summary.destructionPercent,
-              remainingTroops: nextState.summary.remainingTroops,
-            }, session));
-          }
+          savedSummaryRef.current = recordSignature;
         }
 
         setRaidState(nextState);
@@ -784,57 +771,6 @@ export default function WarPage() {
               <p className="mobile-landscape-war-meta mt-1 text-[11px] font-semibold text-emerald-300">Available Loot: {target.loot ?? 0}</p>
             </div>
           ) : null}
-        </div>
-      </div>
-
-      <div className="mobile-landscape-war-right-rail pointer-events-none absolute right-0 top-1/2 z-10 -translate-y-1/2 pr-2 min-[901px]:pr-4">
-        <div className="mobile-landscape-war-side-card pointer-events-auto flex w-29 flex-col gap-1.5 rounded-[0.95rem] border border-white/10 bg-slate-950/72 p-1.5 shadow-[0_14px_36px_rgba(2,6,23,0.28)] min-[901px]:w-44 min-[901px]:gap-2 min-[901px]:rounded-[1.1rem] min-[901px]:bg-slate-950/52 min-[901px]:p-2.5 min-[901px]:backdrop-blur">
-          <div className="rounded-lg border border-white/10 bg-white/5 p-2 min-[901px]:rounded-xl min-[901px]:p-2.5">
-            <p className="mobile-landscape-war-kicker text-[10px] uppercase tracking-[0.14em] text-slate-400 min-[901px]:text-[11px] min-[901px]:tracking-[0.18em]">Structures</p>
-            <p className="mobile-landscape-war-side-value mt-1 text-xl font-black text-rose-200 min-[901px]:text-2xl">{raidState.defendersRemaining ?? 0}</p>
-          </div>
-          <div className="rounded-lg border border-white/10 bg-white/5 p-2 min-[901px]:rounded-xl min-[901px]:p-2.5">
-            <p className="mobile-landscape-war-kicker text-[10px] uppercase tracking-[0.14em] text-slate-400 min-[901px]:text-[11px] min-[901px]:tracking-[0.18em]">Troops Left</p>
-            <p className="mobile-landscape-war-side-value mt-1 text-xl font-black text-sky-200 min-[901px]:text-2xl">{raidState.attackersRemaining ?? 0}</p>
-          </div>
-          <div className="rounded-lg border border-white/10 bg-white/5 p-2 min-[901px]:rounded-xl min-[901px]:p-2.5">
-            <p className="mobile-landscape-war-kicker text-[10px] uppercase tracking-[0.14em] text-slate-400 min-[901px]:text-[11px] min-[901px]:tracking-[0.18em]">{raidTimerTitle}</p>
-            <p className={`mobile-landscape-war-side-value mt-1 text-xl font-black min-[901px]:text-2xl ${
-              raidState.phase === "planning" ? "text-amber-200" : "text-cyan-100"
-            }`}>
-              {raidState.phase === "planning" || raidState.phase === "active" ? raidTimerLabel : "--:--"}
-            </p>
-          </div>
-          <div className="rounded-lg border border-white/10 bg-white/5 p-2 min-[901px]:rounded-xl min-[901px]:p-2.5">
-            <p className="mobile-landscape-war-kicker text-[10px] uppercase tracking-[0.14em] text-slate-400 min-[901px]:text-[11px] min-[901px]:tracking-[0.18em]">Destruction</p>
-            <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-900 min-[901px]:mt-2 min-[901px]:h-2.5">
-              <div
-                className="h-full rounded-full bg-[linear-gradient(90deg,#fb7185_0%,#f59e0b_48%,#facc15_100%)] transition-all duration-300"
-                style={{ width: `${Math.max(0, Math.min(100, raidState.destructionPercent ?? 0))}%` }}
-              />
-            </div>
-          </div>
-          <div className="hidden rounded-xl border border-white/10 bg-white/5 p-2.5 min-[901px]:block">
-            <p className="mobile-landscape-war-kicker text-[11px] uppercase tracking-[0.18em] text-slate-400">Records</p>
-            <div className="mt-2 max-h-40 space-y-2 overflow-y-auto pr-1">
-              {battleRecords.length > 0 ? battleRecords.map((record) => (
-                <div
-                  key={record.id}
-                  className="mobile-landscape-war-record rounded-lg border border-white/10 bg-slate-900/50 px-2.5 py-2"
-                >
-                  <p className={`mobile-landscape-war-note text-xs font-bold ${record.outcome === "victory" ? "text-emerald-300" : "text-rose-300"}`}>
-                    {record.outcome === "victory" ? "Win" : "Lose"} vs {record.targetName}
-                  </p>
-                  <p className="mobile-landscape-war-note mt-1 text-[10px] text-slate-400">{record.targetPlayerId}</p>
-                  <p className="mobile-landscape-war-note mt-1 text-[10px] text-slate-300">
-                    Loot {record.loot} • {record.destructionPercent}% destruction
-                  </p>
-                </div>
-              )) : (
-                <p className="mobile-landscape-war-note text-[11px] text-slate-400">No battle records yet.</p>
-              )}
-            </div>
-          </div>
         </div>
       </div>
 
