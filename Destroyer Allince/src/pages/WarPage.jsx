@@ -142,7 +142,7 @@ function DeploymentOptionCard({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`mobile-landscape-war-deploy-button flex min-w-[5.2rem] items-center gap-2 rounded-xl border px-2 py-1.5 text-left transition disabled:cursor-not-allowed disabled:opacity-40 min-[901px]:min-w-[7rem] min-[901px]:gap-2.5 min-[901px]:rounded-2xl min-[901px]:px-3 min-[901px]:py-2.5 ${
+      className={`mobile-landscape-war-deploy-button flex min-w-[5.2rem] items-center gap-2 rounded-xl border px-2 py-1.5 text-left transition disabled:cursor-not-allowed disabled:opacity-40 min-[901px]:min-w-28 min-[901px]:gap-2.5 min-[901px]:rounded-2xl min-[901px]:px-3 min-[901px]:py-2.5 ${
         isSelected
           ? `${toneClass} border-transparent text-slate-950 shadow-[0_10px_24px_rgba(15,23,42,0.18)]`
           : "border-white/10 bg-white/5 text-white hover:bg-white/10"
@@ -283,7 +283,7 @@ export default function WarPage() {
   const army = useMemo(() => deriveArmyFromSnapshot(snapshot), [snapshot]);
 
   const [lookupState, setLookupState] = useState("idle");
-  const [lookupError, setLookupError] = useState("");
+  const [, setLookupError] = useState("");
   const [target, setTarget] = useState(null);
   const [musicStatus, setMusicStatus] = useState(() => soundManager.getStatus());
   const [musicPanelOpen, setMusicPanelOpen] = useState(false);
@@ -589,7 +589,7 @@ export default function WarPage() {
     battleSceneRef.current?.startRaidAttack();
   };
 
-  const handleSelectDeploymentType = (type) => {
+  const handleSelectDeploymentType = useCallback((type) => {
     const didSelect = battleSceneRef.current?.setDeploymentType?.(type);
 
     if (didSelect === false) {
@@ -600,7 +600,7 @@ export default function WarPage() {
       ...current,
       selectedDeploymentType: type,
     }));
-  };
+  }, []);
 
   const handleBackToBase = () => {
     void primeGameRoute().finally(() => {
@@ -625,10 +625,6 @@ export default function WarPage() {
   };
 
   const totalTroops = getTotalTroops(army);
-  const availableTankCount = raidState.reserves?.tanks ?? army.tanks ?? 0;
-  const availableHelicopterCount = raidState.reserves?.helicopters ?? army.helicopters ?? 0;
-  const canDeployTank = availableTankCount > 0;
-  const canDeployHelicopter = availableHelicopterCount > 0;
   const canAttack = totalTroops > 0 && target && raidState.phase === "ready";
   const canFindMatch = lookupState !== "loading" && raidState.phase !== "planning" && raidState.phase !== "active";
   const summary = raidState.summary;
@@ -639,26 +635,11 @@ export default function WarPage() {
   const canLowerMusicVolume = musicVolumePercent > 0;
   const canRaiseMusicVolume = musicVolumePercent < 100;
   const raidTimerLabel = formatCountdown(raidState.timeRemainingMs);
-  const raidTimerTitle = raidState.phase === "planning"
-    ? "Prep Timer"
-    : raidState.phase === "active"
-      ? "Attack Timer"
-      : "Timer";
-  const raidStatusText = raidState.phase === "active"
-    ? "Deploy units on the battlefield"
-    : raidState.phase === "planning"
-      ? "Scout the base. Attack starts automatically after the prep timer."
-      : raidState.phase === "ready"
-        ? "Village located"
-        : raidState.phase === "finished"
-          ? "Raid complete"
-          : lookupState === "loading"
-            ? "Searching village or base"
-            : "Waiting for orders";
+  const showRaidTimer = raidState.phase === "planning" || raidState.phase === "active";
   const attackButtonLabel = raidState.phase === "planning"
-    ? `Prep ${raidTimerLabel}`
+    ? "Prep"
     : raidState.phase === "active"
-      ? `Attack ${raidTimerLabel}`
+      ? "Attack"
       : "Attack";
   const canChooseDeployment = Boolean(target) && ["ready", "planning", "active"].includes(raidState.phase);
   const deploymentCounts = {
@@ -672,6 +653,49 @@ export default function WarPage() {
       ? (raidState.reserves?.helicopters ?? 0)
       : (army.helicopters ?? 0),
   };
+  const deploymentOptions = [
+    {
+      type: "soldier",
+      label: "Riflemen",
+      imageSrc: "/assets/army/front/firing.png",
+      imageAlt: "Riflemen",
+      count: deploymentCounts.soldier,
+      toneClass: "bg-sky-300",
+    },
+    {
+      type: "tank",
+      label: "Tank",
+      imageSrc: "/assets/tank/tank1.png",
+      imageAlt: "Tank",
+      count: deploymentCounts.tank,
+      toneClass: "bg-amber-300",
+    },
+    {
+      type: "helicopter",
+      label: "Helicopter",
+      imageSrc: "/assets/parkingchopper-Photoroom.png",
+      imageAlt: "Helicopter",
+      count: deploymentCounts.helicopter,
+      toneClass: "bg-emerald-300",
+    },
+  ];
+  const visibleDeploymentOptions = deploymentOptions.filter((option) => option.count > 0);
+
+  useEffect(() => {
+    if (!visibleDeploymentOptions.length) {
+      return;
+    }
+
+    const selectedStillAvailable = visibleDeploymentOptions.some(
+      (option) => option.type === raidState.selectedDeploymentType
+    );
+
+    if (selectedStillAvailable) {
+      return;
+    }
+
+    handleSelectDeploymentType(visibleDeploymentOptions[0].type);
+  }, [visibleDeploymentOptions, raidState.selectedDeploymentType, handleSelectDeploymentType]);
 
   useEffect(() => {
     if (autoSearchTriggeredRef.current) {
@@ -718,6 +742,18 @@ export default function WarPage() {
               <p className="mobile-landscape-war-kicker text-[0.46rem] uppercase tracking-[0.18em] text-rose-300/70 min-[901px]:text-[0.65rem] min-[901px]:tracking-[0.3em]">Damage</p>
               <p className="mobile-landscape-war-value mt-0.5 text-sm font-black text-rose-200 min-[901px]:mt-1 min-[901px]:text-xl">{raidState.destructionPercent ?? 0}%</p>
             </div>
+            {showRaidTimer ? (
+              <>
+                <div className="mobile-landscape-war-divider h-7 w-px bg-white/10 min-[901px]:h-10" />
+                <div>
+                  <p className={`mobile-landscape-war-value mt-0.5 text-sm font-black min-[901px]:mt-1 min-[901px]:text-xl ${
+                    raidState.phase === "planning" ? "text-amber-200" : "text-cyan-100"
+                  }`}>
+                    {raidTimerLabel}
+                  </p>
+                </div>
+              </>
+            ) : null}
             {target ? (
                 <>
                 <div className="mobile-landscape-war-divider h-7 w-px bg-white/10 min-[901px]:h-10" />
@@ -805,29 +841,6 @@ export default function WarPage() {
           >
             {attackButtonLabel}
           </button>
-          <div className="rounded-lg border border-white/10 bg-white/5 p-2 min-[901px]:rounded-xl min-[901px]:p-2.5">
-            <p className="mobile-landscape-war-kicker text-[10px] uppercase tracking-[0.14em] text-slate-400 min-[901px]:text-[11px] min-[901px]:tracking-[0.18em]">Status</p>
-            <p className="mobile-landscape-war-status mt-1 text-[12px] font-black leading-tight text-white min-[901px]:text-sm">
-              {raidStatusText}
-            </p>
-            {raidState.phase === "planning" || raidState.phase === "active" ? (
-              <p className={`mobile-landscape-war-note mt-1 text-[10px] font-semibold min-[901px]:text-[11px] ${
-                raidState.phase === "planning" ? "text-amber-300" : "text-cyan-300"
-              }`}>
-                {raidTimerTitle}: {raidTimerLabel}
-              </p>
-            ) : null}
-            {lookupError ? <p className="mobile-landscape-war-note mt-1 text-[10px] leading-tight text-rose-300 min-[901px]:text-[11px]">{lookupError}</p> : null}
-          </div>
-          {target ? (
-            <div className="hidden rounded-xl border border-white/10 bg-white/5 p-2.5 min-[901px]:block">
-              <p className="mobile-landscape-war-kicker text-[11px] uppercase tracking-[0.18em] text-slate-400">Enemy</p>
-              <p className="mobile-landscape-war-name mt-1 text-base font-black text-white">{target.name}</p>
-              <p className="mobile-landscape-war-meta text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-300">{target.playerId}</p>
-              <p className="mobile-landscape-war-meta mt-1 text-[11px] text-slate-300">HQ Lv.{target.townHallLevel ?? 1}</p>
-              <p className="mobile-landscape-war-meta mt-1 text-[11px] font-semibold text-emerald-300">Available Loot: {target.loot ?? 0}</p>
-            </div>
-          ) : null}
         </div>
       </div>
 
@@ -835,38 +848,27 @@ export default function WarPage() {
         <div className="mobile-landscape-war-bottom-bar pointer-events-auto mx-auto max-w-lg rounded-2xl border border-white/10 bg-slate-950/74 px-2.5 py-2 shadow-[0_14px_36px_rgba(2,6,23,0.3)] min-[901px]:max-w-3xl min-[901px]:rounded-[1.2rem] min-[901px]:bg-slate-950/54 min-[901px]:px-4 min-[901px]:py-3 min-[901px]:backdrop-blur">
           <div className="flex flex-wrap items-center justify-between gap-2 min-[901px]:gap-4">
             {canChooseDeployment ? (
-              <div className="flex flex-wrap gap-1.5 min-[901px]:gap-2">
-                <DeploymentOptionCard
-                  label="Riflemen"
-                  imageSrc="/assets/army/front/firing.png"
-                  imageAlt="Riflemen"
-                  count={deploymentCounts.soldier}
-                  toneClass="bg-sky-300"
-                  isSelected={raidState.selectedDeploymentType === "soldier"}
-                  disabled={deploymentCounts.soldier <= 0}
-                  onClick={() => handleSelectDeploymentType("soldier")}
-                />
-                <DeploymentOptionCard
-                  label="Tank"
-                  imageSrc="/assets/tank/tank1.png"
-                  imageAlt="Tank"
-                  count={deploymentCounts.tank}
-                  toneClass="bg-amber-300"
-                  isSelected={raidState.selectedDeploymentType === "tank"}
-                  disabled={deploymentCounts.tank <= 0}
-                  onClick={() => handleSelectDeploymentType("tank")}
-                />
-                <DeploymentOptionCard
-                  label="Helicopter"
-                  imageSrc="/assets/parkingchopper-Photoroom.png"
-                  imageAlt="Helicopter"
-                  count={deploymentCounts.helicopter}
-                  toneClass="bg-emerald-300"
-                  isSelected={raidState.selectedDeploymentType === "helicopter"}
-                  disabled={deploymentCounts.helicopter <= 0}
-                  onClick={() => handleSelectDeploymentType("helicopter")}
-                />
-              </div>
+              visibleDeploymentOptions.length ? (
+                <div className="flex flex-wrap gap-1.5 min-[901px]:gap-2">
+                  {visibleDeploymentOptions.map((option) => (
+                    <DeploymentOptionCard
+                      key={option.type}
+                      label={option.label}
+                      imageSrc={option.imageSrc}
+                      imageAlt={option.imageAlt}
+                      count={option.count}
+                      toneClass={option.toneClass}
+                      isSelected={raidState.selectedDeploymentType === option.type}
+                      disabled={false}
+                      onClick={() => handleSelectDeploymentType(option.type)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p className="mobile-landscape-war-note text-[11px] font-semibold leading-tight text-slate-400 min-[901px]:text-xs">
+                  No troops available to deploy.
+                </p>
+              )
             ) : (
               <p className="mobile-landscape-war-note text-[11px] font-semibold leading-tight text-slate-400 min-[901px]:text-xs">
                 Find a target first to choose which unit attacks first.
