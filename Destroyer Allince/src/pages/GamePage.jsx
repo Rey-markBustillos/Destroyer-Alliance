@@ -148,6 +148,77 @@ function CommandButton({ children, className = "", ...props }) {
   );
 }
 
+function BuildingStatusNotes({
+  building,
+  blockedByTownHall,
+  upgradeCap,
+  upgradeCostLabel,
+}) {
+  const [now, setNow] = useState(() => Date.now());
+  const hasSoldiers = (building?.soldierCount ?? 0) > 0;
+  const showsFoodTimer = (building?.type === "tent" || building?.type === "command-center")
+    && hasSoldiers
+    && !building?.isHungry
+    && Number(building?.nextWageAt) > 0;
+  const shouldTick = Boolean(building?.isUpgrading || showsFoodTimer);
+
+  useEffect(() => {
+    if (!shouldTick) {
+      return undefined;
+    }
+
+    setNow(Date.now());
+
+    const timer = window.setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [building?.isUpgrading, building?.nextWageAt, shouldTick]);
+
+  if (!building) {
+    return null;
+  }
+
+  const upgradeRemainingMs = building?.upgradeCompleteAt
+    ? Math.max(0, Number(building.upgradeCompleteAt) - now)
+    : 0;
+  const upgradeMinutes = Math.floor(upgradeRemainingMs / 60000);
+  const upgradeSeconds = Math.floor((upgradeRemainingMs % 60000) / 1000);
+  const wageRemainingMs = building?.nextWageAt
+    ? Math.max(0, Number(building.nextWageAt) - now)
+    : 0;
+  const wageHours = Math.floor(wageRemainingMs / 3600000);
+  const wageMinutes = Math.floor((wageRemainingMs % 3600000) / 60000);
+
+  return (
+    <>
+      {building.isUpgrading ? (
+        <p className="pt-px text-[10px] font-semibold text-amber-300">
+          Upgrading... {upgradeMinutes}:{String(upgradeSeconds).padStart(2, "0")}
+        </p>
+      ) : (building.level ?? 1) < upgradeCap ? (
+        <p className="pt-px text-[10px] font-semibold text-emerald-300">
+          Need {upgradeCostLabel} to upgrade
+        </p>
+      ) : blockedByTownHall ? (
+        <p className="pt-px text-[10px] font-semibold text-rose-300">
+          Upgrade main base first
+        </p>
+      ) : null}
+      {(building.type === "tent" || building.type === "command-center") && hasSoldiers ? (
+        <p className={`pt-px text-[10px] font-semibold ${building.isHungry ? "text-rose-300" : "text-sky-300"}`}>
+          {building.isHungry
+            ? "Gutom na sila"
+            : `Food: ${wageHours}h ${String(wageMinutes).padStart(2, "0")}m`}
+        </p>
+      ) : null}
+    </>
+  );
+}
+
 export default function GamePage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -158,7 +229,6 @@ export default function GamePage() {
   const backendRetryAfterRef = useRef(0);
   const backendWarningShownRef = useRef(false);
   const activeSession = getSession();
-  const [clock, setClock] = useState(() => Date.now());
   const [gameState, setGameState] = useState({
     gold: 1200,
     energy: 0,
@@ -207,16 +277,6 @@ export default function GamePage() {
   const [showWelcomeBack, setShowWelcomeBack] = useState(() => isWelcomeBackPending());
   const [musicStatus, setMusicStatus] = useState(() => soundManager.getStatus());
   const [musicPanelOpen, setMusicPanelOpen] = useState(false);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setClock(Date.now());
-    }, 1000);
-
-    return () => {
-      window.clearInterval(timer);
-    };
-  }, []);
 
   useEffect(() => {
     if (!musicPanelOpen) {
@@ -1112,11 +1172,6 @@ export default function GamePage() {
     navigate("/war");
   };
 
-  const upgradeRemainingMs = selectedPlacedBuilding?.upgradeCompleteAt
-    ? Math.max(0, Number(selectedPlacedBuilding.upgradeCompleteAt) - clock)
-    : 0;
-  const upgradeMinutes = Math.floor(upgradeRemainingMs / 60000);
-  const upgradeSeconds = Math.floor((upgradeRemainingMs % 60000) / 1000);
   const upgradeCost = selectedPlacedBuilding
     ? getBuildingUpgradeCost(selectedPlacedBuilding.type)
     : 0;
@@ -1131,11 +1186,6 @@ export default function GamePage() {
     && !selectedPlacedBuilding.isUpgrading
     && (selectedPlacedBuilding.level ?? 1) < upgradeCap
     && gameState.gold >= upgradeCost;
-  const wageRemainingMs = selectedPlacedBuilding?.nextWageAt
-    ? Math.max(0, Number(selectedPlacedBuilding.nextWageAt) - clock)
-    : 0;
-  const wageHours = Math.floor(wageRemainingMs / 3600000);
-  const wageMinutes = Math.floor((wageRemainingMs % 3600000) / 60000);
   const canHireSoldier = (selectedPlacedBuilding?.type === "tent" || selectedPlacedBuilding?.type === "command-center")
     && (selectedPlacedBuilding.soldierCount ?? 0) < (selectedPlacedBuilding.maxSoldiers ?? 0);
   const canAffordRecruit = gameState.gold >= SOLDIER_RECRUIT_COST;
@@ -1440,28 +1490,12 @@ export default function GamePage() {
                     <span className="font-bold text-amber-200">{upgradeCostLabel}</span>
                   </div>
                 ) : null}
-                {selectedPlacedBuilding.isUpgrading ? (
-                  <p className="pt-px text-[10px] font-semibold text-amber-300">
-                    Upgrading... {upgradeMinutes}:{String(upgradeSeconds).padStart(2, "0")}
-                  </p>
-                ) : (selectedPlacedBuilding.level ?? 1) < upgradeCap ? (
-                  <p className="pt-px text-[10px] font-semibold text-emerald-300">
-                    Need {upgradeCostLabel} to upgrade
-                  </p>
-                ) : blockedByTownHall ? (
-                  <p className="pt-px text-[10px] font-semibold text-rose-300">
-                    Upgrade main base first
-                  </p>
-                ) : null}
-                {(selectedPlacedBuilding.type === "tent" || selectedPlacedBuilding.type === "command-center") && (selectedPlacedBuilding.soldierCount ?? 0) > 0 ? (
-                  <p className={`pt-px text-[10px] font-semibold ${
-                    selectedPlacedBuilding.isHungry ? "text-rose-300" : "text-sky-300"
-                  }`}>
-                    {selectedPlacedBuilding.isHungry
-                      ? "Gutom na sila"
-                      : `Food: ${wageHours}h ${String(wageMinutes).padStart(2, "0")}m`}
-                  </p>
-                ) : null}
+                <BuildingStatusNotes
+                  building={selectedPlacedBuilding}
+                  blockedByTownHall={blockedByTownHall}
+                  upgradeCap={upgradeCap}
+                  upgradeCostLabel={upgradeCostLabel}
+                />
               </div>
 
               {selectedPlacedBuilding.type === "tent" ? (
