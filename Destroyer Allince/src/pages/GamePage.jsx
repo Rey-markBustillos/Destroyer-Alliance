@@ -1685,13 +1685,13 @@ export default function GamePage() {
           initial={{ opacity: 0, x: -16 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.45, delay: 0.12 }}
-          className="pointer-events-none absolute bottom-2 left-1/2 z-10 -translate-x-1/2 sm:bottom-10 sm:left-5 sm:translate-x-0"
+          className="mobile-landscape-start-war-wrap pointer-events-none absolute bottom-2 left-1/2 z-10 -translate-x-1/2 sm:bottom-10 sm:left-5 sm:translate-x-0"
         >
           <button
             type="button"
             onClick={handleStartWar}
             disabled={!canStartWar}
-            className="pointer-events-auto min-h-8 rounded-[0.95rem] border border-rose-300/20 bg-[linear-gradient(135deg,rgba(225,29,72,0.92)_0%,rgba(244,63,94,0.9)_100%)] px-3.5 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-[0_12px_24px_rgba(190,24,93,0.22)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_34px_rgba(190,24,93,0.28)] disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50 sm:min-h-12 sm:rounded-[1.35rem] sm:px-6 sm:py-4 sm:text-sm sm:tracking-[0.24em] sm:shadow-[0_22px_40px_rgba(190,24,93,0.28)] sm:hover:shadow-[0_26px_50px_rgba(190,24,93,0.36)]"
+            className="mobile-landscape-start-war-button pointer-events-auto min-h-8 rounded-[0.95rem] border border-rose-300/20 bg-[linear-gradient(135deg,rgba(225,29,72,0.92)_0%,rgba(244,63,94,0.9)_100%)] px-3.5 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-[0_12px_24px_rgba(190,24,93,0.22)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_34px_rgba(190,24,93,0.28)] disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50 sm:min-h-12 sm:rounded-[1.35rem] sm:px-6 sm:py-4 sm:text-sm sm:tracking-[0.24em] sm:shadow-[0_22px_40px_rgba(190,24,93,0.28)] sm:hover:shadow-[0_26px_50px_rgba(190,24,93,0.36)]"
           >
             Start War
           </button>

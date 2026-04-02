@@ -621,25 +621,25 @@ export default function WarPage() {
               <p className="mobile-landscape-war-name mt-0.5 text-[13px] font-black text-white min-[901px]:mt-1 min-[901px]:text-base">{playerName}</p>
               <p className="mobile-landscape-war-meta text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400 min-[901px]:text-[11px] min-[901px]:tracking-[0.16em]">{playerId}</p>
             </div>
-            <div className="h-8 w-px bg-white/10 min-[901px]:h-10" />
+            <div className="mobile-landscape-war-divider h-8 w-px bg-white/10 min-[901px]:h-10" />
             <div>
               <p className="mobile-landscape-war-kicker text-[0.55rem] uppercase tracking-[0.24em] text-amber-300/70 min-[901px]:text-[0.65rem] min-[901px]:tracking-[0.3em]">Loot Gained</p>
               <p className="mobile-landscape-war-value mt-0.5 text-base font-black text-amber-200 min-[901px]:mt-1 min-[901px]:text-xl">{raidState.loot ?? 0}</p>
             </div>
-            <div className="h-8 w-px bg-white/10 min-[901px]:h-10" />
+            <div className="mobile-landscape-war-divider h-8 w-px bg-white/10 min-[901px]:h-10" />
             <div>
               <p className="mobile-landscape-war-kicker text-[0.55rem] uppercase tracking-[0.24em] text-sky-300/70 min-[901px]:text-[0.65rem] min-[901px]:tracking-[0.3em]">Energy</p>
               <p className="mobile-landscape-war-value mt-0.5 text-base font-black text-sky-100 min-[901px]:mt-1 min-[901px]:text-xl">{raidState.energy ?? army.energy ?? 0}</p>
             </div>
-            <div className="h-8 w-px bg-white/10 min-[901px]:h-10" />
+            <div className="mobile-landscape-war-divider h-8 w-px bg-white/10 min-[901px]:h-10" />
             <div>
               <p className="mobile-landscape-war-kicker text-[0.55rem] uppercase tracking-[0.24em] text-rose-300/70 min-[901px]:text-[0.65rem] min-[901px]:tracking-[0.3em]">Destruction</p>
               <p className="mobile-landscape-war-value mt-0.5 text-base font-black text-rose-200 min-[901px]:mt-1 min-[901px]:text-xl">{raidState.destructionPercent ?? 0}%</p>
             </div>
             {target ? (
-              <>
-                <div className="h-8 w-px bg-white/10 min-[901px]:h-10" />
-                <div>
+                <>
+                <div className="mobile-landscape-war-divider h-8 w-px bg-white/10 min-[901px]:h-10" />
+                <div className="mobile-landscape-war-top-enemy">
                   <p className="mobile-landscape-war-kicker text-[0.55rem] uppercase tracking-[0.24em] text-cyan-300/70 min-[901px]:text-[0.65rem] min-[901px]:tracking-[0.3em]">Enemy</p>
                   <p className="mobile-landscape-war-name mt-0.5 text-[13px] font-black text-cyan-100 min-[901px]:mt-1 min-[901px]:text-base">{target.name}</p>
                   <p className="mobile-landscape-war-meta text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400 min-[901px]:text-[11px] min-[901px]:tracking-[0.16em]">{target.playerId}</p>
@@ -705,7 +705,7 @@ export default function WarPage() {
         </div>
       </div>
 
-      <div className="pointer-events-none absolute left-0 top-1/2 z-10 -translate-y-1/2 pl-2 min-[901px]:pl-4">
+      <div className="mobile-landscape-war-left-rail pointer-events-none absolute left-0 top-1/2 z-10 -translate-y-1/2 pl-2 min-[901px]:pl-4">
         <div className="mobile-landscape-war-side-card pointer-events-auto flex w-[8rem] flex-col gap-1.5 rounded-[0.95rem] border border-white/10 bg-slate-950/52 p-1.5 shadow-[0_14px_36px_rgba(2,6,23,0.28)] backdrop-blur min-[901px]:w-[12rem] min-[901px]:gap-2 min-[901px]:rounded-[1.1rem] min-[901px]:p-2.5">
           <button
             type="button"
@@ -750,7 +750,7 @@ export default function WarPage() {
         </div>
       </div>
 
-      <div className="pointer-events-none absolute right-0 top-1/2 z-10 -translate-y-1/2 pr-2 min-[901px]:pr-4">
+      <div className="mobile-landscape-war-right-rail pointer-events-none absolute right-0 top-1/2 z-10 -translate-y-1/2 pr-2 min-[901px]:pr-4">
         <div className="mobile-landscape-war-side-card pointer-events-auto flex w-[7.25rem] flex-col gap-1.5 rounded-[0.95rem] border border-white/10 bg-slate-950/52 p-1.5 shadow-[0_14px_36px_rgba(2,6,23,0.28)] backdrop-blur min-[901px]:w-[11rem] min-[901px]:gap-2 min-[901px]:rounded-[1.1rem] min-[901px]:p-2.5">
           <div className="rounded-lg border border-white/10 bg-white/5 p-2 min-[901px]:rounded-xl min-[901px]:p-2.5">
             <p className="mobile-landscape-war-kicker text-[10px] uppercase tracking-[0.14em] text-slate-400 min-[901px]:text-[11px] min-[901px]:tracking-[0.18em]">Structures</p>

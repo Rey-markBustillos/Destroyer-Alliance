@@ -2,14 +2,14 @@ import { useEffect, useState } from "react";
 
 const LOADING_SCREEN_SRC = "/assets/LOADINGSCREEN/LOAD1.png";
 
-export const primeAuthLoadingScreen = () => {
+export const primeAuthLoadingScreen = (imageSrc = LOADING_SCREEN_SRC) => {
   if (typeof window === "undefined") {
     return;
   }
 
   const image = new window.Image();
   image.decoding = "async";
-  image.src = LOADING_SCREEN_SRC;
+  image.src = imageSrc;
 };
 
 const getConnectionState = () => {
@@ -36,6 +36,7 @@ const getConnectionState = () => {
 export default function AuthLoadingScreen({
   title = "Loading.......",
   description = "Securing your session and preparing the battlefield.",
+  imageSrc = LOADING_SCREEN_SRC,
 }) {
   const [connectionState, setConnectionState] = useState(() => getConnectionState());
 
@@ -60,11 +61,11 @@ export default function AuthLoadingScreen({
     <div className="fixed inset-0 z-[100] overflow-hidden bg-slate-950 text-white">
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-        style={{ backgroundImage: `url('${LOADING_SCREEN_SRC}')` }}
+        style={{ backgroundImage: `url('${imageSrc}')` }}
       />
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat mix-blend-screen opacity-20"
-        style={{ backgroundImage: `url('${LOADING_SCREEN_SRC}')` }}
+        style={{ backgroundImage: `url('${imageSrc}')` }}
       />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(96,165,250,0.18),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(56,189,248,0.12),transparent_28%),linear-gradient(135deg,rgba(2,6,23,0.18)_0%,rgba(2,6,23,0.48)_45%,rgba(2,6,23,0.88)_100%)]" />
       <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(2,6,23,0.9)_0%,rgba(2,6,23,0.56)_46%,rgba(2,6,23,0.82)_100%)]" />

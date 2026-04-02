@@ -36,7 +36,7 @@ project-root/
 │       │   └── tiles.png
 │       └── index.html
 │
-├── backend/              # Node + Prisma + MySQL
+├── backend/              # Node + Prisma + Supabase Postgres
 │   ├── prisma/
 │   │   └── schema.prisma
 │   │
@@ -55,3 +55,6 @@ project-root/
 │   └── .env
 │
 └── README.md
+
+SUPABASE:
+PASS:Bustillos1333

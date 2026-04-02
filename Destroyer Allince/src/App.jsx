@@ -2,14 +2,23 @@ import { Suspense, lazy } from "react";
 import { HashRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AuthLoadingScreen from "./components/AuthLoadingScreen";
+import {
+  loadDashboardPage,
+  loadGamePage,
+  loadIntroStoryPage,
+  loadLoginPage,
+  loadProfilePage,
+  loadRegisterPage,
+  loadWarPage,
+} from "./utils/routePreload";
 
-const Dashboard = lazy(() => import("./pages/Dashboard"));
-const GamePage = lazy(() => import("./pages/GamePage"));
-const ProfilePage = lazy(() => import("./pages/ProfilePage"));
-const WarPage = lazy(() => import("./pages/WarPage"));
-const IntroStory = lazy(() => import("./pages/IntroStory"));
-const Login = lazy(() => import("./pages/login"));
-const Register = lazy(() => import("./pages/register"));
+const Dashboard = lazy(loadDashboardPage);
+const GamePage = lazy(loadGamePage);
+const ProfilePage = lazy(loadProfilePage);
+const WarPage = lazy(loadWarPage);
+const IntroStory = lazy(loadIntroStoryPage);
+const Login = lazy(loadLoginPage);
+const Register = lazy(loadRegisterPage);
 
 function RouteLoadingFallback() {
   return (

@@ -6,6 +6,7 @@ import AuthLoadingScreen, { primeAuthLoadingScreen } from "../components/AuthLoa
 import PwaInstallButton from "../components/PwaInstallButton";
 import { login } from "../services/auth";
 import { markWelcomeBackPending, saveSession } from "../services/session";
+import { primeGameRoute } from "../utils/routePreload";
 
 const cinematicEase = [0.22, 1, 0.36, 1];
 
@@ -109,7 +110,8 @@ export default function Login() {
   );
 
   useEffect(() => {
-    primeAuthLoadingScreen();
+    primeAuthLoadingScreen("/assets/loginbackgound.png");
+    primeGameRoute();
   }, []);
 
   const handleSubmit = async (event) => {
@@ -364,6 +366,7 @@ export default function Login() {
           <AuthLoadingScreen
             title="Loading......."
             description="Opening your command interface and preparing the battlefield."
+            imageSrc="/assets/loginbackgound.png"
           />
         ) : null}
       </AnimatePresence>

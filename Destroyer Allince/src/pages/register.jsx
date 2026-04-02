@@ -6,6 +6,7 @@ import AuthLoadingScreen, { primeAuthLoadingScreen } from "../components/AuthLoa
 import PwaInstallButton from "../components/PwaInstallButton";
 import { register } from "../services/auth";
 import { markIntroPending, saveSession } from "../services/session";
+import { primeGameRoute, primeIntroRoute } from "../utils/routePreload";
 
 const cinematicEase = [0.22, 1, 0.36, 1];
 const cardEase = [0.65, 0.05, 0.36, 1];
@@ -125,7 +126,9 @@ export default function Register() {
   );
 
   useEffect(() => {
-    primeAuthLoadingScreen();
+    primeAuthLoadingScreen("/assets/loginbackgound.png");
+    primeIntroRoute();
+    primeGameRoute();
   }, []);
 
   const handleSubmit = async (event) => {
@@ -407,6 +410,7 @@ export default function Register() {
           <AuthLoadingScreen
             title="Loading......."
             description="Building your command center and preparing your alliance profile."
+            imageSrc="/assets/loginbackgound.png"
           />
         ) : null}
       </AnimatePresence>
