@@ -266,11 +266,26 @@ export default class GameScene extends Phaser.Scene {
       return;
     }
 
+    const camera = this.cameras.main;
+    const preservedCenter = {
+      x: Number(camera?.midPoint?.x ?? 0) || 0,
+      y: Number(camera?.midPoint?.y ?? 0) || 0,
+    };
+
     this.computeBoardMetrics();
     this.refreshBoardVisuals();
     this.repositionPlacedBuildings();
     this.repositionWarDeployments();
-    this.refreshCameraMetrics({ centerCamera: true });
+    this.refreshCameraMetrics({ centerCamera: false, snapZoom: true });
+
+    const restoredScroll = this.getScrollForWorldPoint(
+      preservedCenter.x,
+      preservedCenter.y,
+      this.cameraController.targetZoom
+    );
+    camera.setScroll(restoredScroll.scrollX, restoredScroll.scrollY);
+    this.cameraController.targetScrollX = restoredScroll.scrollX;
+    this.cameraController.targetScrollY = restoredScroll.scrollY;
 
     if (this.selectedPlacedBuilding) {
       this.focusCameraOnBuilding(this.selectedPlacedBuilding, { snap: true });
@@ -740,7 +755,7 @@ export default class GameScene extends Phaser.Scene {
 
   createCamera() {
     const camera = this.cameras.main;
-    camera.setBackgroundColor("rgba(2, 6, 23, 0)");
+    camera.setBackgroundColor("#020617");
     camera.roundPixels = false;
     this.refreshCameraMetrics({ centerCamera: true, snapZoom: true });
   }

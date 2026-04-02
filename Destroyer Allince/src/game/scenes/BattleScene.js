@@ -566,7 +566,7 @@ export default class BattleScene extends Phaser.Scene {
 
   createCamera() {
     const camera = this.cameras.main;
-    camera.setBackgroundColor("rgba(2, 6, 23, 0)");
+    camera.setBackgroundColor("#020617");
     camera.setBounds(
       this.worldBounds.minX,
       this.worldBounds.minY,
