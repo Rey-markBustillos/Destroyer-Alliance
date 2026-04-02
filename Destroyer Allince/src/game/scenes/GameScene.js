@@ -4,6 +4,12 @@ import Building from "../objects/Building";
 import SoldierUnit from "../objects/SoldierUnit";
 import { BUILDING_LIST, getBuildingUpgradeCost } from "../utils/buildingTypes";
 import {
+  getTextureRefFrame,
+  getTextureRefKey,
+  RANGER_FIRING_TEXTURES as RANGER_FIRING_TEXTURE_REFS,
+  RANGER_WALK_TEXTURES as RANGER_WALK_TEXTURE_REFS,
+} from "../utils/rangerSprites";
+import {
   configureHdSprite,
   createAmbientWorldLighting,
   getTextureSourceSize,
@@ -96,20 +102,6 @@ const WAR_FIRING_TEXTURES = {
   right: "soldier-right-firing",
 };
 
-const WAR_RANGER_TEXTURES = {
-  front: ["ranger-front-walk-1", "ranger-front-walk-2"],
-  back: ["ranger-back-walk-1", "ranger-back-walk-2"],
-  left: ["ranger-left-walk-1", "ranger-left-walk-2"],
-  right: ["ranger-right-walk-1", "ranger-right-walk-2"],
-};
-
-const WAR_RANGER_FIRING_TEXTURES = {
-  front: "ranger-front-firing",
-  back: "ranger-back-firing",
-  left: "ranger-left-firing",
-  right: "ranger-right-firing",
-};
-
 const clampStoredShots = (value, maxShots, hasVehicle = true) => {
   if (!hasVehicle) {
     return 0;
@@ -134,6 +126,35 @@ const lightenColor = (hex, amount = 16) => {
   const color = Phaser.Display.Color.ValueToColor(hex);
   color.lighten(amount);
   return color.color;
+};
+
+const getTextureIdentity = (textureRef) => {
+  const key = getTextureRefKey(textureRef);
+  const frame = getTextureRefFrame(textureRef);
+  return `${key ?? "unknown"}::${frame == null ? "__BASE" : frame}`;
+};
+
+const applyTextureRef = (sprite, textureRef) => {
+  if (!sprite) {
+    return false;
+  }
+
+  const key = getTextureRefKey(textureRef);
+  const frame = getTextureRefFrame(textureRef);
+  const identity = getTextureIdentity(textureRef);
+
+  if (!key || sprite.appliedTextureIdentity === identity) {
+    return false;
+  }
+
+  if (frame == null) {
+    sprite.setTexture(key);
+  } else {
+    sprite.setTexture(key, frame);
+  }
+
+  sprite.appliedTextureIdentity = identity;
+  return true;
 };
 
 const getCameraSafeBounds = (scene) => {
@@ -1977,18 +1998,23 @@ export default class GameScene extends Phaser.Scene {
       const deploymentId = String(deployment.id);
       seenIds.add(deploymentId);
       const isRanger = deployment.type === "ranger";
-      const walkTextures = isRanger ? WAR_RANGER_TEXTURES : WAR_SOLDIER_TEXTURES;
-      const firingTextures = isRanger ? WAR_RANGER_FIRING_TEXTURES : WAR_FIRING_TEXTURES;
+      const walkTextures = isRanger ? RANGER_WALK_TEXTURE_REFS : WAR_SOLDIER_TEXTURES;
+      const firingTextures = isRanger ? RANGER_FIRING_TEXTURE_REFS : WAR_FIRING_TEXTURES;
       const textureKey = deployment.state === "firing"
         ? firingTextures[deployment.direction] ?? firingTextures.front
         : (walkTextures[deployment.direction] ?? walkTextures.front)[
-          Number(deployment.frameIndex ?? 0) % 2
+          Number(deployment.frameIndex ?? 0) % (walkTextures[deployment.direction] ?? walkTextures.front).length
         ];
       const position = this.gridToWorld(Number(deployment.col ?? 0), Number(deployment.row ?? 0));
       const existingSprite = this.warDeployments.get(deploymentId);
 
       if (!existingSprite) {
-        const sprite = this.add.image(position.x, position.y, textureKey);
+        const sprite = this.add.image(
+          position.x,
+          position.y,
+          getTextureRefKey(textureKey),
+          getTextureRefFrame(textureKey) ?? undefined
+        );
         sprite.setOrigin(0.5, 1);
         configureHdSprite(sprite, {
           scene: this,
@@ -2004,7 +2030,7 @@ export default class GameScene extends Phaser.Scene {
       }
 
       existingSprite.setPosition(position.x, position.y);
-      existingSprite.setTexture(textureKey);
+      applyTextureRef(existingSprite, textureKey);
       configureHdSprite(existingSprite, {
         scene: this,
         maxWidth: 18,
@@ -2408,6 +2434,16 @@ export default class GameScene extends Phaser.Scene {
       return;
     }
 
+    const desiredUnitTypes = [
+      ...Array.from(
+        { length: Math.max(0, Number(commandCenter.rangerTalaCount ?? 0) || 0) },
+        () => "ranger"
+      ),
+      ...Array.from(
+        { length: Math.max(0, Number(commandCenter.soldierCount ?? 0) || 0) },
+        () => "soldier"
+      ),
+    ];
     const desiredCount = this.getTentTroopCount(commandCenter);
     const visibleCount = commandCenter.isSleeping ? 0 : desiredCount;
     const currentUnits = this.getSoldiersForCommandCenter(commandCenter);
@@ -2419,14 +2455,21 @@ export default class GameScene extends Phaser.Scene {
     }
 
     while (currentUnits.length < visibleCount) {
-      const unit = new SoldierUnit(this, commandCenter, currentUnits.length);
+      const unit = new SoldierUnit(
+        this,
+        commandCenter,
+        currentUnits.length,
+        desiredUnitTypes[currentUnits.length] ?? "soldier"
+      );
       this.structureLayer.add(unit);
       this.soldierUnits.push(unit);
       currentUnits.push(unit);
     }
 
     currentUnits.forEach((unit, index) => {
-      unit.assignCommandCenter(commandCenter, index);
+      const unitType = desiredUnitTypes[index] ?? "soldier";
+      unit.setUnitType?.(unitType);
+      unit.assignCommandCenter(commandCenter, index, unitType);
     });
   }
 

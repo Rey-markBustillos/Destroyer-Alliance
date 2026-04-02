@@ -4,7 +4,9 @@ import { useLocation, useNavigate } from "react-router-dom";
 
 import BuildingShop from "../components/BuildingShop";
 import MobileLandscapePrompt from "../components/MobileLandscapePrompt";
+import SpriteAnimator from "../components/SpriteAnimator";
 import { createGame, destroyGame } from "../game/main";
+import { RANGER_FRONT_PREVIEW } from "../game/utils/rangerSprites";
 import { getBuildingUpgradeCost } from "../game/utils/buildingTypes";
 import { createBattleSocket } from "../services/battleSocket";
 import { fetchLeaderboard } from "../services/auth";
@@ -849,6 +851,7 @@ export default function GamePage() {
         machineGold,
         maxGold,
         soldierCount,
+        rangerTalaCount,
         maxSoldiers,
         nextWageAt,
         hasChopper,
@@ -880,6 +883,7 @@ export default function GamePage() {
             machineGold,
             maxGold,
             soldierCount,
+            rangerTalaCount,
             maxSoldiers,
             nextWageAt,
             hasChopper,
@@ -1819,12 +1823,17 @@ export default function GamePage() {
                   disabled={!canRecruitRangerTala}
                   className="rounded-2xl border border-cyan-400/30 bg-cyan-400/10 p-2 text-left transition hover:border-cyan-300 hover:bg-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <div className="flex h-14 items-center justify-center rounded-xl bg-slate-900/70 p-1.5">
-                    <img
-                      src="/assets/Ranger Tala/front/rangerfront.png"
-                      alt="Ranger Tala"
-                      className="h-full w-full object-contain"
-                      draggable="false"
+                  <div className="flex h-14 items-center justify-center overflow-hidden rounded-xl bg-slate-900/70 p-1.5">
+                    <SpriteAnimator
+                      sprite={RANGER_FRONT_PREVIEW.sprite}
+                      frameWidth={RANGER_FRONT_PREVIEW.frameWidth}
+                      frameHeight={RANGER_FRONT_PREVIEW.frameHeight}
+                      totalFrames={RANGER_FRONT_PREVIEW.totalFrames}
+                      displayWidth={50}
+                      displayHeight={55}
+                      chrome={false}
+                      label="Ranger Tala sprite animation"
+                      className="flex h-full w-full items-center justify-center"
                     />
                   </div>
                   <p className="mt-2 text-sm font-bold text-white">Ranger Tala</p>

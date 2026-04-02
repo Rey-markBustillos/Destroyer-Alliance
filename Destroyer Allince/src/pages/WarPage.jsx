@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { createGame, destroyGame } from "../game/main";
+import SpriteAnimator from "../components/SpriteAnimator";
 import MobileLandscapePrompt from "../components/MobileLandscapePrompt";
+import { RANGER_FRONT_PREVIEW } from "../game/utils/rangerSprites";
 import { applyWarResolution, fetchWarTarget, syncGameSnapshot } from "../services/game";
 import { getGameSnapshot, saveGameSnapshot } from "../services/gameStorage";
 import { getSession, saveSession } from "../services/session";
@@ -141,6 +143,7 @@ function DeploymentOptionCard({
   label,
   imageSrc,
   imageAlt,
+  spritePreview = null,
   count,
   toneClass,
   isSelected,
@@ -161,12 +164,26 @@ function DeploymentOptionCard({
       <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${
         isSelected ? "border-black/10 bg-white/20" : "border-white/10 bg-slate-950/60"
       } min-[901px]:h-10 min-[901px]:w-10`}>
-        <img
-          src={imageSrc}
-          alt={imageAlt}
-          className="h-5 w-5 object-contain min-[901px]:h-6 min-[901px]:w-6"
-          draggable="false"
-        />
+        {spritePreview ? (
+          <SpriteAnimator
+            sprite={spritePreview.sprite}
+            frameWidth={spritePreview.frameWidth}
+            frameHeight={spritePreview.frameHeight}
+            totalFrames={spritePreview.totalFrames}
+            displayWidth={24}
+            displayHeight={26}
+            chrome={false}
+            label={imageAlt}
+            className="flex items-center justify-center"
+          />
+        ) : (
+          <img
+            src={imageSrc}
+            alt={imageAlt}
+            className="h-5 w-5 object-contain min-[901px]:h-6 min-[901px]:w-6"
+            draggable="false"
+          />
+        )}
       </div>
       <div className="min-w-0">
         <p className="truncate text-[10px] font-black uppercase tracking-[0.12em] min-[901px]:text-xs min-[901px]:tracking-[0.16em]">
@@ -708,6 +725,7 @@ export default function WarPage() {
       label: "Ranger Tala",
       imageSrc: "/assets/Ranger Tala/front/rangerfront.png",
       imageAlt: "Ranger Tala",
+      spritePreview: RANGER_FRONT_PREVIEW,
       count: deploymentCounts.ranger,
       toneClass: "bg-cyan-300",
     },
@@ -886,6 +904,7 @@ export default function WarPage() {
                       label={option.label}
                       imageSrc={option.imageSrc}
                       imageAlt={option.imageAlt}
+                      spritePreview={option.spritePreview}
                       count={option.count}
                       toneClass={option.toneClass}
                       isSelected={raidState.selectedDeploymentType === option.type}

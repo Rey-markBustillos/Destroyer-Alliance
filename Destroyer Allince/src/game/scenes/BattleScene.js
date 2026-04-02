@@ -3,6 +3,12 @@ import Phaser from "phaser";
 import Building from "../objects/Building";
 import { BUILDING_LIST } from "../utils/buildingTypes";
 import {
+  getTextureRefFrame,
+  getTextureRefKey,
+  RANGER_FIRING_TEXTURES as RANGER_FIRING_TEXTURE_REFS,
+  RANGER_WALK_TEXTURES as RANGER_WALK_TEXTURE_REFS,
+} from "../utils/rangerSprites";
+import {
   configureHdSprite,
   createAmbientWorldLighting,
   createSoftShadow,
@@ -47,18 +53,6 @@ const SOLDIER_FIRING_TEXTURES = {
   left: "soldier-left-firing",
   right: "soldier-right-firing",
 };
-const RANGER_WALK_TEXTURES = {
-  front: ["ranger-front-walk-1", "ranger-front-walk-2"],
-  back: ["ranger-back-walk-1", "ranger-back-walk-2"],
-  left: ["ranger-left-walk-1", "ranger-left-walk-2"],
-  right: ["ranger-right-walk-1", "ranger-right-walk-2"],
-};
-const RANGER_FIRING_TEXTURES = {
-  front: "ranger-front-firing",
-  back: "ranger-back-firing",
-  left: "ranger-left-firing",
-  right: "ranger-right-firing",
-};
 const TANK_IDLE_TEXTURE = "tank-owned";
 const TANK_ATTACK_TEXTURES = {
   right: "tank-attack-right",
@@ -86,6 +80,40 @@ const darkenColor = (hex, amount = 16) => {
 
 const clamp = Phaser.Math.Clamp;
 const distanceBetween = Phaser.Math.Distance.Between;
+
+const getTextureIdentity = (textureRef) => {
+  const key = getTextureRefKey(textureRef);
+  const frame = getTextureRefFrame(textureRef);
+  return `${key ?? "unknown"}::${frame == null ? "__BASE" : frame}`;
+};
+
+const applyTextureRef = (sprite, textureRef) => {
+  if (!sprite) {
+    return false;
+  }
+
+  const nextIdentity = getTextureIdentity(textureRef);
+
+  if (sprite.appliedTextureIdentity === nextIdentity) {
+    return false;
+  }
+
+  const key = getTextureRefKey(textureRef);
+  const frame = getTextureRefFrame(textureRef);
+
+  if (!key) {
+    return false;
+  }
+
+  if (frame == null) {
+    sprite.setTexture(key);
+  } else {
+    sprite.setTexture(key, frame);
+  }
+
+  sprite.appliedTextureIdentity = nextIdentity;
+  return true;
+};
 
 const UNIT_CONFIG = {
   soldier: {
@@ -228,6 +256,17 @@ const resolveStableDirection = (currentDirection, dx, dy) => {
   }
 
   return currentDirection ?? normalizeDirection(dx, dy);
+};
+
+const resolveCombatDirection = (currentDirection, dx, dy) => {
+  const absX = Math.abs(dx);
+  const absY = Math.abs(dy);
+
+  if (absX < SOLDIER_DIRECTION_DEADZONE && absY < SOLDIER_DIRECTION_DEADZONE) {
+    return currentDirection ?? "front";
+  }
+
+  return normalizeDirection(dx, dy);
 };
 
 const getTankDirectionFromAngle = (angle, fallbackDirection = "down") => {
@@ -1368,9 +1407,9 @@ export default class BattleScene extends Phaser.Scene {
     display.add(shadow);
 
     if (type === "soldier" || type === "guard" || type === "ranger") {
-      const baseWalkTextures = type === "ranger" ? RANGER_WALK_TEXTURES : SOLDIER_WALK_TEXTURES;
+      const baseWalkTextures = type === "ranger" ? RANGER_WALK_TEXTURE_REFS : SOLDIER_WALK_TEXTURES;
       const texture = type === "guard" ? SOLDIER_WALK_TEXTURES.back[0] : baseWalkTextures.front[0];
-      const sprite = this.add.image(0, 0, texture);
+      const sprite = this.add.image(0, 0, getTextureRefKey(texture), getTextureRefFrame(texture) ?? undefined);
       sprite.setOrigin(0.5, 1);
       configureHdSprite(sprite, {
         scene: this,
@@ -1576,15 +1615,15 @@ export default class BattleScene extends Phaser.Scene {
     const direction = unit.direction ?? "front";
     const isHitReacting = unit.type === "ranger" && this.time.now < Number(unit.hitUntil ?? 0);
     const isFiring = this.time.now < Number(unit.firingUntil ?? 0);
-    const walkTextureSet = unit.type === "ranger" ? RANGER_WALK_TEXTURES : SOLDIER_WALK_TEXTURES;
-    const firingTextureSet = unit.type === "ranger" ? RANGER_FIRING_TEXTURES : SOLDIER_FIRING_TEXTURES;
+    const walkTextureSet = unit.type === "ranger" ? RANGER_WALK_TEXTURE_REFS : SOLDIER_WALK_TEXTURES;
+    const firingTextureSet = unit.type === "ranger" ? RANGER_FIRING_TEXTURE_REFS : SOLDIER_FIRING_TEXTURES;
     const walkTextures = walkTextureSet[direction] ?? walkTextureSet.front;
     const firingTexture = firingTextureSet[direction] ?? firingTextureSet.front;
 
     if (isHitReacting) {
-      if (unit.visualState !== "hit" || unit.sprite.texture?.key !== firingTexture) {
+      const textureChanged = applyTextureRef(unit.sprite, firingTexture);
+      if (unit.visualState !== "hit" || textureChanged) {
         unit.visualState = "hit";
-        unit.sprite.setTexture(firingTexture);
         configureHdSprite(unit.sprite, {
           scene: this,
           maxWidth: 26,
@@ -1597,9 +1636,9 @@ export default class BattleScene extends Phaser.Scene {
     }
 
     if (isFiring) {
-      if (unit.visualState !== "firing" || unit.sprite.texture?.key !== firingTexture) {
+      const textureChanged = applyTextureRef(unit.sprite, firingTexture);
+      if (unit.visualState !== "firing" || textureChanged) {
         unit.visualState = "firing";
-        unit.sprite.setTexture(firingTexture);
         configureHdSprite(unit.sprite, {
           scene: this,
           maxWidth: 26,
@@ -1614,11 +1653,11 @@ export default class BattleScene extends Phaser.Scene {
     if (!unit.isMoving) {
       const idleTexture = walkTextures[0];
 
-      if (unit.visualState !== "idle" || unit.sprite.texture?.key !== idleTexture) {
+      const textureChanged = applyTextureRef(unit.sprite, idleTexture);
+      if (unit.visualState !== "idle" || textureChanged) {
         unit.visualState = "idle";
         unit.walkFrameElapsed = 0;
         unit.walkFrameIndex = 0;
-        unit.sprite.setTexture(idleTexture);
         configureHdSprite(unit.sprite, {
           scene: this,
           maxWidth: 26,
@@ -1640,9 +1679,9 @@ export default class BattleScene extends Phaser.Scene {
     }
 
     const nextTexture = walkTextures[Number(unit.walkFrameIndex ?? 0) % walkTextures.length];
-    if (unit.visualState !== "walk" || unit.sprite.texture?.key !== nextTexture) {
+    const textureChanged = applyTextureRef(unit.sprite, nextTexture);
+    if (unit.visualState !== "walk" || textureChanged) {
       unit.visualState = "walk";
-      unit.sprite.setTexture(nextTexture);
       configureHdSprite(unit.sprite, {
         scene: this,
         maxWidth: 26,
@@ -2077,7 +2116,7 @@ export default class BattleScene extends Phaser.Scene {
       if (unit.type === "tank") {
         this.updateTankAttackDirection(unit, target, true);
       } else {
-        unit.direction = resolveStableDirection(unit.direction, dx, dy);
+        unit.direction = resolveCombatDirection(unit.direction, dx, dy);
       }
 
       if (
@@ -2155,7 +2194,7 @@ export default class BattleScene extends Phaser.Scene {
     if (unit.type === "tank") {
       this.updateTankAttackDirection(unit, target, true);
     } else {
-      unit.direction = resolveStableDirection(unit.direction, target.x - unit.x, target.y - unit.y);
+      unit.direction = resolveCombatDirection(unit.direction, target.x - unit.x, target.y - unit.y);
     }
 
     if (unit.type === "soldier" || unit.type === "ranger" || unit.type === "guard" || unit.type === "tank") {
@@ -2315,7 +2354,7 @@ export default class BattleScene extends Phaser.Scene {
     }
     if (unit.type === "ranger") {
       if (Number.isFinite(Number(source?.x)) && Number.isFinite(Number(source?.y))) {
-        unit.direction = resolveStableDirection(
+        unit.direction = resolveCombatDirection(
           unit.direction,
           Number(source.x) - unit.x,
           Number(source.y) - unit.y

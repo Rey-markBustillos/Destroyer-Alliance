@@ -1,5 +1,11 @@
 import Phaser from "phaser";
 import { configureHdSprite, createSoftShadow } from "../utils/renderQuality";
+import {
+  getTextureRefFrame,
+  getTextureRefKey,
+  RANGER_FIRING_TEXTURES,
+  RANGER_WALK_TEXTURES,
+} from "../utils/rangerSprites";
 
 const SOLDIER_SPEED = 0.024;
 const SOLDIER_WALK_FRAME_MS = 130;
@@ -32,13 +38,42 @@ const FIRING_TEXTURES = {
   right: "soldier-right-firing",
 };
 
+const getTextureIdentity = (textureRef) => {
+  const key = getTextureRefKey(textureRef);
+  const frame = getTextureRefFrame(textureRef);
+  return `${key ?? "unknown"}::${frame == null ? "__BASE" : frame}`;
+};
+
+const applyTextureRef = (sprite, textureRef) => {
+  if (!sprite) {
+    return;
+  }
+
+  const key = getTextureRefKey(textureRef);
+  const frame = getTextureRefFrame(textureRef);
+  const identity = getTextureIdentity(textureRef);
+
+  if (!key || sprite.appliedTextureIdentity === identity) {
+    return;
+  }
+
+  if (frame == null) {
+    sprite.setTexture(key);
+  } else {
+    sprite.setTexture(key, frame);
+  }
+
+  sprite.appliedTextureIdentity = identity;
+};
+
 export default class SoldierUnit extends Phaser.GameObjects.Container {
-  constructor(scene, commandCenter, index = 0) {
+  constructor(scene, commandCenter, index = 0, unitType = "soldier") {
     super(scene, 0, 0);
     scene.add.existing(this);
 
     this.commandCenter = commandCenter;
     this.unitIndex = index;
+    this.unitType = unitType;
     this.currentDirection = "front";
     this.behaviorEvent = null;
     this.frameEvent = null;
@@ -55,7 +90,13 @@ export default class SoldierUnit extends Phaser.GameObjects.Container {
     });
     this.add(this.shadow);
 
-    this.sprite = scene.add.image(0, 0, WALK_TEXTURES.front[0]);
+    const initialTexture = this.getWalkTexturesForCurrentType().front[0];
+    this.sprite = scene.add.image(
+      0,
+      0,
+      getTextureRefKey(initialTexture),
+      getTextureRefFrame(initialTexture) ?? undefined
+    );
     this.sprite.setOrigin(0.5, 1);
     configureHdSprite(this.sprite, {
       scene,
@@ -77,7 +118,7 @@ export default class SoldierUnit extends Phaser.GameObjects.Container {
     this.hungryLabel.setVisible(false);
     this.add(this.hungryLabel);
 
-    this.assignCommandCenter(commandCenter, index);
+    this.assignCommandCenter(commandCenter, index, unitType);
 
     this.once("destroy", () => {
       this.behaviorEvent?.remove(false);
@@ -95,9 +136,22 @@ export default class SoldierUnit extends Phaser.GameObjects.Container {
     });
   }
 
-  assignCommandCenter(commandCenter, index = this.unitIndex) {
+  getWalkTexturesForCurrentType() {
+    return this.unitType === "ranger" ? RANGER_WALK_TEXTURES : WALK_TEXTURES;
+  }
+
+  getFiringTexturesForCurrentType() {
+    return this.unitType === "ranger" ? RANGER_FIRING_TEXTURES : FIRING_TEXTURES;
+  }
+
+  setUnitType(unitType = "soldier") {
+    this.unitType = unitType;
+  }
+
+  assignCommandCenter(commandCenter, index = this.unitIndex, unitType = this.unitType) {
     this.commandCenter = commandCenter;
     this.unitIndex = index;
+    this.unitType = unitType;
 
     const homePoint = this.scene.getSoldierHomePoint(commandCenter, this.unitIndex);
     this.setPosition(homePoint.x, homePoint.y);
@@ -181,7 +235,7 @@ export default class SoldierUnit extends Phaser.GameObjects.Container {
     this.stopFrameAnimation();
     this.stopWalkBob();
     this.currentDirection = direction;
-    this.sprite.setTexture(WALK_TEXTURES[direction][0]);
+    applyTextureRef(this.sprite, this.getWalkTexturesForCurrentType()[direction][0]);
     configureHdSprite(this.sprite, { scene: this.scene, maxWidth: 20, maxHeight: 30 });
   }
 
@@ -189,15 +243,17 @@ export default class SoldierUnit extends Phaser.GameObjects.Container {
     this.stopFrameAnimation();
     this.currentDirection = direction;
     this.walkFrameIndex = 0;
-    this.sprite.setTexture(WALK_TEXTURES[direction][0]);
+    const walkTextures = this.getWalkTexturesForCurrentType()[direction];
+    applyTextureRef(this.sprite, walkTextures[0]);
     configureHdSprite(this.sprite, { scene: this.scene, maxWidth: 20, maxHeight: 30 });
     this.startWalkBob();
     this.frameEvent = this.scene.time.addEvent({
       delay: SOLDIER_WALK_FRAME_MS,
       loop: true,
       callback: () => {
-        this.walkFrameIndex = (this.walkFrameIndex + 1) % WALK_TEXTURES[this.currentDirection].length;
-        this.sprite.setTexture(WALK_TEXTURES[this.currentDirection][this.walkFrameIndex]);
+        const currentWalkTextures = this.getWalkTexturesForCurrentType()[this.currentDirection];
+        this.walkFrameIndex = (this.walkFrameIndex + 1) % currentWalkTextures.length;
+        applyTextureRef(this.sprite, currentWalkTextures[this.walkFrameIndex]);
         configureHdSprite(this.sprite, { scene: this.scene, maxWidth: 20, maxHeight: 30 });
       },
     });
@@ -207,7 +263,7 @@ export default class SoldierUnit extends Phaser.GameObjects.Container {
     this.stopFrameAnimation();
     this.stopWalkBob();
     this.currentDirection = direction;
-    this.sprite.setTexture(FIRING_TEXTURES[direction]);
+    applyTextureRef(this.sprite, this.getFiringTexturesForCurrentType()[direction]);
     configureHdSprite(this.sprite, { scene: this.scene, maxWidth: 20, maxHeight: 30 });
   }
 
