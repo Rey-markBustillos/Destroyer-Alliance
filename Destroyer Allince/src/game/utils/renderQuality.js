@@ -5,6 +5,38 @@ export const SHADOW_COLOR = 0x020617;
 export const SHADOW_ANGLE = -6;
 const MOBILE_DEVICE_PATTERN = /Android|webOS|iPhone|iPad|iPod|Mobile|Opera Mini|IEMobile/i;
 
+const canUseWebGL = () => {
+  if (typeof document === "undefined") {
+    return false;
+  }
+
+  try {
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("webgl", {
+      antialias: false,
+      depth: true,
+      failIfMajorPerformanceCaveat: true,
+      powerPreference: "high-performance",
+      preserveDrawingBuffer: false,
+      stencil: false,
+    }) || canvas.getContext("experimental-webgl", {
+      antialias: false,
+      depth: true,
+      failIfMajorPerformanceCaveat: true,
+      powerPreference: "high-performance",
+      preserveDrawingBuffer: false,
+      stencil: false,
+    });
+
+    const supported = Boolean(context);
+    const loseContext = context?.getExtension?.("WEBGL_lose_context");
+    loseContext?.loseContext?.();
+    return supported;
+  } catch {
+    return false;
+  }
+};
+
 export const getRenderProfile = () => {
   const hasWindow = typeof window !== "undefined";
   const hasNavigator = typeof navigator !== "undefined";
@@ -31,6 +63,7 @@ export const getRenderProfile = () => {
     || veryLowMemory
     || (isMobileLike && (lowCpu || lowMemory || heavyHiDpi));
   const ultraLowPerformanceDevice = veryLowCpu || veryLowMemory;
+  const webglSupported = canUseWebGL();
   const resolutionCap = ultraLowPerformanceDevice
     ? 1
     : lowPerformanceDevice
@@ -50,9 +83,11 @@ export const getRenderProfile = () => {
     isMobileLike,
     lowPerformanceDevice,
     powerPreference: "high-performance",
+    preferredRenderer: webglSupported && !ultraLowPerformanceDevice ? Phaser.WEBGL : Phaser.CANVAS,
     resolution: Math.min(dpr, resolutionCap),
     shadowAlphaMultiplier: ultraLowPerformanceDevice ? 0 : lowPerformanceDevice ? 0.45 : 1,
     useShadowBlendMode: !lowPerformanceDevice,
+    webglSupported,
   };
 };
 

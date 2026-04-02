@@ -36,6 +36,30 @@ const phaserConfig = {
 	autoRound: false,
 };
 
+const buildGameConfig = (parentElement, scenes, renderProfile, rendererType) => ({
+	...phaserConfig,
+	type: rendererType,
+	antialias: rendererType === Phaser.CANVAS ? false : renderProfile.antialias,
+	antialiasGL: rendererType === Phaser.CANVAS ? false : renderProfile.antialiasGL,
+	parent: parentElement,
+	resolution: rendererType === Phaser.CANVAS ? 1 : renderProfile.resolution,
+	desynchronized: rendererType === Phaser.CANVAS ? false : renderProfile.desynchronized,
+	fps: {
+		target: renderProfile.fpsTarget,
+		min: renderProfile.fpsMin,
+		forceSetTimeOut: false,
+		smoothStep: !renderProfile.lowPerformanceDevice,
+	},
+	powerPreference: renderProfile.powerPreference,
+	scene: scenes,
+	render: {
+		antialias: rendererType === Phaser.CANVAS ? false : renderProfile.antialias,
+		pixelArt: GAME_RENDER_CONFIG.pixelArt,
+		powerPreference: renderProfile.powerPreference,
+		transparent: false,
+	},
+});
+
 export const createGame = (parentElement, options = {}) => {
 	soundManager.preloadBackgroundMusic();
 	const renderProfile = getRenderProfile();
@@ -51,25 +75,26 @@ export const createGame = (parentElement, options = {}) => {
 		? [BootScene, PreloadScene, gameScene]
 		: [BootScene, PreloadScene, gameScene, UIScene];
 
-	const game = new Phaser.Game({
-		...phaserConfig,
-		antialias: renderProfile.antialias,
-		antialiasGL: renderProfile.antialiasGL,
-		parent: parentElement,
-		resolution: renderProfile.resolution,
-		desynchronized: renderProfile.desynchronized,
-		fps: {
-			target: renderProfile.fpsTarget,
-			min: renderProfile.fpsMin,
-			forceSetTimeOut: false,
-			smoothStep: !renderProfile.lowPerformanceDevice,
-		},
-		powerPreference: renderProfile.powerPreference,
-		scene: scenes,
-	});
+	const preferredRenderer = renderProfile.preferredRenderer ?? Phaser.AUTO;
 
-	applyCanvasQuality(game);
-	return game;
+	try {
+		const game = new Phaser.Game(
+			buildGameConfig(parentElement, scenes, renderProfile, preferredRenderer)
+		);
+		applyCanvasQuality(game);
+		return game;
+	} catch (error) {
+		if (preferredRenderer === Phaser.CANVAS) {
+			throw error;
+		}
+
+		console.warn("Phaser WebGL boot failed. Falling back to Canvas renderer.", error);
+		const fallbackGame = new Phaser.Game(
+			buildGameConfig(parentElement, scenes, renderProfile, Phaser.CANVAS)
+		);
+		applyCanvasQuality(fallbackGame);
+		return fallbackGame;
+	}
 };
 
 export const destroyGame = (gameInstance) => {

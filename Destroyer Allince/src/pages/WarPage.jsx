@@ -52,6 +52,14 @@ const deriveArmyFromSnapshot = (snapshot) => {
     ),
     0
   );
+  const rangers = buildings.reduce(
+    (total, building) => total + (
+      (building?.type === "tent" || (!hasTentArmy && building?.type === "command-center"))
+        ? Math.max(0, Number(building?.rangerTalaCount ?? 0) || 0)
+        : 0
+    ),
+    0
+  );
   const tankUnits = buildings
     .filter((building) => building?.type === "battle-tank" && building?.hasTank)
     .map((building, index) => {
@@ -85,6 +93,7 @@ const deriveArmyFromSnapshot = (snapshot) => {
 
   return {
     soldiers,
+    rangers,
     energy: Math.max(0, Number(snapshot?.energy ?? 0) || 0),
     tanks: tankUnits.length,
     tankUnits,
@@ -95,6 +104,7 @@ const deriveArmyFromSnapshot = (snapshot) => {
 
 const getTotalTroops = (army) =>
   Math.max(0, Number(army?.soldiers ?? 0) || 0)
+  + Math.max(0, Number(army?.rangers ?? 0) || 0)
   + Math.max(0, Number(army?.tanks ?? 0) || 0)
   + Math.max(0, Number(army?.helicopters ?? 0) || 0);
 
@@ -182,21 +192,27 @@ const applyRaidLossesToSnapshot = (snapshot, summary) => {
     : [];
   const survivors = {
     soldiers: Math.max(0, Number(summary?.survivors?.soldiers ?? 0) || 0),
+    rangers: Math.max(0, Number(summary?.survivors?.rangers ?? 0) || 0),
     tanks: Math.max(0, Number(summary?.survivors?.tanks ?? 0) || 0),
     helicopters: Math.max(0, Number(summary?.survivors?.helicopters ?? 0) || 0),
   };
   const hasTentArmy = nextBuildings.some((building) => building?.type === "tent");
 
   let remainingSoldiers = survivors.soldiers;
+  let remainingRangers = survivors.rangers;
   nextBuildings.forEach((building) => {
     if (building?.type !== "tent" && !(!hasTentArmy && building?.type === "command-center")) {
       return;
     }
 
-    const currentCount = Math.max(0, Number(building.soldierCount ?? 0) || 0);
-    const keptSoldiers = Math.min(currentCount, remainingSoldiers);
+    const currentSoldiers = Math.max(0, Number(building.soldierCount ?? 0) || 0);
+    const currentRangers = Math.max(0, Number(building.rangerTalaCount ?? 0) || 0);
+    const keptSoldiers = Math.min(currentSoldiers, remainingSoldiers);
+    const keptRangers = Math.min(currentRangers, remainingRangers);
     building.soldierCount = keptSoldiers;
+    building.rangerTalaCount = keptRangers;
     remainingSoldiers -= keptSoldiers;
+    remainingRangers -= keptRangers;
   });
 
   const survivingTankUnits = new Map(
@@ -263,6 +279,7 @@ export default function WarPage() {
   const emptyReserves = useMemo(() => ({
     energy: 0,
     soldiers: 0,
+    rangers: 0,
     tanks: 0,
     helicopters: 0,
   }), []);
@@ -298,6 +315,7 @@ export default function WarPage() {
     reserves: {
       energy: 0,
       soldiers: 0,
+      rangers: 0,
       tanks: 0,
       helicopters: 0,
     },
@@ -441,7 +459,20 @@ export default function WarPage() {
 
                     return {
                       ...building,
-                      soldierCount: Math.max(0, Number(building.soldierCount ?? 0) - loss),
+                      soldierCount: Math.max(
+                        0,
+                        Number(building.soldierCount ?? 0) - Math.min(
+                          Math.max(0, Number(building.soldierCount ?? 0) || 0),
+                          loss
+                        )
+                      ),
+                      rangerTalaCount: Math.max(
+                        0,
+                        Number(building.rangerTalaCount ?? 0) - Math.max(
+                          0,
+                          loss - Math.max(0, Number(building.soldierCount ?? 0) || 0)
+                        )
+                      ),
                     };
                   })
                   : [];
@@ -630,7 +661,6 @@ export default function WarPage() {
   const summary = raidState.summary;
   const earnedWarPoints = getWarPointsEarned(summary?.destructionPercent);
   const playerName = session?.name || session?.email?.split("@")[0] || "Commander";
-  const playerId = session?.playerId || (session?.id ? `PLYR-${String(session.id).padStart(6, "0")}` : "UNKNOWN");
   const musicVolumePercent = musicStatus?.volumePercent ?? Math.round((musicStatus?.volume ?? 0) * 100);
   const canLowerMusicVolume = musicVolumePercent > 0;
   const canRaiseMusicVolume = musicVolumePercent < 100;
@@ -646,6 +676,9 @@ export default function WarPage() {
     soldier: raidState.phase === "planning" || raidState.phase === "active"
       ? (raidState.reserves?.soldiers ?? 0)
       : (army.soldiers ?? 0),
+    ranger: raidState.phase === "planning" || raidState.phase === "active"
+      ? (raidState.reserves?.rangers ?? 0)
+      : (army.rangers ?? 0),
     tank: raidState.phase === "planning" || raidState.phase === "active"
       ? (raidState.reserves?.tanks ?? 0)
       : (army.tanks ?? 0),
@@ -669,6 +702,14 @@ export default function WarPage() {
       imageAlt: "Tank",
       count: deploymentCounts.tank,
       toneClass: "bg-amber-300",
+    },
+    {
+      type: "ranger",
+      label: "Ranger Tala",
+      imageSrc: "/assets/Ranger Tala/front/rangerfront.png",
+      imageAlt: "Ranger Tala",
+      count: deploymentCounts.ranger,
+      toneClass: "bg-cyan-300",
     },
     {
       type: "helicopter",
@@ -721,47 +762,36 @@ export default function WarPage() {
 
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 px-1.5 py-1.5 min-[901px]:px-4 min-[901px]:py-3">
         <div className="flex flex-wrap items-start justify-between gap-1.5 min-[901px]:gap-4">
-          <div className="mobile-landscape-war-top-card pointer-events-auto flex flex-wrap items-center gap-1.5 rounded-xl border border-white/10 bg-slate-950/72 px-2 py-1 shadow-[0_10px_28px_rgba(2,6,23,0.28)] min-[901px]:gap-3 min-[901px]:rounded-[1.2rem] min-[901px]:bg-slate-950/54 min-[901px]:px-3 min-[901px]:py-2 min-[901px]:backdrop-blur">
-            <div className="min-w-19 min-[901px]:min-w-32">
-              <p className="mobile-landscape-war-kicker text-[0.46rem] uppercase tracking-[0.18em] text-emerald-300/70 min-[901px]:text-[0.65rem] min-[901px]:tracking-[0.3em]">Player</p>
-              <p className="mobile-landscape-war-name mt-0.5 text-[11px] font-black text-white min-[901px]:mt-1 min-[901px]:text-base">{playerName}</p>
-              <p className="mobile-landscape-war-meta text-[8px] font-semibold uppercase tracking-[0.08em] text-slate-400 min-[901px]:text-[11px] min-[901px]:tracking-[0.16em]">{playerId}</p>
+          <div className="pointer-events-none flex flex-col items-start gap-0.5 min-[901px]:gap-1">
+            <p className="mobile-landscape-war-name text-[10px] font-black text-white min-[901px]:text-sm">{playerName}</p>
+            <div className="flex items-baseline gap-1.5">
+              <p className="mobile-landscape-war-kicker text-[0.38rem] uppercase tracking-[0.14em] text-amber-300/70 min-[901px]:text-[0.52rem]">Loot</p>
+              <p className="mobile-landscape-war-value text-[10px] font-black text-amber-200 min-[901px]:text-sm">{raidState.loot ?? 0}</p>
             </div>
-            <div className="mobile-landscape-war-divider h-7 w-px bg-white/10 min-[901px]:h-10" />
-            <div>
-              <p className="mobile-landscape-war-kicker text-[0.46rem] uppercase tracking-[0.18em] text-amber-300/70 min-[901px]:text-[0.65rem] min-[901px]:tracking-[0.3em]">Loot</p>
-              <p className="mobile-landscape-war-value mt-0.5 text-sm font-black text-amber-200 min-[901px]:mt-1 min-[901px]:text-xl">{raidState.loot ?? 0}</p>
+            <div className="flex items-baseline gap-1.5">
+              <p className="mobile-landscape-war-kicker text-[0.38rem] uppercase tracking-[0.14em] text-sky-300/70 min-[901px]:text-[0.52rem]">Energy</p>
+              <p className="mobile-landscape-war-value text-[10px] font-black text-sky-100 min-[901px]:text-sm">{raidState.energy ?? army.energy ?? 0}</p>
             </div>
-            <div className="mobile-landscape-war-divider h-7 w-px bg-white/10 min-[901px]:h-10" />
-            <div>
-              <p className="mobile-landscape-war-kicker text-[0.46rem] uppercase tracking-[0.18em] text-sky-300/70 min-[901px]:text-[0.65rem] min-[901px]:tracking-[0.3em]">Energy</p>
-              <p className="mobile-landscape-war-value mt-0.5 text-sm font-black text-sky-100 min-[901px]:mt-1 min-[901px]:text-xl">{raidState.energy ?? army.energy ?? 0}</p>
-            </div>
-            <div className="mobile-landscape-war-divider h-7 w-px bg-white/10 min-[901px]:h-10" />
-            <div>
-              <p className="mobile-landscape-war-kicker text-[0.46rem] uppercase tracking-[0.18em] text-rose-300/70 min-[901px]:text-[0.65rem] min-[901px]:tracking-[0.3em]">Damage</p>
-              <p className="mobile-landscape-war-value mt-0.5 text-sm font-black text-rose-200 min-[901px]:mt-1 min-[901px]:text-xl">{raidState.destructionPercent ?? 0}%</p>
+            <div className="flex items-baseline gap-1.5">
+              <p className="mobile-landscape-war-kicker text-[0.38rem] uppercase tracking-[0.14em] text-rose-300/70 min-[901px]:text-[0.52rem]">Damage</p>
+              <p className="mobile-landscape-war-value text-[10px] font-black text-rose-200 min-[901px]:text-sm">{raidState.destructionPercent ?? 0}%</p>
             </div>
             {showRaidTimer ? (
-              <>
-                <div className="mobile-landscape-war-divider h-7 w-px bg-white/10 min-[901px]:h-10" />
-                <div>
-                  <p className={`mobile-landscape-war-value mt-0.5 text-sm font-black min-[901px]:mt-1 min-[901px]:text-xl ${
-                    raidState.phase === "planning" ? "text-amber-200" : "text-cyan-100"
-                  }`}>
-                    {raidTimerLabel}
-                  </p>
-                </div>
-              </>
+              <p className={`mobile-landscape-war-value text-[10px] font-black min-[901px]:text-sm ${
+                raidState.phase === "planning" ? "text-amber-200" : "text-cyan-100"
+              }`}>
+                {raidTimerLabel}
+              </p>
             ) : null}
             {target ? (
-                <>
-                <div className="mobile-landscape-war-divider h-7 w-px bg-white/10 min-[901px]:h-10" />
-                <div className="mobile-landscape-war-top-enemy">
-                  <p className="mobile-landscape-war-kicker text-[0.46rem] uppercase tracking-[0.18em] text-cyan-300/70 min-[901px]:text-[0.65rem] min-[901px]:tracking-[0.3em]">Enemy</p>
-                  <p className="mobile-landscape-war-name mt-0.5 text-[11px] font-black text-cyan-100 min-[901px]:mt-1 min-[901px]:text-base">{target.name}</p>
-                  <p className="mobile-landscape-war-meta text-[8px] font-semibold uppercase tracking-[0.08em] text-slate-400 min-[901px]:text-[11px] min-[901px]:tracking-[0.16em]">{target.playerId}</p>
-                  <p className="mobile-landscape-war-meta mt-0.5 text-[8px] font-semibold text-amber-200 min-[901px]:mt-1 min-[901px]:text-[11px]">Lootable: {target.loot ?? 0}</p>
+              <>
+                <div className="flex items-baseline gap-1.5">
+                  <p className="mobile-landscape-war-kicker text-[0.38rem] uppercase tracking-[0.14em] text-cyan-300/70 min-[901px]:text-[0.52rem]">Enemy</p>
+                  <p className="mobile-landscape-war-name text-[10px] font-black text-cyan-100 min-[901px]:text-sm">{target.name}</p>
+                </div>
+                <div className="flex items-baseline gap-1.5">
+                  <p className="mobile-landscape-war-kicker text-[0.38rem] uppercase tracking-[0.14em] text-amber-300/70 min-[901px]:text-[0.52rem]">Lootable</p>
+                  <p className="mobile-landscape-war-meta text-[9px] font-semibold text-amber-200 min-[901px]:text-[11px]">{target.loot ?? 0}</p>
                 </div>
               </>
             ) : null}
@@ -877,7 +907,7 @@ export default function WarPage() {
           </div>
           {raidState.phase === "planning" ? (
             <p className="mobile-landscape-war-note mt-2 text-[11px] font-semibold leading-tight text-amber-200 min-[901px]:mt-3 min-[901px]:text-xs">
-              You have 1 minute to inspect the enemy base before the 2-minute attack timer starts.
+              You have 1 minute to inspect the enemy base, or the 2-minute attack timer starts as soon as you deploy the first troop.
             </p>
           ) : null}
           {raidState.phase === "active" ? (

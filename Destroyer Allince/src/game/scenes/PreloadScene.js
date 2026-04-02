@@ -41,6 +41,18 @@ const HD_TEXTURE_KEYS = [
   "soldier-right-walk-1",
   "soldier-right-walk-2",
   "soldier-right-firing",
+  "ranger-front-walk-1",
+  "ranger-front-walk-2",
+  "ranger-front-firing",
+  "ranger-back-walk-1",
+  "ranger-back-walk-2",
+  "ranger-back-firing",
+  "ranger-left-walk-1",
+  "ranger-left-walk-2",
+  "ranger-left-firing",
+  "ranger-right-walk-1",
+  "ranger-right-walk-2",
+  "ranger-right-firing",
 ];
 
 const TEXTURE_FALLBACKS = {
@@ -61,6 +73,18 @@ const TEXTURE_FALLBACKS = {
   "energy-machine": ["machine-wood", "command-center", "town"],
   "machine-wood": ["command-center", "town"],
   "command-center": ["town", "machine-wood"],
+  "ranger-front-walk-1": ["soldier-front-walk-1"],
+  "ranger-front-walk-2": ["ranger-front-walk-1", "soldier-front-walk-2"],
+  "ranger-front-firing": ["ranger-front-walk-1", "soldier-front-firing"],
+  "ranger-back-walk-1": ["soldier-back-walk-1"],
+  "ranger-back-walk-2": ["ranger-back-walk-1", "soldier-back-walk-2"],
+  "ranger-back-firing": ["ranger-back-walk-1", "soldier-back-firing"],
+  "ranger-left-walk-1": ["soldier-left-walk-1"],
+  "ranger-left-walk-2": ["ranger-left-walk-1", "soldier-left-walk-2"],
+  "ranger-left-firing": ["ranger-left-walk-1", "soldier-left-firing"],
+  "ranger-right-walk-1": ["soldier-right-walk-1"],
+  "ranger-right-walk-2": ["ranger-right-walk-1", "soldier-right-walk-2"],
+  "ranger-right-firing": ["ranger-right-walk-1", "soldier-right-firing"],
 };
 
 export default class PreloadScene extends Phaser.Scene {
@@ -161,6 +185,18 @@ export default class PreloadScene extends Phaser.Scene {
     this.load.image("soldier-right-walk-1", "/assets/army/right/walk1.png");
     this.load.image("soldier-right-walk-2", "/assets/army/right/walk2.png");
     this.load.image("soldier-right-firing", "/assets/army/right/firing.png");
+    this.load.image("ranger-front-walk-1", "/assets/Ranger Tala/front/rangerfront.png");
+    this.load.image("ranger-front-walk-2", "/assets/Ranger Tala/front/rangerfront.png");
+    this.load.image("ranger-front-firing", "/assets/Ranger Tala/front/rangerfront.png");
+    this.load.image("ranger-back-walk-1", "/assets/Ranger Tala/back/rangerback.png");
+    this.load.image("ranger-back-walk-2", "/assets/Ranger Tala/back/rangerback.png");
+    this.load.image("ranger-back-firing", "/assets/Ranger Tala/back/backfire.png");
+    this.load.image("ranger-left-walk-1", "/assets/Ranger Tala/left/rangerleft.png");
+    this.load.image("ranger-left-walk-2", "/assets/Ranger Tala/left/rangerleft.png");
+    this.load.image("ranger-left-firing", "/assets/Ranger Tala/left/leftfire.png");
+    this.load.image("ranger-right-walk-1", "/assets/Ranger Tala/right/rangerright.png");
+    this.load.image("ranger-right-walk-2", "/assets/Ranger Tala/right/rangerright.png");
+    this.load.image("ranger-right-firing", "/assets/Ranger Tala/right/rightfire.png");
   }
 
   create() {

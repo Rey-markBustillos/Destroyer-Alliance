@@ -25,6 +25,7 @@ const serializeBuilding = (building) => ({
   machineGold: building.machineGold ?? 0,
   lastGeneratedAt: serializeTimestamp(building.lastGeneratedAt),
   soldierCount: building.soldierCount ?? 0,
+  rangerTalaCount: building.rangerTalaCount ?? 0,
   isSleeping: Boolean(building.isSleeping),
   lastWagePaidAt: serializeTimestamp(building.lastWagePaidAt),
   lastFedAt: serializeTimestamp(building.lastFedAt),
@@ -50,6 +51,7 @@ const normalizeBuildingPayload = (building) => {
   const level = Math.max(1, Math.floor(Number(building?.level ?? 1) || 1));
   const machineGold = Math.max(0, Math.floor(Number(building?.machineGold ?? 0) || 0));
   const soldierCount = Math.max(0, Math.floor(Number(building?.soldierCount ?? 0) || 0));
+  const rangerTalaCount = Math.max(0, Math.floor(Number(building?.rangerTalaCount ?? 0) || 0));
   const hasChopper = Boolean(building?.hasChopper);
   const hasTank = Boolean(building?.hasTank);
 
@@ -67,7 +69,8 @@ const normalizeBuildingPayload = (building) => {
     machineGold,
     lastGeneratedAt: parseOptionalDate(building?.lastGeneratedAt),
     soldierCount,
-    isSleeping: Boolean(building?.isSleeping) && soldierCount > 0,
+    rangerTalaCount,
+    isSleeping: Boolean(building?.isSleeping) && (soldierCount + rangerTalaCount) > 0,
     lastWagePaidAt: parseOptionalDate(building?.lastWagePaidAt),
     lastFedAt: parseOptionalDate(building?.lastFedAt),
     hasChopper,
@@ -429,6 +432,7 @@ export const applyWarResolution = async (req, res) => {
           select: {
             id: true,
             soldierCount: true,
+            rangerTalaCount: true,
           },
         },
       },
@@ -469,7 +473,20 @@ export const applyWarResolution = async (req, res) => {
             id: building.id,
           },
           data: {
-            soldierCount: Math.max(0, Number(building.soldierCount ?? 0) - loss),
+            soldierCount: Math.max(
+              0,
+              Number(building.soldierCount ?? 0) - Math.min(
+                Math.max(0, Number(building.soldierCount ?? 0) || 0),
+                loss
+              )
+            ),
+            rangerTalaCount: Math.max(
+              0,
+              Number(building.rangerTalaCount ?? 0) - Math.max(
+                0,
+                loss - Math.max(0, Number(building.soldierCount ?? 0) || 0)
+              )
+            ),
           },
         });
       }
@@ -576,6 +593,10 @@ export const updateBuilding = async (req, res) => {
 
   if (Number.isFinite(Number(req.body.soldierCount))) {
     nextData.soldierCount = Math.max(0, Math.floor(Number(req.body.soldierCount)));
+  }
+
+  if (Number.isFinite(Number(req.body.rangerTalaCount))) {
+    nextData.rangerTalaCount = Math.max(0, Math.floor(Number(req.body.rangerTalaCount)));
   }
 
   if (typeof req.body.hasChopper === "boolean") {

@@ -234,6 +234,7 @@ export const getLeaderboard = async (req, res) => {
           select: {
             type: true,
             soldierCount: true,
+            rangerTalaCount: true,
             hasTank: true,
             hasChopper: true,
           },
@@ -244,7 +245,10 @@ export const getLeaderboard = async (req, res) => {
     const leaderboard = users.map((user, index) => {
       const buildings = Array.isArray(user.buildings) ? user.buildings : [];
       const soldiers = buildings.reduce(
-        (total, building) => total + Math.max(0, Number(building?.soldierCount ?? 0) || 0),
+        (total, building) =>
+          total
+          + Math.max(0, Number(building?.soldierCount ?? 0) || 0)
+          + Math.max(0, Number(building?.rangerTalaCount ?? 0) || 0),
         0
       );
       const tanks = buildings.filter((building) => building?.type === "battle-tank" && building?.hasTank).length;

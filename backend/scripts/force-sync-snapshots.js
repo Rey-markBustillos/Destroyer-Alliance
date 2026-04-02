@@ -43,6 +43,7 @@ const normalizeBuilding = (building) => {
     machineGold: Math.max(0, Math.floor(Number(building?.machineGold ?? 0) || 0)),
     lastGeneratedAt: parseOptionalDate(building?.lastGeneratedAt),
     soldierCount: Math.max(0, Math.floor(Number(building?.soldierCount ?? 0) || 0)),
+    rangerTalaCount: Math.max(0, Math.floor(Number(building?.rangerTalaCount ?? 0) || 0)),
     lastWagePaidAt: parseOptionalDate(building?.lastWagePaidAt),
     lastFedAt: parseOptionalDate(building?.lastFedAt),
     hasChopper: Boolean(building?.hasChopper),

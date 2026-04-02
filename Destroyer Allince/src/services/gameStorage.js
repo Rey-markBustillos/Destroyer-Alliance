@@ -69,6 +69,7 @@ const normalizeBuildings = (buildings) => {
         machineGold: Math.max(0, Number(building?.machineGold ?? 0) || 0),
         lastGeneratedAt: Number(building?.lastGeneratedAt ?? Date.now()),
         soldierCount: Math.max(0, Number(building?.soldierCount ?? 0) || 0),
+        rangerTalaCount: Math.max(0, Number(building?.rangerTalaCount ?? 0) || 0),
         lastWagePaidAt: Number(building?.lastWagePaidAt ?? Date.now()),
         lastFedAt: Number(building?.lastFedAt ?? Date.now()),
         hasChopper,

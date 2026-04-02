@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion as Motion } from "framer-motion";
 
-import AuthLoadingScreen, { primeAuthLoadingScreen } from "../components/AuthLoadingScreen";
+import AuthLoadingScreen from "../components/AuthLoadingScreen";
+import { primeAuthLoadingScreen } from "../components/authLoadingScreenUtils";
 import PwaInstallButton from "../components/PwaInstallButton";
 import { register } from "../services/auth";
 import { markIntroPending, saveSession } from "../services/session";
@@ -225,7 +226,7 @@ export default function Register() {
 
       <div className="mobile-landscape-auth-shell relative z-10 flex items-center justify-center overflow-y-auto px-4 py-4">
         <Motion.div
-          className="mobile-landscape-auth-wrap w-full max-w-md [perspective:2000px]"
+          className="mobile-landscape-auth-wrap w-full max-w-md perspective-[2000px]"
           initial="hidden"
           animate="visible"
           variants={cardVariants}
@@ -377,7 +378,7 @@ export default function Register() {
                       boxShadow: "0 16px 36px rgba(22,163,74,0.38)",
                     }}
                     whileTap={{ scale: 0.95 }}
-                    className="mt-5 w-full cursor-pointer rounded-2xl bg-[linear-gradient(120deg,#15803d_0%,#16a34a_35%,#4ade80_60%,#15803d_100%)] bg-[length:200%_100%] px-4 py-3 text-sm font-bold uppercase tracking-[0.22em] text-white shadow-[0_14px_30px_rgba(22,163,74,0.28)] transition disabled:cursor-not-allowed disabled:opacity-70 min-[901px]:mt-6"
+                    className="mt-5 w-full cursor-pointer rounded-2xl bg-[linear-gradient(120deg,#15803d_0%,#16a34a_35%,#4ade80_60%,#15803d_100%)] bg-size-[200%_100%] px-4 py-3 text-sm font-bold uppercase tracking-[0.22em] text-white shadow-[0_14px_30px_rgba(22,163,74,0.28)] transition disabled:cursor-not-allowed disabled:opacity-70 min-[901px]:mt-6"
                   >
                     <Motion.span
                       className="block"

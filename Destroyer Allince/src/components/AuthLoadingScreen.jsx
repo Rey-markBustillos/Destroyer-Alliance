@@ -1,16 +1,5 @@
 import { useEffect, useState } from "react";
-
-const LOADING_SCREEN_SRC = "/assets/LOADINGSCREEN/LOAD1.png";
-
-export const primeAuthLoadingScreen = (imageSrc = LOADING_SCREEN_SRC) => {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  const image = new window.Image();
-  image.decoding = "async";
-  image.src = imageSrc;
-};
+import { DEFAULT_AUTH_LOADING_SCREEN_SRC } from "./authLoadingScreenUtils";
 
 const getConnectionState = () => {
   if (typeof navigator === "undefined") {
@@ -36,7 +25,7 @@ const getConnectionState = () => {
 export default function AuthLoadingScreen({
   title = "Loading.......",
   description = "Securing your session and preparing the battlefield.",
-  imageSrc = LOADING_SCREEN_SRC,
+  imageSrc = DEFAULT_AUTH_LOADING_SCREEN_SRC,
 }) {
   const [connectionState, setConnectionState] = useState(() => getConnectionState());
 

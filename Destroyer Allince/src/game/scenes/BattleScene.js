@@ -46,6 +46,18 @@ const SOLDIER_FIRING_TEXTURES = {
   left: "soldier-left-firing",
   right: "soldier-right-firing",
 };
+const RANGER_WALK_TEXTURES = {
+  front: ["ranger-front-walk-1", "ranger-front-walk-2"],
+  back: ["ranger-back-walk-1", "ranger-back-walk-2"],
+  left: ["ranger-left-walk-1", "ranger-left-walk-2"],
+  right: ["ranger-right-walk-1", "ranger-right-walk-2"],
+};
+const RANGER_FIRING_TEXTURES = {
+  front: "ranger-front-firing",
+  back: "ranger-back-firing",
+  left: "ranger-left-firing",
+  right: "ranger-right-firing",
+};
 const TANK_IDLE_TEXTURE = "tank-owned";
 const TANK_ATTACK_TEXTURES = {
   right: "tank-attack-right",
@@ -85,6 +97,16 @@ const UNIT_CONFIG = {
     preferredTargets: ["tower", "guard", "building", "wall"],
     lootScale: 1,
   },
+  ranger: {
+    maxHealth: 92,
+    speed: 26,
+    range: 136,
+    detectRange: 196,
+    damage: 19,
+    cooldownMs: 760,
+    preferredTargets: ["tower", "guard", "building", "wall"],
+    lootScale: 1.08,
+  },
   tank: {
     maxHealth: 260,
     speed: 30,
@@ -113,14 +135,21 @@ const UNIT_CONFIG = {
     detectRange: 156,
     damage: 10,
     cooldownMs: 980,
-    preferredTargets: ["soldier", "tank", "helicopter"],
+    preferredTargets: ["soldier", "ranger", "tank", "helicopter"],
   },
 };
 
-const SOLDIER_DAMAGE_MODIFIERS = {
-  vsStructure: 0.7,
-  vsTank: 0.62,
-  vsHelicopter: 0.56,
+const INFANTRY_DAMAGE_MODIFIERS = {
+  soldier: {
+    vsStructure: 0.7,
+    vsTank: 0.62,
+    vsHelicopter: 0.56,
+  },
+  ranger: {
+    vsStructure: 0.9,
+    vsTank: 0.7,
+    vsHelicopter: 0.64,
+  },
 };
 
 const VEHICLE_LEVEL_BONUS = {
@@ -421,12 +450,13 @@ export default class BattleScene extends Phaser.Scene {
     this.raid = {
       phase: "idle",
       target: null,
-      army: { soldiers: 0, energy: 0, tanks: 0, tankUnits: [], helicopters: 0, helicopterUnits: [] },
+      army: { soldiers: 0, rangers: 0, energy: 0, tanks: 0, tankUnits: [], helicopters: 0, helicopterUnits: [] },
       structures: [],
       attackers: [],
       reserves: {
         energy: 0,
         soldiers: 0,
+        rangers: 0,
         tankUnits: [],
         helicopterUnits: [],
       },
@@ -822,7 +852,7 @@ export default class BattleScene extends Phaser.Scene {
       const wasDrag = this.pointerDrag.moved;
       this.pointerDrag.active = false;
 
-      if (!wasDrag && this.raid?.phase === "active") {
+      if (!wasDrag && (this.raid?.phase === "planning" || this.raid?.phase === "active")) {
         this.handleBattlefieldDeploy(pointer.worldX, pointer.worldY);
       }
     });
@@ -870,6 +900,7 @@ export default class BattleScene extends Phaser.Scene {
     this.raid.target = target ?? null;
     this.raid.army = {
       soldiers: Math.max(0, Number(army?.soldiers ?? 0) || 0),
+      rangers: Math.max(0, Number(army?.rangers ?? 0) || 0),
       energy: Math.max(0, Number(army?.energy ?? 0) || 0),
       tanks: normalizedTankUnits.length,
       tankUnits: normalizedTankUnits.map((unit) => ({ ...unit })),
@@ -879,6 +910,7 @@ export default class BattleScene extends Phaser.Scene {
     this.raid.reserves = {
       energy: Math.max(0, Number(army?.energy ?? 0) || 0),
       soldiers: Math.max(0, Number(army?.soldiers ?? 0) || 0),
+      rangers: Math.max(0, Number(army?.rangers ?? 0) || 0),
       tankUnits: normalizedTankUnits.map((unit) => ({ ...unit })),
       helicopterUnits: normalizedHelicopterUnits.map((unit) => ({ ...unit })),
     };
@@ -997,7 +1029,8 @@ export default class BattleScene extends Phaser.Scene {
 
     commandCenters.forEach((structure) => {
       const sourceBuilding = this.raid.target?.buildings?.find((building) => building.id === structure.sourceId);
-      const defenderCount = Math.max(0, Number(sourceBuilding?.soldierCount ?? 0) || 0);
+      const defenderCount = Math.max(0, Number(sourceBuilding?.soldierCount ?? 0) || 0)
+        + Math.max(0, Number(sourceBuilding?.rangerTalaCount ?? 0) || 0);
 
       Array.from({ length: defenderCount }).forEach((_, index) => {
         this.time.delayedCall(index * 120, () => {
@@ -1141,6 +1174,7 @@ export default class BattleScene extends Phaser.Scene {
 
   getRemainingReserveCount() {
     return Math.max(0, Number(this.raid?.reserves?.soldiers ?? 0) || 0)
+      + Math.max(0, Number(this.raid?.reserves?.rangers ?? 0) || 0)
       + this.getAvailableRaidVehicleCount("tank")
       + this.getAvailableRaidVehicleCount("helicopter");
   }
@@ -1207,6 +1241,10 @@ export default class BattleScene extends Phaser.Scene {
       return (this.raid?.reserves?.soldiers ?? 0) > 0;
     }
 
+    if (type === "ranger") {
+      return (this.raid?.reserves?.rangers ?? 0) > 0;
+    }
+
     if (type === "tank") {
       return this.getAvailableRaidVehicleCount("tank") > 0;
     }
@@ -1223,6 +1261,10 @@ export default class BattleScene extends Phaser.Scene {
       return "soldier";
     }
 
+    if (this.canDeployVehicleType("ranger")) {
+      return "ranger";
+    }
+
     if (this.canDeployVehicleType("tank")) {
       return "tank";
     }
@@ -1235,7 +1277,7 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   setDeploymentType(type = "soldier") {
-    if (!["soldier", "tank", "helicopter"].includes(type) || !this.canDeployVehicleType(type)) {
+    if (!["soldier", "ranger", "tank", "helicopter"].includes(type) || !this.canDeployVehicleType(type)) {
       return false;
     }
 
@@ -1324,8 +1366,9 @@ export default class BattleScene extends Phaser.Scene {
     });
     display.add(shadow);
 
-    if (type === "soldier" || type === "guard") {
-      const texture = type === "guard" ? SOLDIER_WALK_TEXTURES.back[0] : SOLDIER_WALK_TEXTURES.front[0];
+    if (type === "soldier" || type === "guard" || type === "ranger") {
+      const baseWalkTextures = type === "ranger" ? RANGER_WALK_TEXTURES : SOLDIER_WALK_TEXTURES;
+      const texture = type === "guard" ? SOLDIER_WALK_TEXTURES.back[0] : baseWalkTextures.front[0];
       const sprite = this.add.image(0, 0, texture);
       sprite.setOrigin(0.5, 1);
       configureHdSprite(sprite, {
@@ -1432,6 +1475,7 @@ export default class BattleScene extends Phaser.Scene {
     this.raid.reserves = {
       energy: this.getAvailableRaidEnergy(),
       soldiers: this.raid.army.soldiers,
+      rangers: this.raid.army.rangers,
       tankUnits: Array.isArray(this.raid.army.tankUnits)
         ? this.raid.army.tankUnits.map((unit) => ({ ...unit }))
         : [],
@@ -1523,14 +1567,16 @@ export default class BattleScene extends Phaser.Scene {
       return;
     }
 
-    if (unit.type !== "soldier" && unit.type !== "guard") {
+    if (unit.type !== "soldier" && unit.type !== "guard" && unit.type !== "ranger") {
       return;
     }
 
     const direction = unit.direction ?? "front";
     const isFiring = this.time.now < Number(unit.firingUntil ?? 0);
-    const walkTextures = SOLDIER_WALK_TEXTURES[direction] ?? SOLDIER_WALK_TEXTURES.front;
-    const firingTexture = SOLDIER_FIRING_TEXTURES[direction] ?? SOLDIER_FIRING_TEXTURES.front;
+    const walkTextureSet = unit.type === "ranger" ? RANGER_WALK_TEXTURES : SOLDIER_WALK_TEXTURES;
+    const firingTextureSet = unit.type === "ranger" ? RANGER_FIRING_TEXTURES : SOLDIER_FIRING_TEXTURES;
+    const walkTextures = walkTextureSet[direction] ?? walkTextureSet.front;
+    const firingTexture = firingTextureSet[direction] ?? firingTextureSet.front;
 
     if (isFiring) {
       if (unit.visualState !== "firing" || unit.sprite.texture?.key !== firingTexture) {
@@ -1640,7 +1686,7 @@ export default class BattleScene extends Phaser.Scene {
       const target = unit.type === "tank"
         ? this.getNearestTargetByDistance(
           unit,
-          livingAttackers.filter((candidate) => candidate.type === "soldier" || candidate.type === "guard")
+          livingAttackers.filter((candidate) => ["soldier", "ranger", "guard"].includes(candidate.type))
         ) ?? this.getFocusedUnitTarget(unit, livingAttackers)
         : this.getFocusedUnitTarget(unit, livingAttackers);
 
@@ -1862,6 +1908,10 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   handleBattlefieldDeploy(worldX, worldY) {
+    if (this.raid.phase !== "planning" && this.raid.phase !== "active") {
+      return;
+    }
+
     if (this.time.now - this.lastDeployAt < 120) {
       return;
     }
@@ -1875,10 +1925,18 @@ export default class BattleScene extends Phaser.Scene {
     this.lastDeployAt = this.time.now;
 
     const type = this.raid.selectedDeploymentType ?? this.getFirstAvailableDeploymentType();
+    const shouldStartAttackTimer = this.raid.phase === "planning";
+
+    if (shouldStartAttackTimer) {
+      this.activateRaidAttack();
+    }
 
     if (type === "soldier" && (this.raid.reserves.soldiers ?? 0) > 0) {
       this.raid.reserves.soldiers -= 1;
       this.deployAttackerUnit("soldier", tile.col + 0.2, tile.row + 0.1);
+    } else if (type === "ranger" && (this.raid.reserves.rangers ?? 0) > 0) {
+      this.raid.reserves.rangers -= 1;
+      this.deployAttackerUnit("ranger", tile.col + 0.2, tile.row + 0.1);
     } else if (type === "tank" && this.getAvailableRaidVehicleCount("tank") > 0) {
       const tankIndex = this.raid.reserves.tankUnits.findIndex((entry) => (entry?.shotsRemaining ?? 0) > 0);
       const tank = tankIndex >= 0
@@ -2082,7 +2140,7 @@ export default class BattleScene extends Phaser.Scene {
       unit.direction = resolveStableDirection(unit.direction, target.x - unit.x, target.y - unit.y);
     }
 
-    if (unit.type === "soldier" || unit.type === "guard" || unit.type === "tank") {
+    if (unit.type === "soldier" || unit.type === "ranger" || unit.type === "guard" || unit.type === "tank") {
       unit.firingUntil = this.time.now + (unit.type === "tank" ? 240 : 170);
       unit.visualState = "firing";
       this.updateUnitVisual(unit, 0);
@@ -2174,14 +2232,14 @@ export default class BattleScene extends Phaser.Scene {
 
     let resolvedAmount = amount;
 
-    if (attacker?.type === "soldier") {
-      resolvedAmount *= SOLDIER_DAMAGE_MODIFIERS.vsStructure;
+    if (INFANTRY_DAMAGE_MODIFIERS[attacker?.type]) {
+      resolvedAmount *= INFANTRY_DAMAGE_MODIFIERS[attacker.type].vsStructure;
     }
 
     if (structure.type === "air-defense") {
       if (attacker?.type === "helicopter") {
         resolvedAmount *= 0.65;
-      } else if (attacker?.type === "soldier" || attacker?.type === "tank") {
+      } else if (attacker?.type === "soldier" || attacker?.type === "ranger" || attacker?.type === "tank") {
         resolvedAmount *= 1.22;
       }
     }
@@ -2225,11 +2283,11 @@ export default class BattleScene extends Phaser.Scene {
 
     let resolvedAmount = amount;
 
-    if (source?.type === "soldier") {
+    if (INFANTRY_DAMAGE_MODIFIERS[source?.type]) {
       if (unit.type === "tank") {
-        resolvedAmount *= SOLDIER_DAMAGE_MODIFIERS.vsTank;
+        resolvedAmount *= INFANTRY_DAMAGE_MODIFIERS[source.type].vsTank;
       } else if (unit.type === "helicopter") {
-        resolvedAmount *= SOLDIER_DAMAGE_MODIFIERS.vsHelicopter;
+        resolvedAmount *= INFANTRY_DAMAGE_MODIFIERS[source.type].vsHelicopter;
       }
     }
 
@@ -2476,11 +2534,13 @@ export default class BattleScene extends Phaser.Scene {
     const survivingAttackers = this.raid.attackers.filter((entry) => !entry.destroyed);
     const remainingReserves = {
       soldiers: Math.max(0, Number(this.raid.reserves?.soldiers ?? 0) || 0),
+      rangers: Math.max(0, Number(this.raid.reserves?.rangers ?? 0) || 0),
       tanks: Array.isArray(this.raid.reserves?.tankUnits) ? this.raid.reserves.tankUnits.length : 0,
       helicopters: Array.isArray(this.raid.reserves?.helicopterUnits) ? this.raid.reserves.helicopterUnits.length : 0,
     };
     const survivors = {
       soldiers: survivingAttackers.filter((entry) => entry.type === "soldier").length + remainingReserves.soldiers,
+      rangers: survivingAttackers.filter((entry) => entry.type === "ranger").length + remainingReserves.rangers,
       tanks: survivingAttackers.filter((entry) => entry.type === "tank").length + remainingReserves.tanks,
       helicopters: survivingAttackers.filter((entry) => entry.type === "helicopter").length + remainingReserves.helicopters,
     };
@@ -2521,7 +2581,7 @@ export default class BattleScene extends Phaser.Scene {
       destructionPercent: this.raid.destructionPercent,
       loot: this.raid.loot,
       energySpent: this.raid.energySpent ?? 0,
-      remainingTroops: survivors.soldiers + survivors.tanks + survivors.helicopters,
+      remainingTroops: survivors.soldiers + survivors.rangers + survivors.tanks + survivors.helicopters,
       survivors,
       survivingTankUnits,
       survivingHelicopterUnits,
@@ -2556,6 +2616,7 @@ export default class BattleScene extends Phaser.Scene {
       reserves: {
         energy: this.getAvailableRaidEnergy(),
         soldiers: this.raid.reserves?.soldiers ?? 0,
+        rangers: this.raid.reserves?.rangers ?? 0,
         tanks: this.getAvailableRaidVehicleCount("tank"),
         helicopters: this.getAvailableRaidVehicleCount("helicopter"),
       },

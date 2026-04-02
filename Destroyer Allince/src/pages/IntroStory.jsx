@@ -86,20 +86,20 @@ export default function IntroStory() {
       <div className="absolute inset-0 opacity-[0.06]" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px)", backgroundSize: "110px 110px" }} />
 
       <div className="mobile-landscape-story-shell relative z-10 flex min-h-screen items-center justify-center px-4 py-8">
-        <div className="mobile-landscape-story-card grid w-full max-w-6xl gap-6 overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 p-4 shadow-[0_30px_100px_rgba(2,6,23,0.5)] backdrop-blur-2xl lg:grid-cols-[0.92fr_1.08fr] lg:p-6">
+        <div className="mobile-landscape-story-card grid w-full max-w-6xl gap-6 overflow-hidden rounded-4xl border border-white/10 bg-white/5 p-4 shadow-[0_30px_100px_rgba(2,6,23,0.5)] backdrop-blur-2xl lg:grid-cols-[0.92fr_1.08fr] lg:p-6">
           <Motion.div
             key={`narrator-${storyIndex}`}
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.45 }}
-            className="mobile-landscape-story-narrator relative flex min-h-[20rem] items-end overflow-hidden rounded-[1.7rem] border border-white/10 bg-[linear-gradient(180deg,rgba(15,23,42,0.82)_0%,rgba(2,6,23,0.98)_100%)]"
+            className="mobile-landscape-story-narrator relative flex min-h-80 items-end overflow-hidden rounded-[1.7rem] border border-white/10 bg-[linear-gradient(180deg,rgba(15,23,42,0.82)_0%,rgba(2,6,23,0.98)_100%)]"
           >
-            <div className={`absolute inset-0 bg-gradient-to-br ${activeBeat.tone} opacity-35`} />
+            <div className={`absolute inset-0 bg-linear-to-br ${activeBeat.tone} opacity-35`} />
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.2),transparent_36%)]" />
             <img
               src="/assets/narrator.png"
               alt="Narrator"
-              className="mobile-landscape-story-image relative z-10 mx-auto h-[25rem] w-full max-w-md object-contain object-bottom"
+              className="mobile-landscape-story-image relative z-10 mx-auto h-100 w-full max-w-md object-contain object-bottom"
             />
             <div className="absolute inset-x-0 bottom-0 z-20 bg-[linear-gradient(180deg,transparent_0%,rgba(2,6,23,0.22)_18%,rgba(2,6,23,0.95)_100%)] px-5 pb-5 pt-12">
               <p className="text-[0.68rem] font-semibold uppercase tracking-[0.28em] text-amber-300/80">Narrator Transmission</p>
@@ -113,7 +113,7 @@ export default function IntroStory() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45 }}
-            className="mobile-landscape-story-panel flex min-h-[20rem] flex-col justify-between rounded-[1.7rem] border border-white/10 bg-[linear-gradient(180deg,rgba(15,23,42,0.74)_0%,rgba(2,6,23,0.88)_100%)] p-5 lg:p-7"
+            className="mobile-landscape-story-panel flex min-h-80 flex-col justify-between rounded-[1.7rem] border border-white/10 bg-[linear-gradient(180deg,rgba(15,23,42,0.74)_0%,rgba(2,6,23,0.88)_100%)] p-5 lg:p-7"
           >
             <div className="mobile-landscape-story-copy">
               <div className="flex items-center justify-between gap-4">
@@ -131,7 +131,7 @@ export default function IntroStory() {
             <div className="mobile-landscape-story-actions mt-6">
               <div className="mb-4 h-2 overflow-hidden rounded-full bg-white/10">
                 <div
-                  className={`h-full rounded-full bg-gradient-to-r ${activeBeat.tone} transition-all duration-300`}
+                  className={`h-full rounded-full bg-linear-to-r ${activeBeat.tone} transition-all duration-300`}
                   style={{ width: `${((storyIndex + 1) / STORY_BEATS.length) * 100}%` }}
                 />
               </div>

@@ -58,6 +58,7 @@ const COMMAND_CENTER_SOLDIER_LIMIT_PER_LEVEL = 5;
 const SOLDIER_HUNGER_WARNING_MS = 18000000;
 const SOLDIER_STARVATION_MS = 86400000;
 const SOLDIER_RECRUIT_COST_PER_UNIT = 2;
+const RANGER_TALA_RECRUIT_COST_PER_UNIT = 4;
 const SOLDIER_FEED_COST_PER_UNIT = 1;
 const SKYPORT_CHOPPER_COST = 5000;
 const SKYPORT_CHOPPER_LEVEL_TWO_COST = 3500;
@@ -93,6 +94,20 @@ const WAR_FIRING_TEXTURES = {
   back: "soldier-back-firing",
   left: "soldier-left-firing",
   right: "soldier-right-firing",
+};
+
+const WAR_RANGER_TEXTURES = {
+  front: ["ranger-front-walk-1", "ranger-front-walk-2"],
+  back: ["ranger-back-walk-1", "ranger-back-walk-2"],
+  left: ["ranger-left-walk-1", "ranger-left-walk-2"],
+  right: ["ranger-right-walk-1", "ranger-right-walk-2"],
+};
+
+const WAR_RANGER_FIRING_TEXTURES = {
+  front: "ranger-front-firing",
+  back: "ranger-back-firing",
+  left: "ranger-left-firing",
+  right: "ranger-right-firing",
 };
 
 const clampStoredShots = (value, maxShots, hasVehicle = true) => {
@@ -1611,6 +1626,7 @@ export default class GameScene extends Phaser.Scene {
     building.machineGold = Number(resourceState.machineGold ?? 0);
     building.lastGeneratedAt = Number(resourceState.lastGeneratedAt ?? Date.now());
     building.soldierCount = Math.max(0, Number(resourceState.soldierCount ?? 0) || 0);
+    building.rangerTalaCount = Math.max(0, Number(resourceState.rangerTalaCount ?? 0) || 0);
     building.isSleeping = Boolean(resourceState.isSleeping ?? false);
     building.lastWagePaidAt = Number(resourceState.lastWagePaidAt ?? Date.now());
     building.lastFedAt = Number(resourceState.lastFedAt ?? Date.now());
@@ -1714,6 +1730,7 @@ export default class GameScene extends Phaser.Scene {
           machineGold: entry.machineGold ?? 0,
           lastGeneratedAt: entry.lastGeneratedAt ?? Date.now(),
           soldierCount: entry.soldierCount ?? 0,
+          rangerTalaCount: entry.rangerTalaCount ?? 0,
           isSleeping: entry.isSleeping ?? false,
           lastWagePaidAt: entry.lastWagePaidAt ?? Date.now(),
           lastFedAt: entry.lastFedAt ?? Date.now(),
@@ -1959,9 +1976,12 @@ export default class GameScene extends Phaser.Scene {
     deployments.forEach((deployment) => {
       const deploymentId = String(deployment.id);
       seenIds.add(deploymentId);
+      const isRanger = deployment.type === "ranger";
+      const walkTextures = isRanger ? WAR_RANGER_TEXTURES : WAR_SOLDIER_TEXTURES;
+      const firingTextures = isRanger ? WAR_RANGER_FIRING_TEXTURES : WAR_FIRING_TEXTURES;
       const textureKey = deployment.state === "firing"
-        ? WAR_FIRING_TEXTURES[deployment.direction] ?? WAR_FIRING_TEXTURES.front
-        : (WAR_SOLDIER_TEXTURES[deployment.direction] ?? WAR_SOLDIER_TEXTURES.front)[
+        ? firingTextures[deployment.direction] ?? firingTextures.front
+        : (walkTextures[deployment.direction] ?? walkTextures.front)[
           Number(deployment.frameIndex ?? 0) % 2
         ];
       const position = this.gridToWorld(Number(deployment.col ?? 0), Number(deployment.row ?? 0));
@@ -2041,6 +2061,7 @@ export default class GameScene extends Phaser.Scene {
         machineGold: building.machineGold ?? 0,
         lastGeneratedAt: building.lastGeneratedAt ?? Date.now(),
         soldierCount: building.soldierCount ?? 0,
+        rangerTalaCount: building.rangerTalaCount ?? 0,
         isSleeping: building.isSleeping ?? false,
         lastWagePaidAt: building.lastWagePaidAt ?? Date.now(),
         lastFedAt: building.lastFedAt ?? Date.now(),
@@ -2094,7 +2115,7 @@ export default class GameScene extends Phaser.Scene {
       0
     );
     const totalSoldiers = this.placedBuildings.reduce(
-      (total, building) => total + (building.soldierCount ?? 0),
+      (total, building) => total + this.getTentTroopCount(building),
       0
     );
     const totalTanks = this.placedBuildings.filter((building) =>
@@ -2251,7 +2272,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   getNextCommandCenterWageAt(building) {
-    if (!this.isTent(building) || (building?.soldierCount ?? 0) <= 0) {
+    if (!this.isTent(building) || this.getTentTroopCount(building) <= 0) {
       return null;
     }
 
@@ -2259,7 +2280,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   isCommandCenterHungry(building) {
-    if (!this.isTent(building) || (building?.soldierCount ?? 0) <= 0) {
+    if (!this.isTent(building) || this.getTentTroopCount(building) <= 0) {
       return false;
     }
 
@@ -2273,6 +2294,25 @@ export default class GameScene extends Phaser.Scene {
 
   getTentBuildings() {
     return this.placedBuildings.filter((building) => this.isTent(building));
+  }
+
+  getTentTroopCount(building) {
+    return Math.max(0, Number(building?.soldierCount ?? 0) || 0)
+      + Math.max(0, Number(building?.rangerTalaCount ?? 0) || 0);
+  }
+
+  getTotalTentRangers() {
+    return this.getTentBuildings().reduce(
+      (total, building) => total + Math.max(0, Number(building?.rangerTalaCount ?? 0) || 0),
+      0
+    );
+  }
+
+  getTotalTentTroops() {
+    return this.getTentBuildings().reduce(
+      (total, building) => total + this.getTentTroopCount(building),
+      0
+    );
   }
 
   getTotalTentSoldiers() {
@@ -2290,7 +2330,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   areAllTentSoldiersSleeping() {
-    const occupiedTents = this.getTentBuildings().filter((building) => (building?.soldierCount ?? 0) > 0);
+    const occupiedTents = this.getTentBuildings().filter((building) => this.getTentTroopCount(building) > 0);
 
     if (occupiedTents.length === 0) {
       return false;
@@ -2368,7 +2408,7 @@ export default class GameScene extends Phaser.Scene {
       return;
     }
 
-    const desiredCount = Math.max(0, Number(commandCenter.soldierCount ?? 0) || 0);
+    const desiredCount = this.getTentTroopCount(commandCenter);
     const visibleCount = commandCenter.isSleeping ? 0 : desiredCount;
     const currentUnits = this.getSoldiersForCommandCenter(commandCenter);
 
@@ -2427,7 +2467,11 @@ export default class GameScene extends Phaser.Scene {
     const isMainBase = this.isCommandCenter(building);
     const soldierCount = isMainBase
       ? this.getTotalTentSoldiers()
-      : (building.soldierCount ?? 0);
+      : Math.max(0, Number(building.soldierCount ?? 0) || 0);
+    const rangerTalaCount = isMainBase
+      ? this.getTotalTentRangers()
+      : Math.max(0, Number(building.rangerTalaCount ?? 0) || 0);
+    const troopCount = soldierCount + rangerTalaCount;
     const maxSoldiers = isMainBase
       ? this.getTotalTentCapacity()
       : this.getCommandCenterSoldierLimit(building);
@@ -2459,6 +2503,8 @@ export default class GameScene extends Phaser.Scene {
       machineGold: building.machineGold ?? 0,
       maxGold: this.getBuildingMaxGold(building),
       soldierCount,
+      rangerTalaCount,
+      troopCount,
       isSleeping,
       maxSoldiers,
       nextWageAt,
@@ -2504,6 +2550,7 @@ export default class GameScene extends Phaser.Scene {
       maxGold: this.getBuildingMaxGold(building),
       lastGeneratedAt: building.lastGeneratedAt ?? Date.now(),
       soldierCount: building.soldierCount ?? 0,
+      rangerTalaCount: building.rangerTalaCount ?? 0,
       isSleeping: building.isSleeping ?? false,
       maxSoldiers: this.getCommandCenterSoldierLimit(building),
       lastWagePaidAt: building.lastWagePaidAt ?? Date.now(),
@@ -2676,6 +2723,18 @@ export default class GameScene extends Phaser.Scene {
   }
 
   hireSoldierAtSelectedBuilding(targetBuilding = null) {
+    return this.hireTroopAtSelectedBuilding("soldier", targetBuilding);
+  }
+
+  hireRangerTalaAtSelectedBuilding(targetBuilding = null) {
+    return this.hireTroopAtSelectedBuilding("ranger", targetBuilding);
+  }
+
+  getRecruitCostForTroopType(type = "soldier") {
+    return type === "ranger" ? RANGER_TALA_RECRUIT_COST_PER_UNIT : SOLDIER_RECRUIT_COST_PER_UNIT;
+  }
+
+  hireTroopAtSelectedBuilding(type = "soldier", targetBuilding = null) {
     const building = this.findPlacedBuilding(targetBuilding) ?? this.selectedPlacedBuilding;
 
     if (!building || !this.isTent(building)) {
@@ -2683,20 +2742,25 @@ export default class GameScene extends Phaser.Scene {
     }
 
     this.selectedPlacedBuilding = building;
-    const currentSoldiers = building.soldierCount ?? 0;
+    const currentTroops = this.getTentTroopCount(building);
     const maxSoldiers = this.getCommandCenterSoldierLimit(building);
+    const recruitCost = this.getRecruitCostForTroopType(type);
 
-    if (currentSoldiers >= maxSoldiers) {
+    if (currentTroops >= maxSoldiers) {
       return this.getPlacedBuildingSelectionPayload(building);
     }
 
-    if (this.gold < SOLDIER_RECRUIT_COST_PER_UNIT) {
+    if (this.gold < recruitCost) {
       return this.getPlacedBuildingSelectionPayload(building);
     }
 
     const now = Date.now();
-    this.setGoldState(this.gold - SOLDIER_RECRUIT_COST_PER_UNIT);
-    building.soldierCount = currentSoldiers + 1;
+    this.setGoldState(this.gold - recruitCost);
+    if (type === "ranger") {
+      building.rangerTalaCount = Math.max(0, Number(building.rangerTalaCount ?? 0) || 0) + 1;
+    } else {
+      building.soldierCount = Math.max(0, Number(building.soldierCount ?? 0) || 0) + 1;
+    }
     building.isSleeping = false;
     building.lastWagePaidAt = now;
     building.lastFedAt = now;
@@ -2717,25 +2781,39 @@ export default class GameScene extends Phaser.Scene {
   }
 
   recruitSoldierAcrossTents() {
+    return this.recruitTroopAcrossTents("soldier");
+  }
+
+  recruitRangerTalaAcrossTents() {
+    return this.recruitTroopAcrossTents("ranger");
+  }
+
+  recruitTroopAcrossTents(type = "soldier") {
     if (!this.selectedPlacedBuilding || !this.isCommandCenter(this.selectedPlacedBuilding)) {
       return null;
     }
 
     const targetTent = this.getTentBuildings()
-      .filter((building) => (building.soldierCount ?? 0) < this.getCommandCenterSoldierLimit(building))
+      .filter((building) => this.getTentTroopCount(building) < this.getCommandCenterSoldierLimit(building))
       .sort((left, right) => (left.row + left.col) - (right.row + right.col))[0];
 
     if (!targetTent) {
       return this.getPlacedBuildingSelectionPayload(this.selectedPlacedBuilding);
     }
 
-    if (this.gold < SOLDIER_RECRUIT_COST_PER_UNIT) {
+    const recruitCost = this.getRecruitCostForTroopType(type);
+
+    if (this.gold < recruitCost) {
       return this.getPlacedBuildingSelectionPayload(this.selectedPlacedBuilding);
     }
 
     const now = Date.now();
-    this.setGoldState(this.gold - SOLDIER_RECRUIT_COST_PER_UNIT);
-    targetTent.soldierCount = Math.max(0, Number(targetTent.soldierCount ?? 0) || 0) + 1;
+    this.setGoldState(this.gold - recruitCost);
+    if (type === "ranger") {
+      targetTent.rangerTalaCount = Math.max(0, Number(targetTent.rangerTalaCount ?? 0) || 0) + 1;
+    } else {
+      targetTent.soldierCount = Math.max(0, Number(targetTent.soldierCount ?? 0) || 0) + 1;
+    }
     targetTent.isSleeping = false;
     targetTent.lastWagePaidAt = now;
     targetTent.lastFedAt = now;
@@ -2762,10 +2840,10 @@ export default class GameScene extends Phaser.Scene {
     }
 
     const building = this.selectedPlacedBuilding;
-    const soldierCount = Math.max(0, Number(building.soldierCount ?? 0) || 0);
-    const totalFeedCost = soldierCount * SOLDIER_FEED_COST_PER_UNIT;
+    const troopCount = this.getTentTroopCount(building);
+    const totalFeedCost = troopCount * SOLDIER_FEED_COST_PER_UNIT;
 
-    if (soldierCount <= 0 || this.gold < totalFeedCost) {
+    if (troopCount <= 0 || this.gold < totalFeedCost) {
       return;
     }
 
@@ -2791,14 +2869,23 @@ export default class GameScene extends Phaser.Scene {
 
     const building = this.selectedPlacedBuilding;
     const currentSoldiers = Math.max(0, Number(building.soldierCount ?? 0) || 0);
+    const currentRangers = Math.max(0, Number(building.rangerTalaCount ?? 0) || 0);
+    const currentTroops = currentSoldiers + currentRangers;
     const removeCount = Math.max(0, Math.floor(Number(count) || 0));
 
-    if (currentSoldiers <= 0 || removeCount <= 0) {
+    if (currentTroops <= 0 || removeCount <= 0) {
       return;
     }
 
-    building.soldierCount = Math.max(0, currentSoldiers - removeCount);
-    if (building.soldierCount <= 0) {
+    let remainingToRemove = Math.min(currentTroops, removeCount);
+    const removedSoldiers = Math.min(currentSoldiers, remainingToRemove);
+    building.soldierCount = currentSoldiers - removedSoldiers;
+    remainingToRemove -= removedSoldiers;
+    if (remainingToRemove > 0) {
+      const removedRangers = Math.min(currentRangers, remainingToRemove);
+      building.rangerTalaCount = currentRangers - removedRangers;
+    }
+    if (this.getTentTroopCount(building) <= 0) {
       building.isSleeping = false;
       building.setSleepState?.(false);
     }
@@ -2820,9 +2907,9 @@ export default class GameScene extends Phaser.Scene {
       return;
     }
 
-    const tents = this.getTentBuildings().filter((building) => (building.soldierCount ?? 0) > 0);
+    const tents = this.getTentBuildings().filter((building) => this.getTentTroopCount(building) > 0);
     const totalSoldiers = tents.reduce(
-      (total, building) => total + Math.max(0, Number(building.soldierCount ?? 0) || 0),
+      (total, building) => total + this.getTentTroopCount(building),
       0
     );
     const totalFeedCost = totalSoldiers * SOLDIER_FEED_COST_PER_UNIT;
@@ -2856,7 +2943,7 @@ export default class GameScene extends Phaser.Scene {
 
     const building = this.selectedPlacedBuilding;
 
-    if ((building.soldierCount ?? 0) <= 0) {
+    if (this.getTentTroopCount(building) <= 0) {
       building.isSleeping = false;
     } else {
       building.isSleeping = !building.isSleeping;
@@ -2884,7 +2971,7 @@ export default class GameScene extends Phaser.Scene {
     const shouldSleep = !this.areAllTentSoldiersSleeping();
 
     this.getTentBuildings().forEach((tent) => {
-      if ((tent.soldierCount ?? 0) <= 0) {
+      if (this.getTentTroopCount(tent) <= 0) {
         tent.isSleeping = false;
       } else {
         tent.isSleeping = shouldSleep;
@@ -3554,7 +3641,7 @@ export default class GameScene extends Phaser.Scene {
     const now = Date.now();
 
     this.placedBuildings.forEach((building) => {
-      if (!this.isTent(building) || (building.soldierCount ?? 0) <= 0) {
+      if (!this.isTent(building) || this.getTentTroopCount(building) <= 0) {
         return;
       }
 
@@ -3569,6 +3656,7 @@ export default class GameScene extends Phaser.Scene {
       }
 
       building.soldierCount = 0;
+      building.rangerTalaCount = 0;
       building.lastFedAt = now;
       this.syncCommandCenterSoldiers(building);
 

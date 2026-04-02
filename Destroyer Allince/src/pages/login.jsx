@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion as Motion } from "framer-motion";
 
-import AuthLoadingScreen, { primeAuthLoadingScreen } from "../components/AuthLoadingScreen";
+import AuthLoadingScreen from "../components/AuthLoadingScreen";
+import { primeAuthLoadingScreen } from "../components/authLoadingScreenUtils";
 import PwaInstallButton from "../components/PwaInstallButton";
 import { login } from "../services/auth";
 import { markWelcomeBackPending, saveSession } from "../services/session";
