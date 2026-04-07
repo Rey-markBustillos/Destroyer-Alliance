@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { createGame, destroyGame } from "../game/main";
 import SpriteAnimator from "../components/SpriteAnimator";
 import MobileLandscapePrompt from "../components/MobileLandscapePrompt";
+import ScaledStage from "../components/ScaledStage";
 import { RANGER_FRONT_PREVIEW } from "../game/utils/rangerSprites";
 import { applyWarResolution, fetchWarTarget, syncGameSnapshot } from "../services/game";
 import { getGameSnapshot, saveGameSnapshot } from "../services/gameStorage";
@@ -772,7 +773,9 @@ export default function WarPage() {
   }, [session, totalTroops, handleFindMatch]);
 
   return (
-    <main className="app-screen-height relative overflow-hidden bg-[radial-gradient(circle_at_top,#2c5c3f_0%,#173126_48%,#08120e_100%)] text-white">
+    <main className="min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top,#2c5c3f_0%,#173126_48%,#08120e_100%)] text-white">
+      <ScaledStage className="desktop-stage-war">
+      <div className="desktop-stage-fill relative h-full w-full overflow-hidden">
       <div ref={gameRootRef} className="absolute inset-0 h-full w-full overflow-hidden" />
       <MobileLandscapePrompt />
 
@@ -995,6 +998,8 @@ export default function WarPage() {
           </div>
         </div>
       ) : null}
+      </div>
+      </ScaledStage>
     </main>
   );
 }

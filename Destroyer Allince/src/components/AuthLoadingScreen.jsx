@@ -47,7 +47,7 @@ export default function AuthLoadingScreen({
   }, []);
 
   return (
-    <div className="fixed inset-0 z-[100] overflow-hidden bg-slate-950 text-white">
+    <div className="fixed inset-0 z-100 overflow-hidden bg-slate-950 text-white">
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
         style={{ backgroundImage: `url('${imageSrc}')` }}
@@ -69,7 +69,7 @@ export default function AuthLoadingScreen({
       />
 
       <div className="relative z-10 flex min-h-screen items-end px-5 py-6 sm:px-8 sm:py-8">
-        <div className="max-w-[28rem] rounded-[1.6rem] border border-white/12 bg-slate-950/40 p-5 shadow-[0_20px_70px_rgba(2,6,23,0.36)] backdrop-blur-md sm:p-6">
+        <div className="mobile-safe-solid-panel max-w-md rounded-[1.6rem] border border-white/12 bg-slate-950/40 p-5 shadow-[0_20px_70px_rgba(2,6,23,0.36)] backdrop-blur-md sm:p-6">
           <p className="text-[0.7rem] font-bold uppercase tracking-[0.32em] text-sky-300/85">
             Loading
           </p>

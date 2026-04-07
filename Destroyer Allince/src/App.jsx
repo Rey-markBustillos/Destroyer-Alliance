@@ -1,4 +1,5 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useEffect } from "react";
+import { MotionConfig } from "framer-motion";
 import { HashRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AuthLoadingScreen from "./components/AuthLoadingScreen";
@@ -11,6 +12,7 @@ import {
   loadRegisterPage,
   loadWarPage,
 } from "./utils/routePreload";
+import { useVisualEffectsProfile } from "./utils/visualEffects";
 
 const Dashboard = lazy(loadDashboardPage);
 const GamePage = lazy(loadGamePage);
@@ -103,10 +105,23 @@ function AppRoutes() {
 }
 
 function App() {
+  const visualEffectsProfile = useVisualEffectsProfile();
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.effectsMode = visualEffectsProfile.reduceEffects ? "reduced" : "full";
+
+    return () => {
+      delete root.dataset.effectsMode;
+    };
+  }, [visualEffectsProfile.reduceEffects]);
+
   return (
-    <HashRouter>
-      <AppRoutes />
-    </HashRouter>
+    <MotionConfig reducedMotion={visualEffectsProfile.reduceMotion ? "always" : "never"}>
+      <HashRouter>
+        <AppRoutes />
+      </HashRouter>
+    </MotionConfig>
   );
 }
 

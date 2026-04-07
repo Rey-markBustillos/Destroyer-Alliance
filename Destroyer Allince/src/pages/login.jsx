@@ -161,7 +161,7 @@ export default function Login() {
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(96,165,250,0.22),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(56,189,248,0.12),transparent_28%),linear-gradient(135deg,rgba(2,6,23,0.24)_0%,rgba(2,6,23,0.58)_45%,rgba(2,6,23,0.86)_100%)]" />
 
       <Motion.div
-        className="absolute inset-0"
+        className="mobile-safe-backdrop absolute inset-0"
         initial={false}
         animate={{
           opacity: isLoggingIn ? 1 : 0.8,
@@ -181,7 +181,7 @@ export default function Login() {
         }}
       />
 
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+      <div className="mobile-safe-particles pointer-events-none absolute inset-0 overflow-hidden">
         {particles.map((particle) => (
           <Motion.span
             key={particle.id}
@@ -216,7 +216,7 @@ export default function Login() {
         >
           <Motion.form
             onSubmit={handleSubmit}
-            className="mobile-landscape-auth-card relative overflow-hidden rounded-[1.45rem] border border-white/15 bg-white/10 p-5 shadow-[0_20px_80px_rgba(15,23,42,0.24)] backdrop-blur-2xl min-[901px]:rounded-[1.8rem] min-[901px]:p-7"
+            className="mobile-landscape-auth-card mobile-safe-solid-panel mobile-safe-3d relative overflow-hidden rounded-[1.45rem] border border-white/15 bg-white/10 p-5 shadow-[0_20px_80px_rgba(15,23,42,0.24)] backdrop-blur-2xl min-[901px]:rounded-[1.8rem] min-[901px]:p-7"
             initial={false}
             animate="visible"
             variants={cardVariants}

@@ -29,9 +29,9 @@ export default function BuildingShop({
       initial={{ opacity: 0, y: 18, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.28, ease: "easeOut" }}
-      className="mobile-landscape-panel mx-auto flex w-full flex-col overflow-hidden rounded-[1.1rem] border border-cyan-300/15 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.12),transparent_28%),linear-gradient(135deg,rgba(8,20,38,0.95)_0%,rgba(14,34,46,0.9)_50%,rgba(10,26,34,0.94)_100%)] p-3 shadow-[0_22px_70px_rgba(2,6,23,0.42)] backdrop-blur-2xl min-[901px]:max-w-5xl min-[901px]:rounded-[1.25rem] min-[901px]:p-4"
+      className="mobile-landscape-panel mobile-safe-solid-panel mx-auto flex w-full flex-col overflow-hidden rounded-[1.1rem] border border-cyan-300/15 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.12),transparent_28%),linear-gradient(135deg,rgba(8,20,38,0.95)_0%,rgba(14,34,46,0.9)_50%,rgba(10,26,34,0.94)_100%)] p-3 shadow-[0_22px_70px_rgba(2,6,23,0.42)] backdrop-blur-2xl min-[901px]:max-w-5xl min-[901px]:rounded-[1.25rem] min-[901px]:p-4"
     >
-      <div className="pointer-events-none absolute inset-x-10 top-0 h-16 rounded-full bg-cyan-300/10 blur-3xl" />
+      <div className="mobile-safe-effect-layer pointer-events-none absolute inset-x-10 top-0 h-16 rounded-full bg-cyan-300/10 blur-3xl" />
 
       <div className="relative mb-3 flex shrink-0 flex-col items-start justify-between gap-2 min-[560px]:flex-row min-[901px]:mb-4 min-[901px]:gap-3">
         <div>
@@ -172,7 +172,7 @@ function ShopPreviewImage({ building }) {
       <div className="mb-2 flex h-16 w-full items-center justify-center overflow-hidden rounded-[0.95rem] border border-white/6 bg-black/20 p-2 min-[901px]:mb-3 min-[901px]:h-20">
         <div
           aria-label={building.name}
-          className="h-full max-w-full flex-1 rounded-md bg-contain bg-no-repeat"
+          className="mobile-safe-filter h-full max-w-full flex-1 rounded-md bg-contain bg-no-repeat"
           style={{
             aspectRatio: "512 / 516",
             backgroundImage: `url(${currentSource})`,
@@ -192,7 +192,7 @@ function ShopPreviewImage({ building }) {
       <img
         src={currentSource}
         alt={building.name}
-        className="h-full w-full object-contain"
+        className="mobile-safe-filter h-full w-full object-contain"
         style={{
           imageRendering: "auto",
           filter: "drop-shadow(0 8px 18px rgba(2, 6, 23, 0.22)) saturate(1.05) contrast(1.04)",
