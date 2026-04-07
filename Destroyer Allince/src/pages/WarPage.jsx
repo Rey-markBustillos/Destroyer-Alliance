@@ -630,10 +630,6 @@ export default function WarPage() {
     await resolveTarget();
   }, [resolveTarget]);
 
-  const handleStartAttack = () => {
-    battleSceneRef.current?.startRaidAttack();
-  };
-
   const handleSelectDeploymentType = useCallback((type) => {
     const didSelect = battleSceneRef.current?.setDeploymentType?.(type);
 
@@ -678,7 +674,6 @@ export default function WarPage() {
   };
 
   const totalTroops = getTotalTroops(army);
-  const canAttack = totalTroops > 0 && target && raidState.phase === "ready";
   const canFindMatch = lookupState !== "loading" && raidState.phase !== "planning" && raidState.phase !== "active";
   const summary = raidState.summary;
   const earnedWarPoints = getWarPointsEarned(summary?.destructionPercent);
@@ -688,11 +683,6 @@ export default function WarPage() {
   const canRaiseMusicVolume = musicVolumePercent < 100;
   const raidTimerLabel = formatCountdown(raidState.timeRemainingMs);
   const showRaidTimer = raidState.phase === "planning" || raidState.phase === "active";
-  const attackButtonLabel = raidState.phase === "planning"
-    ? "Prep"
-    : raidState.phase === "active"
-      ? "Attack"
-      : "Attack";
   const canChooseDeployment = Boolean(target) && ["ready", "planning", "active"].includes(raidState.phase);
   const deploymentCounts = {
     soldier: raidState.phase === "planning" || raidState.phase === "active"
@@ -900,14 +890,6 @@ export default function WarPage() {
           >
             {lookupState === "loading" ? "Searching..." : "Search Another Village"}
           </button>
-          <button
-            type="button"
-            onClick={handleStartAttack}
-            disabled={!canAttack}
-            className="mobile-landscape-war-button rounded-lg bg-rose-500 px-2 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-white transition hover:bg-rose-400 disabled:cursor-not-allowed disabled:opacity-50 min-[901px]:rounded-xl min-[901px]:px-3 min-[901px]:py-2.5 min-[901px]:text-xs min-[901px]:tracking-[0.16em]"
-          >
-            {attackButtonLabel}
-          </button>
         </div>
       </div>
 
@@ -943,9 +925,9 @@ export default function WarPage() {
               </p>
             )}
           </div>
-          {raidState.phase === "planning" ? (
+          {raidState.phase === "ready" ? (
             <p className="mobile-landscape-war-note mt-2 text-[11px] font-semibold leading-tight text-amber-200 min-[901px]:mt-3 min-[901px]:text-xs">
-              You have 1 minute to inspect the enemy base, or the 2-minute attack timer starts as soon as you deploy the first troop.
+              Tap a unit card, then drop it on the battlefield to start the raid immediately.
             </p>
           ) : null}
           {raidState.phase === "active" ? (

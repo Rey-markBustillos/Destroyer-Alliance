@@ -27,7 +27,6 @@ const DESKTOP_CAMERA_FIT_ZOOM_BIAS = 1;
 const MAP_BACKGROUND_COLOR = "#8c8169";
 const BATTLE_CAMERA_PADDING_X = 220;
 const BATTLE_CAMERA_PADDING_Y = 220;
-const RAID_PREVIEW_READY_DELAY_MS = 1800;
 const RAID_PLANNING_TIME_LIMIT_MS = 60000;
 const RAID_TIME_LIMIT_MS = 120000;
 const RAID_DEPLOY_INTERVAL_MS = 180;
@@ -996,15 +995,6 @@ export default class BattleScene extends Phaser.Scene {
       return;
     }
 
-    if ((camera.panEffect?.isRunning || camera.zoomEffect?.isRunning) && !this.pointerDrag.active) {
-      this.cameraController.targetZoom = Number(camera.zoom ?? INITIAL_ZOOM) || INITIAL_ZOOM;
-      this.cameraController.targetScrollX = Number(camera.scrollX ?? 0) || 0;
-      this.cameraController.targetScrollY = Number(camera.scrollY ?? 0) || 0;
-      this.cameraController.velocityX = 0;
-      this.cameraController.velocityY = 0;
-      return;
-    }
-
     const deltaSeconds = Math.max(0.001, Math.min(0.05, (delta || 16) / 1000));
     const zoomLerp = 1 - Math.exp(-CAMERA_ZOOM_LERP * deltaSeconds);
     const scrollLerp = 1 - Math.exp(-CAMERA_SCROLL_LERP * deltaSeconds);
@@ -1049,6 +1039,37 @@ export default class BattleScene extends Phaser.Scene {
     camera.scrollY = clampedCamera.scrollY;
   }
 
+  snapCameraToCurrentView() {
+    const camera = this.cameras.main;
+
+    if (!camera || !this.cameraController) {
+      return;
+    }
+
+    camera.stopFollow?.();
+    camera.panEffect?.reset?.();
+    camera.zoomEffect?.reset?.();
+
+    const zoom = clamp(
+      Number(camera.zoom ?? this.cameraController.targetZoom ?? INITIAL_ZOOM) || INITIAL_ZOOM,
+      this.cameraController.minZoom,
+      this.cameraController.maxZoom
+    );
+    const clampedScroll = this.clampCameraScroll(
+      Number(camera.scrollX ?? this.cameraController.targetScrollX ?? 0) || 0,
+      Number(camera.scrollY ?? this.cameraController.targetScrollY ?? 0) || 0,
+      zoom
+    );
+
+    camera.setZoom(zoom);
+    camera.setScroll(clampedScroll.scrollX, clampedScroll.scrollY);
+    this.cameraController.targetZoom = zoom;
+    this.cameraController.targetScrollX = clampedScroll.scrollX;
+    this.cameraController.targetScrollY = clampedScroll.scrollY;
+    this.cameraController.velocityX = 0;
+    this.cameraController.velocityY = 0;
+  }
+
   bindInput() {
     this.input.setTopOnly(true);
 
@@ -1078,7 +1099,7 @@ export default class BattleScene extends Phaser.Scene {
       const wasDrag = this.pointerDrag.moved;
       this.pointerDrag.active = false;
 
-      if (!wasDrag && (this.raid?.phase === "planning" || this.raid?.phase === "active")) {
+      if (!wasDrag && (this.raid?.phase === "ready" || this.raid?.phase === "planning" || this.raid?.phase === "active")) {
         this.handleBattlefieldDeploy(pointer.worldX, pointer.worldY);
       }
     });
@@ -1158,16 +1179,7 @@ export default class BattleScene extends Phaser.Scene {
     }
 
     this.createTargetVillage(target);
-    this.runCameraReveal();
-    this.time.delayedCall(RAID_PREVIEW_READY_DELAY_MS, () => {
-      if (this.raid.target?.id !== target.id) {
-        return;
-      }
-
-      this.raid.phase = "ready";
-      this.emitRaidState(true);
-    });
-
+    this.raid.phase = "ready";
     this.emitRaidState(true);
   }
 
@@ -1482,22 +1494,6 @@ export default class BattleScene extends Phaser.Scene {
         this.raid.defenders.push(defender);
         this.emitRaidState(true);
       });
-    });
-  }
-
-  runCameraReveal() {
-    const focusStructure = this.getBattleFocusStructure();
-    const camera = this.cameras.main;
-
-    if (!focusStructure) {
-      return;
-    }
-
-    camera.stopFollow();
-    camera.pan(focusStructure.x, focusStructure.y - 36, 980, "Sine.easeInOut");
-    camera.zoomTo(1.1, 1080);
-    this.time.delayedCall(980, () => {
-      this.centerCameraOnVillage(980, 0.94);
     });
   }
 
@@ -1826,7 +1822,7 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   startRaidAttack() {
-    if (!this.raid.target || this.raid.phase === "planning" || this.raid.phase === "active") {
+    if (!this.raid.target || this.raid.phase === "active") {
       return;
     }
 
@@ -1855,23 +1851,20 @@ export default class BattleScene extends Phaser.Scene {
         : [],
     };
     this.raid.selectedDeploymentType = this.getFirstAvailableDeploymentType();
-    this.raid.planningStartedAt = this.time.now;
-    this.raid.startedAt = 0;
-    this.raid.phase = "planning";
-    this.centerCameraOnVillage(560, 1.02);
+    this.raid.planningStartedAt = 0;
+    this.raid.startedAt = this.time.now;
+    this.raid.phase = "active";
+    this.spawnBaseDefenders();
+    this.snapCameraToCurrentView();
     this.emitRaidState(true);
   }
 
   activateRaidAttack() {
-    if (!this.raid.target || this.raid.phase !== "planning") {
+    if (!this.raid.target || this.raid.phase === "active") {
       return;
     }
 
-    this.raid.startedAt = this.time.now;
-    this.raid.phase = "active";
-    this.spawnBaseDefenders();
-    this.centerCameraOnVillage(560, 1.02);
-    this.emitRaidState(true);
+    this.startRaidAttack();
   }
 
   update(_time, delta) {
@@ -2295,7 +2288,7 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   handleBattlefieldDeploy(worldX, worldY) {
-    if (this.raid.phase !== "planning" && this.raid.phase !== "active") {
+    if (this.raid.phase !== "ready" && this.raid.phase !== "planning" && this.raid.phase !== "active") {
       return;
     }
 
@@ -2314,10 +2307,8 @@ export default class BattleScene extends Phaser.Scene {
     this.lastDeployAt = this.time.now;
 
     const type = this.raid.selectedDeploymentType ?? this.getFirstAvailableDeploymentType();
-    const shouldStartAttackTimer = this.raid.phase === "planning";
-
-    if (shouldStartAttackTimer) {
-      this.activateRaidAttack();
+    if (this.raid.phase === "ready") {
+      this.startRaidAttack();
     }
 
     if (type === "soldier" && (this.raid.reserves.soldiers ?? 0) > 0) {
