@@ -3,6 +3,7 @@ import Phaser from "phaser";
 import Building from "../objects/Building";
 import SoldierUnit from "../objects/SoldierUnit";
 import { BUILDING_LIST, getBuildingUpgradeCost } from "../utils/buildingTypes";
+import { GAME_HEIGHT, GAME_WIDTH } from "../utils/config";
 import {
   getTextureRefFrame,
   getTextureRefKey,
@@ -21,8 +22,6 @@ const MAP_ROWS = 15;
 const MAP_COLS = 15;
 const STARTING_GOLD = 1200;
 const MIN_ZOOM_FLOOR = 0.55;
-const TABLET_MIN_ZOOM_FLOOR = 0.64;
-const MOBILE_MIN_ZOOM_FLOOR = 0.8;
 const MAX_ZOOM = 2.2;
 const ZOOM_STEP = 0.1;
 const CAMERA_EDGE_SCROLL_MARGIN = 56;
@@ -34,14 +33,15 @@ const CAMERA_FOCUS_SCROLL_LERP = 6;
 const CAMERA_FOCUS_ZOOM_LERP = 5;
 const CAMERA_FOCUS_TRANSITION_MS = 420;
 const CAMERA_FOCUS_OFFSET_Y = TILE_HEIGHT * 0.18;
-const CAMERA_FIT_PADDING = 0;
-const MAP_COVER_BLEED = 96;
+const CAMERA_FIT_PADDING = 24;
 const CAMERA_SCROLL_SAFE_INSET_LEFT = 0;
 const CAMERA_SCROLL_SAFE_INSET_RIGHT = 72;
 const CAMERA_EXTRA_LEFT_SCROLL = 84;
 const CAMERA_SCROLL_SAFE_INSET_TOP = 40;
 const CAMERA_SCROLL_SAFE_INSET_BOTTOM = 120;
-const CAMERA_COVER_ZOOM_GUARD = 1.035;
+const MOBILE_CAMERA_FIT_ZOOM_BIAS = 0.94;
+const TABLET_CAMERA_FIT_ZOOM_BIAS = 0.98;
+const DESKTOP_CAMERA_FIT_ZOOM_BIAS = 1;
 const WOOD_MACHINE_TICK_MS = 180000;
 const ENERGY_MACHINE_TICK_MS = 180000;
 const WOOD_MACHINE_GOLD_PER_TICK = 10;
@@ -85,6 +85,8 @@ const TANK_BASE_DAMAGE = 80;
 const TANK_DAMAGE_PER_LEVEL = 18;
 const BUILDING_SELECTION_DEBUG = false;
 const CAMERA_WORLD_PADDING = 64;
+const FIXED_WORLD_CENTER_X = GAME_WIDTH / 2;
+const FIXED_WORLD_CENTER_Y = GAME_HEIGHT / 2;
 const BUILDABLE_GRASS_MASK = Array.from({ length: MAP_ROWS }, (_, row) => (
   row === 0 || row === MAP_ROWS - 1
     ? [3, MAP_COLS - 4]
@@ -172,51 +174,66 @@ const getCameraSafeBounds = (scene) => {
     width: fallbackWidth,
     height: fallbackHeight,
   };
+  const viewportWidth = Number(scene?.scale?.width ?? GAME_WIDTH) || GAME_WIDTH;
+  const safeInsets = viewportWidth <= 768
+    ? {
+      left: 0,
+      right: 0,
+      top: 0,
+      bottom: 0,
+      extraLeft: 0,
+    }
+    : {
+      left: CAMERA_SCROLL_SAFE_INSET_LEFT,
+      right: CAMERA_SCROLL_SAFE_INSET_RIGHT,
+      top: CAMERA_SCROLL_SAFE_INSET_TOP,
+      bottom: CAMERA_SCROLL_SAFE_INSET_BOTTOM,
+      extraLeft: CAMERA_EXTRA_LEFT_SCROLL,
+    };
 
   return {
-    minX: activeBounds.minX + CAMERA_SCROLL_SAFE_INSET_LEFT,
-    maxX: activeBounds.maxX - CAMERA_SCROLL_SAFE_INSET_RIGHT,
-    minY: activeBounds.minY + CAMERA_SCROLL_SAFE_INSET_TOP,
-    maxY: activeBounds.maxY - CAMERA_SCROLL_SAFE_INSET_BOTTOM,
-    width: Math.max(1, activeBounds.width - CAMERA_SCROLL_SAFE_INSET_LEFT - CAMERA_SCROLL_SAFE_INSET_RIGHT),
-    height: Math.max(1, activeBounds.height - CAMERA_SCROLL_SAFE_INSET_TOP - CAMERA_SCROLL_SAFE_INSET_BOTTOM),
+    minX: activeBounds.minX + safeInsets.left,
+    maxX: activeBounds.maxX - safeInsets.right,
+    minY: activeBounds.minY + safeInsets.top,
+    maxY: activeBounds.maxY - safeInsets.bottom,
+    width: Math.max(1, activeBounds.width - safeInsets.left - safeInsets.right),
+    height: Math.max(1, activeBounds.height - safeInsets.top - safeInsets.bottom),
+    extraLeft: safeInsets.extraLeft,
   };
 };
 
-const getResponsiveMinZoomFloor = (scene) => {
+const getCameraFitZoomBias = (scene) => {
   const viewportWidth = Number(scene?.scale?.width ?? 1280) || 1280;
 
-  if (viewportWidth <= 480) {
-    return MOBILE_MIN_ZOOM_FLOOR;
+  if (viewportWidth <= 640) {
+    return MOBILE_CAMERA_FIT_ZOOM_BIAS;
   }
 
   if (viewportWidth <= 768) {
-    return TABLET_MIN_ZOOM_FLOOR;
+    return TABLET_CAMERA_FIT_ZOOM_BIAS;
   }
 
-  return MIN_ZOOM_FLOOR;
+  return DESKTOP_CAMERA_FIT_ZOOM_BIAS;
 };
 
 const getSixteenBySixteenViewZoom = (scene) => {
   const viewportWidth = Number(scene?.scale?.width ?? 1280) || 1280;
   const viewportHeight = Number(scene?.scale?.height ?? 720) || 720;
-  const visibleGridWidth = Math.max(1, 16 * TILE_WIDTH);
-  const visibleGridHeight = Math.max(1, 16 * TILE_HEIGHT);
-  const safeBounds = getCameraSafeBounds(scene);
-  const fitBoundsWidth = Math.max(1, Number(safeBounds.width ?? visibleGridWidth) || visibleGridWidth);
-  const fitBoundsHeight = Math.max(1, Number(safeBounds.height ?? visibleGridHeight) || visibleGridHeight);
+  const fitBounds = scene?.cameraFitBounds ?? scene?.worldBounds ?? {
+    width: Math.max(1, 16 * TILE_WIDTH),
+    height: Math.max(1, 16 * TILE_HEIGHT),
+  };
+  const fitBoundsWidth = Math.max(1, Number(fitBounds.width ?? (16 * TILE_WIDTH)) || (16 * TILE_WIDTH));
+  const fitBoundsHeight = Math.max(1, Number(fitBounds.height ?? (16 * TILE_HEIGHT)) || (16 * TILE_HEIGHT));
   const safeViewportWidth = Math.max(1, viewportWidth - (CAMERA_FIT_PADDING * 2));
   const safeViewportHeight = Math.max(1, viewportHeight - (CAMERA_FIT_PADDING * 2));
-  const requestedWidthZoom = safeViewportWidth / visibleGridWidth;
-  const requestedHeightZoom = safeViewportHeight / visibleGridHeight;
-  const requestedZoom = Math.min(requestedWidthZoom, requestedHeightZoom);
-  const mapCoverZoom = Math.max(
+  const fitZoom = Math.min(
     safeViewportWidth / fitBoundsWidth,
     safeViewportHeight / fitBoundsHeight
   );
-  const resolvedZoom = Math.max(requestedZoom, mapCoverZoom * CAMERA_COVER_ZOOM_GUARD);
+  const resolvedZoom = fitZoom * getCameraFitZoomBias(scene);
 
-  return Phaser.Math.Clamp(resolvedZoom, getResponsiveMinZoomFloor(scene), MAX_ZOOM);
+  return Phaser.Math.Clamp(resolvedZoom, MIN_ZOOM_FLOOR * 0.5, MAX_ZOOM);
 };
 
 export default class GameScene extends Phaser.Scene {
@@ -364,11 +381,15 @@ export default class GameScene extends Phaser.Scene {
   }
 
   computeBoardMetrics() {
+    const localGridToWorld = (x, y) => ({
+      x: (x - y) * this.iso.tileWidth / 2,
+      y: (x + y) * this.iso.tileHeight / 2,
+    });
     const corners = [
-      this.gridToWorld(0, 0),
-      this.gridToWorld(this.iso.cols - 1, 0),
-      this.gridToWorld(0, this.iso.rows - 1),
-      this.gridToWorld(this.iso.cols - 1, this.iso.rows - 1),
+      localGridToWorld(0, 0),
+      localGridToWorld(this.iso.cols - 1, 0),
+      localGridToWorld(0, this.iso.rows - 1),
+      localGridToWorld(this.iso.cols - 1, this.iso.rows - 1),
     ];
 
     const halfW = this.iso.tileWidth / 2;
@@ -378,9 +399,9 @@ export default class GameScene extends Phaser.Scene {
 
     const boardHeight = maxY - minY;
 
-    this.iso.originX = this.scale.width / 2;
+    this.iso.originX = FIXED_WORLD_CENTER_X;
     this.iso.originY =
-      this.scale.height / 2 - (minY + boardHeight / 2) + this.iso.tileHeight / 2;
+      FIXED_WORLD_CENTER_Y - (minY + boardHeight / 2) + this.iso.tileHeight / 2;
 
     const centeredCorners = [
       this.gridToWorld(0, 0),
@@ -654,7 +675,7 @@ export default class GameScene extends Phaser.Scene {
 
   drawBoard() {
     if (this.textures.exists("base")) {
-      this.cameraFitMode = "cover";
+      this.cameraFitMode = "contain";
       const boardCenter = this.gridToWorld(
         (this.iso.cols - 1) / 2,
         (this.iso.rows - 1) / 2
@@ -668,19 +689,11 @@ export default class GameScene extends Phaser.Scene {
       );
 
       village.setOrigin(0.5, 0.5);
-      const coverScale = Math.max(
-        (this.scale.width + MAP_COVER_BLEED) / Math.max(1, mapTextureSize.width),
-        (this.scale.height + MAP_COVER_BLEED) / Math.max(1, mapTextureSize.height)
-      );
       configureHdSprite(village, {
         scene: this,
         sourceWidth: mapTextureSize.width,
         sourceHeight: mapTextureSize.height,
       });
-      village.setDisplaySize(
-        Math.max(1, Math.round(mapTextureSize.width * coverScale)),
-        Math.max(1, Math.round(mapTextureSize.height * coverScale))
-      );
       village.setTint(0xf8fafc);
       village.setDepth(-50);
       this.groundLayer.add(village);
@@ -1081,7 +1094,7 @@ export default class GameScene extends Phaser.Scene {
     const viewportWidth = this.scale.width / zoom;
     const viewportHeight = this.scale.height / zoom;
     const insetBounds = getCameraSafeBounds(this);
-    let minScrollX = insetBounds.minX - CAMERA_EXTRA_LEFT_SCROLL;
+    let minScrollX = insetBounds.minX - (insetBounds.extraLeft ?? 0);
     let maxScrollX = insetBounds.maxX - viewportWidth;
     let minScrollY = insetBounds.minY;
     let maxScrollY = insetBounds.maxY - viewportHeight;

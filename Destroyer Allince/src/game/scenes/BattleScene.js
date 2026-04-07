@@ -2,6 +2,7 @@ import Phaser from "phaser";
 
 import Building from "../objects/Building";
 import { BUILDING_LIST } from "../utils/buildingTypes";
+import { GAME_HEIGHT, GAME_WIDTH } from "../utils/config";
 import {
   getTextureRefFrame,
   getTextureRefKey,
@@ -19,6 +20,10 @@ const TILE_HEIGHT = 32;
 const MAP_ROWS = 12;
 const MAP_COLS = 12;
 const INITIAL_ZOOM = 0.9;
+const CAMERA_FIT_PADDING = 24;
+const MOBILE_CAMERA_FIT_ZOOM_BIAS = 0.94;
+const TABLET_CAMERA_FIT_ZOOM_BIAS = 0.98;
+const DESKTOP_CAMERA_FIT_ZOOM_BIAS = 1;
 const BATTLE_CAMERA_PADDING_X = 220;
 const BATTLE_CAMERA_PADDING_Y = 220;
 const RAID_PREVIEW_READY_DELAY_MS = 1800;
@@ -40,8 +45,9 @@ const SOLDIER_DIRECTION_DEADZONE = 4;
 const SOLDIER_DIRECTION_SWITCH_RATIO = 1.18;
 const RANGER_HIT_REACTION_MS = 180;
 const AIR_DEFENSE_TARGET_PRIORITY = ["rocket", "jet", "helicopter"];
-const DEPLOYABLE_MIN_ROW = MAP_ROWS - 3;
+const DEPLOYABLE_MIN_ROW = MAP_ROWS - 1;
 const DEPLOY_HINT_COOLDOWN_MS = 450;
+const CAMERA_WORLD_PADDING = 64;
 const SOLDIER_WALK_TEXTURES = {
   front: ["soldier-front-walk-1", "soldier-front-walk-2"],
   back: ["soldier-back-walk-1", "soldier-back-walk-2"],
@@ -72,11 +78,42 @@ const VEHICLE_SHOTS_PER_CHARGE = {
   tank: 10,
   helicopter: 15,
 };
+const FIXED_WORLD_CENTER_X = GAME_WIDTH / 2;
+const FIXED_WORLD_CENTER_Y = GAME_HEIGHT / 2;
 
 const darkenColor = (hex, amount = 16) => {
   const color = Phaser.Display.Color.ValueToColor(hex);
   color.darken(amount);
   return color.color;
+};
+
+const getBattleCameraFitZoomBias = (scene) => {
+  const viewportWidth = Number(scene?.scale?.width ?? GAME_WIDTH) || GAME_WIDTH;
+
+  if (viewportWidth <= 640) {
+    return MOBILE_CAMERA_FIT_ZOOM_BIAS;
+  }
+
+  if (viewportWidth <= 768) {
+    return TABLET_CAMERA_FIT_ZOOM_BIAS;
+  }
+
+  return DESKTOP_CAMERA_FIT_ZOOM_BIAS;
+};
+
+const getBattleCameraFitZoom = (scene, bounds) => {
+  const viewportWidth = Math.max(1, Number(scene?.scale?.width ?? GAME_WIDTH) || GAME_WIDTH);
+  const viewportHeight = Math.max(1, Number(scene?.scale?.height ?? GAME_HEIGHT) || GAME_HEIGHT);
+  const safeViewportWidth = Math.max(1, viewportWidth - (CAMERA_FIT_PADDING * 2));
+  const safeViewportHeight = Math.max(1, viewportHeight - (CAMERA_FIT_PADDING * 2));
+  const fitWidth = Math.max(1, Number(bounds?.width ?? 1) || 1);
+  const fitHeight = Math.max(1, Number(bounds?.height ?? 1) || 1);
+  const fitZoom = Math.min(
+    safeViewportWidth / fitWidth,
+    safeViewportHeight / fitHeight
+  );
+
+  return clamp(fitZoom * getBattleCameraFitZoomBias(scene), MIN_CAMERA_ZOOM * 0.5, MAX_CAMERA_ZOOM);
 };
 
 const clamp = Phaser.Math.Clamp;
@@ -531,6 +568,10 @@ export default class BattleScene extends Phaser.Scene {
     this.computeBoardMetrics();
     this.drawBoard();
     this.createCamera();
+    this.scale.on("resize", this.handleResize, this);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.scale.off("resize", this.handleResize, this);
+    });
     this.bindInput();
     this.resetRaidState();
     this.game.events.emit("game-scene-ready");
@@ -569,11 +610,15 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   computeBoardMetrics() {
+    const localGridToWorld = (x, y) => ({
+      x: (x - y) * this.iso.tileWidth / 2,
+      y: (x + y) * this.iso.tileHeight / 2,
+    });
     const corners = [
-      this.gridToWorld(0, 0),
-      this.gridToWorld(this.iso.cols - 1, 0),
-      this.gridToWorld(0, this.iso.rows - 1),
-      this.gridToWorld(this.iso.cols - 1, this.iso.rows - 1),
+      localGridToWorld(0, 0),
+      localGridToWorld(this.iso.cols - 1, 0),
+      localGridToWorld(0, this.iso.rows - 1),
+      localGridToWorld(this.iso.cols - 1, this.iso.rows - 1),
     ];
     const halfW = this.iso.tileWidth / 2;
     const halfH = this.iso.tileHeight / 2;
@@ -581,8 +626,8 @@ export default class BattleScene extends Phaser.Scene {
     const maxY = Math.max(...corners.map(({ y }) => y + halfH));
     const boardHeight = maxY - minY;
 
-    this.iso.originX = this.scale.width / 2;
-    this.iso.originY = this.scale.height / 2 - (minY + boardHeight / 2) + this.iso.tileHeight / 2;
+    this.iso.originX = FIXED_WORLD_CENTER_X;
+    this.iso.originY = FIXED_WORLD_CENTER_Y - (minY + boardHeight / 2) + this.iso.tileHeight / 2;
 
     const centeredCorners = [
       this.gridToWorld(0, 0),
@@ -666,21 +711,42 @@ export default class BattleScene extends Phaser.Scene {
   drawBoard() {
     if (this.textures.exists("base")) {
       const boardCenter = this.gridToWorld((this.iso.cols - 1) / 2, (this.iso.rows - 1) / 2);
-      const base = this.add.image(boardCenter.x, boardCenter.y + this.iso.tileHeight * 2.2, "base");
+      const mapCenterY = boardCenter.y + this.iso.tileHeight * 0.85;
+      const base = this.add.image(boardCenter.x, mapCenterY, "base");
+      const baseTextureSize = {
+        width: Math.max(1, Number(base.width ?? 1) || 1),
+        height: Math.max(1, Number(base.height ?? 1) || 1),
+      };
       base.setOrigin(0.5, 0.5);
       configureHdSprite(base, {
         scene: this,
-        maxWidth: this.iso.cols * this.iso.tileWidth * 1.5,
-        maxHeight: this.iso.rows * this.iso.tileHeight * 2.9,
+        sourceWidth: baseTextureSize.width,
+        sourceHeight: baseTextureSize.height,
       });
       base.setTint(0xf8fafc);
       base.setDepth(-30);
       this.groundLayer.add(base);
+      this.cameraFitBounds = {
+        minX: base.x - baseTextureSize.width / 2,
+        maxX: base.x + baseTextureSize.width / 2,
+        minY: base.y - baseTextureSize.height / 2,
+        maxY: base.y + baseTextureSize.height / 2,
+        width: baseTextureSize.width,
+        height: baseTextureSize.height,
+      };
+      this.worldBounds = {
+        minX: base.x - base.displayWidth / 2 - CAMERA_WORLD_PADDING,
+        maxX: base.x + base.displayWidth / 2 + CAMERA_WORLD_PADDING,
+        minY: base.y - base.displayHeight / 2 - CAMERA_WORLD_PADDING,
+        maxY: base.y + base.displayHeight / 2 + CAMERA_WORLD_PADDING,
+        width: base.displayWidth + (CAMERA_WORLD_PADDING * 2),
+        height: base.displayHeight + (CAMERA_WORLD_PADDING * 2),
+      };
       createAmbientWorldLighting(this, this.ambientLayer, {
         centerX: boardCenter.x,
-        centerY: boardCenter.y + this.iso.tileHeight * 2.05,
-        width: this.iso.cols * this.iso.tileWidth * 1.65,
-        height: this.iso.rows * this.iso.tileHeight * 2.95,
+        centerY: mapCenterY,
+        width: this.iso.cols * this.iso.tileWidth * 1.6,
+        height: this.iso.rows * this.iso.tileHeight * 2.9,
       });
       return;
     }
@@ -717,12 +783,52 @@ export default class BattleScene extends Phaser.Scene {
       this.worldBounds.width,
       this.worldBounds.height
     );
-    camera.centerOn(this.iso.originX, this.iso.originY + this.iso.rows * this.iso.tileHeight / 2);
-    camera.setZoom(INITIAL_ZOOM);
+    const focusBounds = this.cameraFitBounds ?? this.worldBounds;
+    const defaultZoom = getBattleCameraFitZoom(this, focusBounds);
+    const centeredScroll = this.getScrollForWorldPoint(
+      focusBounds.minX + (focusBounds.width / 2),
+      focusBounds.minY + (focusBounds.height / 2),
+      defaultZoom
+    );
+    camera.setZoom(defaultZoom);
+    camera.setScroll(centeredScroll.scrollX, centeredScroll.scrollY);
     camera.roundPixels = false;
-    this.cameraController.targetZoom = INITIAL_ZOOM;
-    this.cameraController.targetScrollX = Number(camera.scrollX ?? 0) || 0;
-    this.cameraController.targetScrollY = Number(camera.scrollY ?? 0) || 0;
+    this.cameraController.defaultZoom = defaultZoom;
+    this.cameraController.minZoom = Math.max(MIN_CAMERA_ZOOM * 0.5, defaultZoom);
+    this.cameraController.targetZoom = defaultZoom;
+    this.cameraController.targetScrollX = centeredScroll.scrollX;
+    this.cameraController.targetScrollY = centeredScroll.scrollY;
+  }
+
+  handleResize() {
+    const camera = this.cameras.main;
+
+    if (!camera) {
+      return;
+    }
+
+    const center = {
+      x: Number(camera.midPoint?.x ?? (this.iso.originX ?? FIXED_WORLD_CENTER_X)) || (this.iso.originX ?? FIXED_WORLD_CENTER_X),
+      y: Number(camera.midPoint?.y ?? (this.iso.originY ?? FIXED_WORLD_CENTER_Y)) || (this.iso.originY ?? FIXED_WORLD_CENTER_Y),
+    };
+    const focusBounds = this.cameraFitBounds ?? this.worldBounds;
+    const defaultZoom = getBattleCameraFitZoom(this, focusBounds);
+    this.cameraController.defaultZoom = defaultZoom;
+    this.cameraController.minZoom = Math.max(MIN_CAMERA_ZOOM * 0.5, defaultZoom);
+    this.cameraController.targetZoom = clamp(
+      Number(this.cameraController.targetZoom ?? defaultZoom) || defaultZoom,
+      this.cameraController.minZoom,
+      this.cameraController.maxZoom
+    );
+    camera.setZoom(this.cameraController.targetZoom);
+    const centeredScroll = this.getScrollForWorldPoint(
+      center.x,
+      center.y,
+      this.cameraController.targetZoom
+    );
+    camera.setScroll(centeredScroll.scrollX, centeredScroll.scrollY);
+    this.cameraController.targetScrollX = centeredScroll.scrollX;
+    this.cameraController.targetScrollY = centeredScroll.scrollY;
   }
 
   getCameraScrollBounds(zoom = this.cameraController.targetZoom) {
@@ -1225,7 +1331,7 @@ export default class BattleScene extends Phaser.Scene {
       }
     }
 
-    const deployLabelPoint = this.gridToWorld((this.iso.cols - 1) / 2, DEPLOYABLE_MIN_ROW + 1);
+    const deployLabelPoint = this.gridToWorld((this.iso.cols - 1) / 2, DEPLOYABLE_MIN_ROW);
     const deployLabel = this.add.text(deployLabelPoint.x, deployLabelPoint.y + 22, "Deploy Zone", {
       fontFamily: "Verdana",
       fontSize: "14px",
@@ -1407,20 +1513,25 @@ export default class BattleScene extends Phaser.Scene {
     const centerY = (minY + maxY) / 2 + 42;
     const targetWidth = Math.max(1, maxX - minX + BATTLE_CAMERA_PADDING_X);
     const targetHeight = Math.max(1, maxY - minY + BATTLE_CAMERA_PADDING_Y);
-    const fitZoom = Math.min(
-      this.scale.width / targetWidth,
-      this.scale.height / targetHeight
-    );
+    const fitZoom = getBattleCameraFitZoom(this, {
+      width: targetWidth,
+      height: targetHeight,
+    });
     const resolvedZoom = Math.min(zoom, fitZoom);
 
     if (duration > 0) {
       this.cameras.main.pan(centerX, centerY, duration, "Sine.easeInOut");
       this.cameras.main.zoomTo(resolvedZoom, duration);
+      this.cameraController.targetZoom = resolvedZoom;
       return;
     }
 
-    this.cameras.main.centerOn(centerX, centerY);
+    const centeredScroll = this.getScrollForWorldPoint(centerX, centerY, resolvedZoom);
     this.cameras.main.setZoom(resolvedZoom);
+    this.cameras.main.setScroll(centeredScroll.scrollX, centeredScroll.scrollY);
+    this.cameraController.targetZoom = resolvedZoom;
+    this.cameraController.targetScrollX = centeredScroll.scrollX;
+    this.cameraController.targetScrollY = centeredScroll.scrollY;
   }
 
   createHealthBar(width = 42) {
