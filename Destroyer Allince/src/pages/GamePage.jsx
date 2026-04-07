@@ -1969,7 +1969,7 @@ export default function GamePage() {
             onClick={() => setChatOpen(false)}
           >
             <div
-              className="mobile-landscape-overlay-card mobile-landscape-chat-card mt-auto mb-16 flex w-full flex-col rounded-2xl border border-white/12 bg-[linear-gradient(180deg,rgba(15,23,42,0.9)_0%,rgba(15,23,42,0.78)_100%)] p-2.5 text-white shadow-[0_18px_50px_rgba(2,6,23,0.34)] backdrop-blur-xl min-[901px]:mb-4 min-[901px]:max-w-88 min-[901px]:rounded-[1.2rem] min-[901px]:p-3"
+              className="mobile-landscape-overlay-card mobile-landscape-chat-card mobile-safe-solid-panel mobile-safe-backdrop mt-auto mb-16 flex w-full flex-col rounded-2xl border border-white/12 bg-[linear-gradient(180deg,rgba(15,23,42,0.9)_0%,rgba(15,23,42,0.78)_100%)] p-2.5 text-white shadow-[0_18px_50px_rgba(2,6,23,0.34)] backdrop-blur-xl min-[901px]:mb-4 min-[901px]:max-w-88 min-[901px]:rounded-[1.2rem] min-[901px]:p-3"
               onClick={(event) => event.stopPropagation()}
             >
               <div className="flex shrink-0 items-start justify-between gap-2 min-[901px]:gap-4">

@@ -243,6 +243,9 @@ body {
 
   .mobile-landscape-chat-card {
     max-width: min(96vw, 34rem);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.97) 0%, rgba(15, 23, 42, 0.94) 100%);
   }
 
   .mobile-landscape-war-top-card {

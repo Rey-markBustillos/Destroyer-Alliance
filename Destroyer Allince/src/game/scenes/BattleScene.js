@@ -397,6 +397,19 @@ const getAirDefenseProfile = (level = 1) => {
   };
 };
 
+const getDirectionTowardTarget = (currentDirection, unit, target) => {
+  if (!unit || !target) {
+    return currentDirection ?? "front";
+  }
+
+  const aimPoint = getTargetAimPoint(target);
+  return resolveCombatDirection(
+    currentDirection,
+    aimPoint.x - unit.x,
+    aimPoint.y - unit.y
+  );
+};
+
 const getLeveledStructureHealth = (baseHealth, level, type = "") => {
   const resolvedLevel = Math.max(1, Number(level ?? 1) || 1);
 
@@ -2168,7 +2181,7 @@ export default class BattleScene extends Phaser.Scene {
       if (unit.type === "tank") {
         this.updateTankAttackDirection(unit, target, true);
       } else {
-        unit.direction = resolveCombatDirection(unit.direction, dx, dy);
+        unit.direction = getDirectionTowardTarget(unit.direction, unit, target);
       }
 
       if (
@@ -2246,7 +2259,7 @@ export default class BattleScene extends Phaser.Scene {
     if (unit.type === "tank") {
       this.updateTankAttackDirection(unit, target, true);
     } else {
-      unit.direction = resolveCombatDirection(unit.direction, target.x - unit.x, target.y - unit.y);
+      unit.direction = getDirectionTowardTarget(unit.direction, unit, target);
     }
 
     if (unit.type === "soldier" || unit.type === "ranger" || unit.type === "guard" || unit.type === "tank") {
