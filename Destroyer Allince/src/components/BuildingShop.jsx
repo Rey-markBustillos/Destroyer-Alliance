@@ -8,7 +8,6 @@ export default function BuildingShop({
   onSelectBuilding,
   selectedBuilding,
   onClose,
-  townHallLevel = 1,
   woodMachineCount = 0,
   woodMachineLimit = 4,
   energyMachineCount = 0,

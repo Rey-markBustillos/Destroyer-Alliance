@@ -2104,7 +2104,6 @@ export default function GamePage() {
             <div className="w-full" onClick={(event) => event.stopPropagation()}>
               <BuildingShop
                 gold={gameState.gold}
-                townHallLevel={gameState.townHallLevel}
                 woodMachineCount={gameState.woodMachines}
                 woodMachineLimit={gameState.woodMachineLimit}
                 energyMachineCount={gameState.energyMachines}
