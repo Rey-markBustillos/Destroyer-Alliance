@@ -2136,15 +2136,15 @@ export default function GamePage() {
               transition={{ duration: 0.38 }}
               className="absolute inset-0 z-30 flex items-center justify-center bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.14),transparent_30%),linear-gradient(135deg,rgba(2,6,23,0.94)_0%,rgba(2,6,23,0.82)_42%,rgba(2,6,23,0.96)_100%)] px-6 backdrop-blur-[3px]"
             >
-              <Motion.div
-                initial={{ opacity: 0, x: 46, scale: 0.94 }}
-                animate={{ opacity: 1, x: 0, scale: 1 }}
-                exit={{ opacity: 0, x: -260, scale: 0.96 }}
-                transition={{ duration: 0.52, ease: [0.22, 1, 0.36, 1] }}
-                className="relative flex h-full w-full items-center justify-center overflow-hidden text-white"
+            <Motion.div
+              initial={{ opacity: 0, x: 46, scale: 0.94 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: -260, scale: 0.96 }}
+              transition={{ duration: 0.52, ease: [0.22, 1, 0.36, 1] }}
+                className="relative flex h-full w-full items-center justify-center overflow-y-auto text-white"
               >
-                <div className="relative z-10 flex w-full max-w-352 items-center justify-center gap-10">
-                  <div className="h-136 w-136 shrink-0 overflow-hidden">
+                <div className="relative z-10 flex w-full max-w-352 flex-col items-center justify-center gap-4 py-6 sm:gap-6 md:flex-row md:gap-10 md:py-8">
+                  <div className="h-48 w-48 shrink-0 overflow-hidden sm:h-64 sm:w-64 md:h-136 md:w-136">
                     <img
                       src="/assets/welcomeback.png"
                       alt="Welcome Back"
@@ -2153,20 +2153,20 @@ export default function GamePage() {
                     />
                   </div>
 
-                  <div className="min-w-0 max-w-md">
-                    <p className="text-[0.9rem] uppercase tracking-[0.42em] text-sky-300/80">
+                  <div className="min-w-0 max-w-md text-center md:text-left">
+                    <p className="text-[0.68rem] uppercase tracking-[0.28em] text-sky-300/80 sm:text-[0.78rem] sm:tracking-[0.34em] md:text-[0.9rem] md:tracking-[0.42em]">
                       Welcome Back
                     </p>
-                    <h2 className="mt-3 text-6xl font-black leading-[0.95] text-white">
+                    <h2 className="mt-2 text-3xl font-black leading-[0.95] text-white sm:mt-3 sm:text-4xl md:text-6xl">
                       {profileName}
                     </h2>
-                    <p className="mt-4 text-lg leading-8 text-slate-300">
+                    <p className="mt-3 text-sm leading-6 text-slate-300 sm:text-base sm:leading-7 md:mt-4 md:text-lg md:leading-8">
                       Your base is ready, Commander. Continue building and prepare for the next battle.
                     </p>
                     <button
                       type="button"
                       onClick={handleCloseWelcomeBack}
-                      className="pointer-events-auto mt-6 rounded-2xl bg-sky-400 px-6 py-3.5 text-base font-black uppercase tracking-[0.18em] text-slate-950 transition hover:bg-sky-300"
+                      className="pointer-events-auto mt-4 w-full rounded-2xl bg-sky-400 px-5 py-3 text-sm font-black uppercase tracking-[0.14em] text-slate-950 transition hover:bg-sky-300 sm:mt-5 sm:w-auto sm:px-6 sm:py-3.5 sm:text-base sm:tracking-[0.18em]"
                     >
                       Continue
                     </button>
