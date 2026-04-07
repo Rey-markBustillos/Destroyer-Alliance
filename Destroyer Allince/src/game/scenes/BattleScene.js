@@ -31,6 +31,7 @@ const RAID_PLANNING_TIME_LIMIT_MS = 60000;
 const RAID_TIME_LIMIT_MS = 120000;
 const RAID_DEPLOY_INTERVAL_MS = 180;
 const RAID_UI_EMIT_INTERVAL_MS = 220;
+const RAID_SUCCESS_DESTRUCTION_THRESHOLD = 50;
 const MAX_CAMERA_ZOOM = 2.1;
 const MIN_CAMERA_ZOOM = 0.72;
 const CAMERA_ZOOM_STEP = 0.12;
@@ -2964,8 +2965,30 @@ export default class BattleScene extends Phaser.Scene {
     }
 
     if (this.time.now - this.raid.startedAt >= RAID_TIME_LIMIT_MS) {
-      this.finishRaid(this.raid.destructionPercent >= 60 ? "victory" : "defeat", "Raid timer expired.");
+      this.finishRaid(
+        this.raid.destructionPercent >= RAID_SUCCESS_DESTRUCTION_THRESHOLD ? "victory" : "defeat",
+        "Raid timer expired."
+      );
     }
+  }
+
+  quitRaid() {
+    if (!this.raid?.target) {
+      return false;
+    }
+
+    if (!["ready", "planning", "active"].includes(this.raid.phase)) {
+      return false;
+    }
+
+    const reachedSuccessThreshold = this.raid.destructionPercent >= RAID_SUCCESS_DESTRUCTION_THRESHOLD;
+    this.finishRaid(
+      reachedSuccessThreshold ? "victory" : "defeat",
+      reachedSuccessThreshold
+        ? `Raid ended after reaching ${RAID_SUCCESS_DESTRUCTION_THRESHOLD}% destruction.`
+        : `You quit the raid before reaching ${RAID_SUCCESS_DESTRUCTION_THRESHOLD}% destruction.`
+    );
+    return true;
   }
 
   finishRaid(outcome, reason) {

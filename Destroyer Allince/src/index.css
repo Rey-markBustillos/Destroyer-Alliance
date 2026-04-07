@@ -130,6 +130,14 @@ body {
   contain: paint;
 }
 
+.mobile-game-chat-overlay {
+  isolation: isolate;
+}
+
+.mobile-game-chat-card {
+  isolation: isolate;
+}
+
 .mobile-game-recruit-modal {
   max-height: calc(var(--app-screen-height) - 1rem);
   overflow: hidden;
@@ -258,9 +266,30 @@ body {
     box-shadow: 0 18px 42px rgba(2, 6, 23, 0.34);
   }
 
-  .mobile-game-chat-scroll {
-    background: rgba(2, 6, 23, 0.98);
+  .mobile-game-chat-overlay {
+    background: rgba(2, 6, 23, 0.24);
+    isolation: isolate;
+    contain: paint;
+  }
+
+  .mobile-game-chat-card {
+    background: rgb(15, 23, 42) !important;
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 16px 34px rgba(2, 6, 23, 0.34);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    transform: translateZ(0);
+    will-change: auto;
     contain: layout paint;
+  }
+
+  .mobile-game-chat-scroll {
+    background: rgb(2, 6, 23);
+    border-color: rgba(255, 255, 255, 0.06);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    transform: translateZ(0);
+    contain: strict;
   }
 
   .mobile-game-recruit-modal {

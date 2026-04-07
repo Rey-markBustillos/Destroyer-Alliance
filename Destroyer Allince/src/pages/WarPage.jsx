@@ -7,7 +7,7 @@ import MobileLandscapePrompt from "../components/MobileLandscapePrompt";
 import { RANGER_FRONT_PREVIEW } from "../game/utils/rangerSprites";
 import { applyWarResolution, fetchWarTarget, syncGameSnapshot } from "../services/game";
 import { getGameSnapshot, saveGameSnapshot } from "../services/gameStorage";
-import { getSession, saveSession } from "../services/session";
+import { clearSession, getSession, saveSession } from "../services/session";
 import soundManager from "../services/soundManager";
 import { primeGameRoute } from "../utils/routePreload";
 
@@ -130,6 +130,16 @@ const getWarPointsEarned = (destructionPercent) => {
   }
 
   return 0;
+};
+
+const getWarPointsDelta = (summary) => {
+  const percent = Math.max(0, Number(summary?.destructionPercent ?? 0) || 0);
+
+  if (summary?.outcome === "defeat" && percent < 50) {
+    return -10;
+  }
+
+  return getWarPointsEarned(percent);
 };
 
 const formatCountdown = (value) => {
@@ -308,6 +318,7 @@ export default function WarPage() {
   const appliedLossSignatureRef = useRef("");
   const appliedWarResolutionRef = useRef("");
   const autoSearchTriggeredRef = useRef(false);
+  const reloginTriggeredRef = useRef(false);
 
   const session = useMemo(() => getSession(), []);
   const [snapshot, setSnapshot] = useState(() => getGameSnapshot(session));
@@ -336,6 +347,41 @@ export default function WarPage() {
     selectedDeploymentType: "soldier",
     summary: null,
   });
+
+  useEffect(() => {
+    const clearAuth = ({ redirect = false } = {}) => {
+      if (reloginTriggeredRef.current) {
+        return;
+      }
+
+      reloginTriggeredRef.current = true;
+      clearSession();
+
+      if (redirect) {
+        navigate("/login", { replace: true });
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        clearAuth({ redirect: true });
+      }
+    };
+
+    const handlePageHide = () => {
+      clearAuth();
+    };
+
+    window.addEventListener("pagehide", handlePageHide);
+    window.addEventListener("beforeunload", handlePageHide);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("pagehide", handlePageHide);
+      window.removeEventListener("beforeunload", handlePageHide);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [navigate]);
 
   useEffect(() => {
     targetRef.current = target;
@@ -420,6 +466,7 @@ export default function WarPage() {
               defenderLosses: nextState.summary.defenderLosses,
               loot: nextState.summary.loot,
               destructionPercent: nextState.summary.destructionPercent,
+              outcome: nextState.summary.outcome,
             }, session.token).catch((error) => {
               console.error("Unable to save enemy defender losses:", error);
             }).then((result) => {
@@ -436,14 +483,25 @@ export default function WarPage() {
               snapshotRef.current = savedSnapshot;
               setSnapshot(savedSnapshot);
 
+              const currentSession = getSession() ?? {};
+              const currentWarPoints = Math.max(0, Number(currentSession?.warPoints ?? 0) || 0);
+              const expectedWarPoints = Math.max(0, currentWarPoints + getWarPointsDelta(nextState.summary));
+              const resolvedWarPoints = typeof result.warPoints === "number"
+                ? (
+                  result.warPoints !== currentWarPoints
+                    ? result.warPoints
+                    : expectedWarPoints
+                )
+                : expectedWarPoints;
+
               saveSession({
-                ...(getSession() ?? {}),
+                ...currentSession,
                 gold: result.attackerGold,
-                warPoints: typeof result.warPoints === "number" ? result.warPoints : getSession()?.warPoints,
-                rankName: result.rankName ?? getSession()?.rankName,
-                rankDescription: result.rankDescription ?? getSession()?.rankDescription,
-                nextRankName: result.nextRankName ?? getSession()?.nextRankName,
-                nextRankPoints: result.nextRankPoints ?? getSession()?.nextRankPoints,
+                warPoints: resolvedWarPoints,
+                rankName: result.rankName ?? currentSession?.rankName,
+                rankDescription: result.rankDescription ?? currentSession?.rankDescription,
+                nextRankName: result.nextRankName ?? currentSession?.nextRankName,
+                nextRankPoints: result.nextRankPoints ?? currentSession?.nextRankPoints,
               });
 
               setTarget((currentTarget) => {
@@ -649,6 +707,19 @@ export default function WarPage() {
     });
   };
 
+  const handleExitRaid = () => {
+    if (summary) {
+      handleBackToBase();
+      return;
+    }
+
+    const endedRaid = battleSceneRef.current?.quitRaid?.();
+
+    if (!endedRaid) {
+      handleBackToBase();
+    }
+  };
+
   const handleToggleMusicMute = () => {
     soundManager.toggleMuted();
   };
@@ -676,7 +747,8 @@ export default function WarPage() {
   const totalTroops = getTotalTroops(army);
   const canFindMatch = lookupState !== "loading" && raidState.phase !== "planning" && raidState.phase !== "active";
   const summary = raidState.summary;
-  const earnedWarPoints = getWarPointsEarned(summary?.destructionPercent);
+  const warPointsDelta = getWarPointsDelta(summary);
+  const warPointsDeltaLabel = `${warPointsDelta >= 0 ? "+" : ""}${warPointsDelta}`;
   const playerName = session?.name || session?.email?.split("@")[0] || "Commander";
   const musicVolumePercent = musicStatus?.volumePercent ?? Math.round((musicStatus?.volume ?? 0) * 100);
   const canLowerMusicVolume = musicVolumePercent > 0;
@@ -813,7 +885,7 @@ export default function WarPage() {
           <div className="mobile-landscape-war-actions pointer-events-auto flex items-center gap-1 rounded-xl border border-white/10 bg-slate-950/72 px-1 py-1 shadow-[0_10px_28px_rgba(2,6,23,0.28)] min-[901px]:gap-2 min-[901px]:rounded-[1.1rem] min-[901px]:bg-slate-950/54 min-[901px]:px-2 min-[901px]:py-2 min-[901px]:backdrop-blur">
             <button
               type="button"
-              onClick={handleBackToBase}
+              onClick={handleExitRaid}
               className="mobile-landscape-war-button rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-semibold text-white transition hover:bg-white/10 min-[901px]:rounded-xl min-[901px]:px-3 min-[901px]:py-2 min-[901px]:text-sm"
             >
               Exit Raid
@@ -943,13 +1015,13 @@ export default function WarPage() {
           <div className="mobile-landscape-war-summary pointer-events-auto w-full max-w-xl rounded-4xl border border-white/10 bg-slate-950/94 p-6 text-white shadow-[0_24px_90px_rgba(2,6,23,0.55)] min-[901px]:bg-slate-950/90 min-[901px]:backdrop-blur">
             <p className="text-xs uppercase tracking-[0.3em] text-amber-300/80">Battle Result</p>
             <h2 className={`mobile-landscape-war-summary-title mt-3 text-4xl font-black ${summary.outcome === "victory" ? "text-emerald-300" : "text-rose-300"}`}>
-              {summary.outcome === "victory" ? "Victory" : "You Lose"}
+              {summary.outcome === "victory" ? "Victory" : "Lose"}
             </h2>
             <p className="mt-2 text-sm text-slate-300">{summary.reason}</p>
             <p className={`mt-3 text-base font-black ${summary.outcome === "victory" ? "text-emerald-200" : "text-rose-200"}`}>
               {summary.outcome === "victory"
-                ? `You gained ${earnedWarPoints} War Points and ${summary.loot} loot.`
-                : `You earned ${earnedWarPoints} War Points and got ${summary.loot} loot.`}
+                ? `You gained ${warPointsDelta} War Points and ${summary.loot} loot.`
+                : `You lost ${Math.abs(warPointsDelta)} War Points and got ${summary.loot} loot.`}
             </p>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-3">
@@ -963,7 +1035,7 @@ export default function WarPage() {
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                 <p className="text-xs uppercase tracking-[0.18em] text-slate-500">War Points</p>
-                <p className="mt-1 text-2xl font-black text-sky-200">+{earnedWarPoints}</p>
+                <p className={`mt-1 text-2xl font-black ${warPointsDelta >= 0 ? "text-sky-200" : "text-rose-200"}`}>{warPointsDeltaLabel}</p>
               </div>
             </div>
 
@@ -974,7 +1046,7 @@ export default function WarPage() {
               Energy Used: {summary.energySpent ?? 0}
             </p>
             <p className="mt-1 text-sm font-semibold text-yellow-200">
-              War Points Earned: +{earnedWarPoints}
+              War Points Change: {warPointsDeltaLabel}
             </p>
 
             <div className="mt-6 flex flex-wrap gap-3">

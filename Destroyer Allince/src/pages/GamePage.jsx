@@ -19,6 +19,7 @@ import {
   saveGameSnapshot,
 } from "../services/gameStorage";
 import {
+  clearSession,
   clearWelcomeBackPending,
   getSession,
   isWelcomeBackPending,
@@ -235,6 +236,7 @@ export default function GamePage() {
   const musicPanelRef = useRef(null);
   const backendRetryAfterRef = useRef(0);
   const backendWarningShownRef = useRef(false);
+  const reloginTriggeredRef = useRef(false);
   const activeSession = getSession();
   const [gameState, setGameState] = useState({
     gold: 1200,
@@ -257,7 +259,7 @@ export default function GamePage() {
     woodMachines: 0,
     energyMachines: 0,
     tents: 0,
-    tentLimit: 4,
+    tentLimit: 10,
     fullWoodMachines: 0,
     townHallLevel: 1,
     townHallCount: 1,
@@ -284,6 +286,41 @@ export default function GamePage() {
   const [showWelcomeBack, setShowWelcomeBack] = useState(() => isWelcomeBackPending());
   const [musicStatus, setMusicStatus] = useState(() => soundManager.getStatus());
   const [musicPanelOpen, setMusicPanelOpen] = useState(false);
+
+  useEffect(() => {
+    const clearAuth = ({ redirect = false } = {}) => {
+      if (reloginTriggeredRef.current) {
+        return;
+      }
+
+      reloginTriggeredRef.current = true;
+      clearSession();
+
+      if (redirect) {
+        navigate("/login", { replace: true });
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        clearAuth({ redirect: true });
+      }
+    };
+
+    const handlePageHide = () => {
+      clearAuth();
+    };
+
+    window.addEventListener("pagehide", handlePageHide);
+    window.addEventListener("beforeunload", handlePageHide);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("pagehide", handlePageHide);
+      window.removeEventListener("beforeunload", handlePageHide);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [navigate]);
 
   useEffect(() => {
     if (!musicPanelOpen) {
@@ -534,7 +571,7 @@ export default function GamePage() {
         setSelectedPlacedBuilding(building);
         setIsMoveMode(false);
         setRemoveSoldierCount("1");
-        if (building?.type !== "tent") {
+        if (building?.type !== "tent" && building?.type !== "command-center") {
           setHireModalOpen(false);
         }
       };
@@ -613,6 +650,7 @@ export default function GamePage() {
         machineGold,
         maxGold,
         soldierCount,
+        maxSoldiers,
         hasChopper,
         hasTank,
         tankCost,
@@ -643,7 +681,7 @@ export default function GamePage() {
             maxGold,
             soldierCount,
             nextWageAt: current.nextWageAt,
-            maxSoldiers: current.maxSoldiers,
+            maxSoldiers,
             hasChopper,
             hasTank,
             tankCost,
@@ -678,6 +716,7 @@ export default function GamePage() {
         machineGold,
         maxGold,
         soldierCount,
+        maxSoldiers,
         hasChopper,
         hasTank,
         tankCost,
@@ -708,7 +747,7 @@ export default function GamePage() {
             maxGold,
             soldierCount,
             nextWageAt: current.nextWageAt,
-            maxSoldiers: current.maxSoldiers,
+            maxSoldiers,
             hasChopper,
             hasTank,
             tankCost,
@@ -736,6 +775,7 @@ export default function GamePage() {
         machineGold,
         maxGold,
         soldierCount,
+        maxSoldiers,
         hasChopper,
         hasTank,
         tankCost,
@@ -766,7 +806,7 @@ export default function GamePage() {
             maxGold,
             soldierCount,
             nextWageAt: current.nextWageAt,
-            maxSoldiers: current.maxSoldiers,
+            maxSoldiers,
             hasChopper,
             hasTank,
             tankCost,
@@ -794,6 +834,7 @@ export default function GamePage() {
         machineGold,
         maxGold,
         soldierCount,
+        maxSoldiers,
         hasChopper,
         hasTank,
         tankCost,
@@ -824,7 +865,7 @@ export default function GamePage() {
             maxGold,
             soldierCount,
             nextWageAt: current.nextWageAt,
-            maxSoldiers: current.maxSoldiers,
+            maxSoldiers,
             hasChopper,
             hasTank,
             tankCost,
@@ -1063,6 +1104,12 @@ export default function GamePage() {
     gameScene.startMovingSelectedBuilding();
   };
 
+  const handleCloseSelectedBuilding = () => {
+    const gameScene = gameRef.current?.scene?.getScene("GameScene");
+    setHireModalOpen(false);
+    gameScene?.clearPlacedBuildingSelection?.();
+  };
+
   const handleSellBuilding = () => {
     const gameScene = gameRef.current?.scene?.getScene("GameScene");
     gameScene?.sellSelectedBuilding();
@@ -1094,22 +1141,14 @@ export default function GamePage() {
   };
 
   const handleHireSoldier = () => {
-    if (selectedPlacedBuilding?.type === "command-center") {
-      const gameScene = gameRef.current?.scene?.getScene("GameScene");
-      const updatedBuilding = gameScene?.recruitSoldierAcrossTents?.();
-
-      if (updatedBuilding) {
-        setSelectedPlacedBuilding(updatedBuilding);
-      }
-      return;
-    }
-
     setHireModalOpen(true);
   };
 
   const handleConfirmHireSoldier = () => {
     const gameScene = gameRef.current?.scene?.getScene("GameScene");
-    const updatedBuilding = gameScene?.hireSoldierAtSelectedBuilding?.(selectedPlacedBuilding);
+    const updatedBuilding = selectedPlacedBuilding?.type === "command-center"
+      ? gameScene?.recruitSoldierAcrossTents?.()
+      : gameScene?.hireSoldierAtSelectedBuilding?.(selectedPlacedBuilding);
 
     if (updatedBuilding) {
       setSelectedPlacedBuilding(updatedBuilding);
@@ -1118,7 +1157,9 @@ export default function GamePage() {
 
   const handleConfirmHireRangerTala = () => {
     const gameScene = gameRef.current?.scene?.getScene("GameScene");
-    const updatedBuilding = gameScene?.hireRangerTalaAtSelectedBuilding?.(selectedPlacedBuilding);
+    const updatedBuilding = selectedPlacedBuilding?.type === "command-center"
+      ? gameScene?.recruitRangerTalaAcrossTents?.()
+      : gameScene?.hireRangerTalaAtSelectedBuilding?.(selectedPlacedBuilding);
 
     if (updatedBuilding) {
       setSelectedPlacedBuilding(updatedBuilding);
@@ -1402,17 +1443,33 @@ export default function GamePage() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 12 }}
             transition={{ duration: 0.22 }}
-            className="pointer-events-none absolute inset-x-0 bottom-20 z-10 flex justify-center px-3 sm:bottom-2.5"
+            className="absolute inset-0 bottom-0 z-10 flex items-end justify-center px-3 pb-20 pointer-events-auto sm:pb-2.5"
           >
-            <div className="pointer-events-auto w-full max-w-sm rounded-[0.8rem] border border-white/10 bg-[rgba(20,30,40,0.85)] p-1.5 text-white shadow-[0_8px_20px_rgba(0,0,0,0.5)] backdrop-blur-[10px] sm:max-w-59">
+            <div
+              className="absolute inset-0 pointer-events-auto"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+            />
+            <div className="relative z-10 w-full max-w-sm rounded-[0.8rem] border border-white/10 bg-[rgba(20,30,40,0.85)] p-1.5 text-white shadow-[0_8px_20px_rgba(0,0,0,0.5)] backdrop-blur-[10px] sm:max-w-59">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="text-[10px] uppercase tracking-[0.16em] text-slate-400">Selected</p>
                   <h3 className="mt-0.5 truncate text-[12px] font-bold text-white">{selectedPlacedBuilding.name}</h3>
                 </div>
-                <span className="shrink-0 rounded-full border border-sky-300/20 bg-sky-400/10 px-1.5 py-0.5 text-[9px] font-semibold text-sky-100">
-                  Lv.{selectedPlacedBuilding.level ?? 1}
-                </span>
+                <div className="flex shrink-0 items-center gap-1">
+                  <span className="rounded-full border border-sky-300/20 bg-sky-400/10 px-1.5 py-0.5 text-[9px] font-semibold text-sky-100">
+                    Lv.{selectedPlacedBuilding.level ?? 1}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleCloseSelectedBuilding}
+                    className="rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[9px] font-semibold text-slate-100 transition hover:bg-white/10"
+                  >
+                    Close
+                  </button>
+                </div>
               </div>
 
               <div className="mt-1.5">
@@ -1677,7 +1734,7 @@ export default function GamePage() {
                     <button
                       type="button"
                       onClick={handleHireSoldier}
-                      disabled={!canRecruitSoldier}
+                      disabled={!canHireSoldier || (!canAffordRecruit && !canAffordRangerRecruit)}
                       className="rounded-[9px] bg-violet-500 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-white transition hover:-translate-y-0.5 hover:bg-violet-400 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
                     >
                       Recruit
@@ -1786,21 +1843,23 @@ export default function GamePage() {
             disabled={!canStartWar}
             className="mobile-landscape-start-war-button pointer-events-auto min-h-8 rounded-[0.95rem] border border-rose-300/20 bg-[linear-gradient(135deg,rgba(225,29,72,0.92)_0%,rgba(244,63,94,0.9)_100%)] px-3.5 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-[0_12px_24px_rgba(190,24,93,0.22)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_34px_rgba(190,24,93,0.28)] disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50 sm:min-h-12 sm:rounded-[1.35rem] sm:px-6 sm:py-4 sm:text-sm sm:tracking-[0.24em] sm:shadow-[0_22px_40px_rgba(190,24,93,0.28)] sm:hover:shadow-[0_26px_50px_rgba(190,24,93,0.36)]"
           >
-            Start War
+            Start Raid
           </button>
         </Motion.div>
 
-        {hireModalOpen && selectedPlacedBuilding?.type === "tent" ? (
+        {hireModalOpen && (selectedPlacedBuilding?.type === "tent" || selectedPlacedBuilding?.type === "command-center") ? (
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/70 px-2 py-2 min-[901px]:px-4 min-[901px]:py-4 min-[901px]:bg-slate-950/55 min-[901px]:backdrop-blur-[3px]">
             <div className="mobile-landscape-overlay-card mobile-game-recruit-modal mobile-safe-solid-panel w-full max-w-74 rounded-[1.15rem] border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(15,23,42,0.92)_100%)] p-2.5 text-white shadow-[0_20px_60px_rgba(2,6,23,0.28)] min-[901px]:rounded-[1.4rem] min-[901px]:bg-[linear-gradient(180deg,rgba(15,23,42,0.82)_0%,rgba(15,23,42,0.68)_100%)] min-[901px]:p-3 min-[901px]:backdrop-blur-xl">
               <div className="flex items-start justify-between gap-2 min-[901px]:gap-4">
                 <div>
                   <p className="text-[0.56rem] uppercase tracking-[0.2em] text-amber-300/70 min-[901px]:text-[0.68rem] min-[901px]:tracking-[0.3em]">
-                    Soldier Tent
+                    {selectedPlacedBuilding?.type === "command-center" ? "Command Center" : "Soldier Tent"}
                   </p>
                   <h3 className="mt-1 text-base font-black min-[901px]:text-lg">Unit Shop</h3>
                   <p className="mt-1 text-[11px] leading-tight text-slate-400 min-[901px]:mt-2 min-[901px]:text-xs">
-                    Dito ka bibili ng units para sa selected Soldier Tent.
+                    {selectedPlacedBuilding?.type === "command-center"
+                      ? "Dito ka pipili ng unit para ma-assign agad sa available Soldier Tent."
+                      : "Dito ka bibili ng units para sa selected Soldier Tent."}
                   </p>
                 </div>
 
@@ -1829,7 +1888,11 @@ export default function GamePage() {
                     />
                   </div>
                   <p className="mt-2 text-sm font-bold text-white">Basic Soldier</p>
-                  <p className="mt-1 text-[11px] leading-tight text-slate-300 min-[901px]:text-xs">Starter unit para sa Soldier Tent.</p>
+                  <p className="mt-1 text-[11px] leading-tight text-slate-300 min-[901px]:text-xs">
+                    {selectedPlacedBuilding?.type === "command-center"
+                      ? "Starter unit na mapupunta sa unang tent na may space."
+                      : "Starter unit para sa Soldier Tent."}
+                  </p>
                   <p className="mt-2 text-[11px] font-semibold text-amber-300 min-[901px]:text-xs">
                     Recruit: {SOLDIER_RECRUIT_COST} gold / unit
                   </p>
@@ -1857,7 +1920,11 @@ export default function GamePage() {
                     />
                   </div>
                   <p className="mt-2 text-sm font-bold text-white">Ranger Tala</p>
-                  <p className="mt-1 text-[11px] leading-tight text-slate-300 min-[901px]:text-xs">Longer-range infantry for Warpage assaults.</p>
+                  <p className="mt-1 text-[11px] leading-tight text-slate-300 min-[901px]:text-xs">
+                    {selectedPlacedBuilding?.type === "command-center"
+                      ? "Long-range infantry na mapupunta sa unang tent na may space."
+                      : "Longer-range infantry for Warpage assaults."}
+                  </p>
                   <p className="mt-2 text-[11px] font-semibold text-amber-300 min-[901px]:text-xs">
                     Recruit: {RANGER_TALA_RECRUIT_COST} gold / unit
                   </p>
@@ -1876,7 +1943,9 @@ export default function GamePage() {
               {!(canRecruitSoldier || canRecruitRangerTala) && (
                 <p className="mt-3 text-[11px] font-semibold leading-tight text-rose-300 min-[901px]:mt-4 min-[901px]:text-sm">
                   {soldierCapacityReached
-                    ? "Max troops reached na para sa Soldier Tent na ito."
+                    ? selectedPlacedBuilding?.type === "command-center"
+                      ? "Max troops reached na sa lahat ng available Soldier Tents."
+                      : "Max troops reached na para sa Soldier Tent na ito."
                     : `Kulang gold. Kailangan ${SOLDIER_RECRUIT_COST} gold para sa Basic Soldier o ${RANGER_TALA_RECRUIT_COST} gold para sa Ranger Tala.`}
                 </p>
               )}
@@ -1962,11 +2031,11 @@ export default function GamePage() {
 
         {chatOpen ? (
           <div
-            className="absolute inset-0 z-20 flex items-end justify-center p-2 min-[901px]:justify-end min-[901px]:p-4"
+            className="mobile-game-chat-overlay absolute inset-0 z-20 flex items-end justify-center p-2 min-[901px]:justify-end min-[901px]:p-4"
             onClick={() => setChatOpen(false)}
           >
             <div
-              className="mobile-landscape-overlay-card mobile-landscape-chat-card mobile-safe-solid-panel mt-auto mb-16 flex w-full flex-col rounded-2xl border border-white/12 bg-[rgba(15,23,42,0.98)] p-2.5 text-white shadow-[0_18px_50px_rgba(2,6,23,0.34)] min-[901px]:mb-4 min-[901px]:max-w-88 min-[901px]:rounded-[1.2rem] min-[901px]:bg-[linear-gradient(180deg,rgba(15,23,42,0.9)_0%,rgba(15,23,42,0.78)_100%)] min-[901px]:p-3 min-[901px]:backdrop-blur-xl"
+              className="mobile-landscape-overlay-card mobile-landscape-chat-card mobile-game-chat-card mobile-safe-solid-panel mt-auto mb-16 flex w-full flex-col rounded-2xl border border-white/12 bg-[rgba(15,23,42,0.98)] p-2.5 text-white shadow-[0_18px_50px_rgba(2,6,23,0.34)] min-[901px]:mb-4 min-[901px]:max-w-88 min-[901px]:rounded-[1.2rem] min-[901px]:bg-[linear-gradient(180deg,rgba(15,23,42,0.9)_0%,rgba(15,23,42,0.78)_100%)] min-[901px]:p-3 min-[901px]:backdrop-blur-xl"
               onClick={(event) => event.stopPropagation()}
             >
               <div className="flex shrink-0 items-start justify-between gap-2 min-[901px]:gap-4">
