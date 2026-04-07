@@ -4,7 +4,6 @@ import { useNavigate } from "react-router-dom";
 import { createGame, destroyGame } from "../game/main";
 import SpriteAnimator from "../components/SpriteAnimator";
 import MobileLandscapePrompt from "../components/MobileLandscapePrompt";
-import ScaledStage from "../components/ScaledStage";
 import { RANGER_FRONT_PREVIEW } from "../game/utils/rangerSprites";
 import { applyWarResolution, fetchWarTarget, syncGameSnapshot } from "../services/game";
 import { getGameSnapshot, saveGameSnapshot } from "../services/gameStorage";
@@ -673,6 +672,14 @@ export default function WarPage() {
     soundManager.stepBackgroundMusicVolume(0.1, { fadeDurationMs: 150 });
   };
 
+  const handleZoomIn = () => {
+    battleSceneRef.current?.zoomCameraIn?.();
+  };
+
+  const handleZoomOut = () => {
+    battleSceneRef.current?.zoomCameraOut?.();
+  };
+
   const totalTroops = getTotalTroops(army);
   const canAttack = totalTroops > 0 && target && raidState.phase === "ready";
   const canFindMatch = lookupState !== "loading" && raidState.phase !== "planning" && raidState.phase !== "active";
@@ -773,9 +780,7 @@ export default function WarPage() {
   }, [session, totalTroops, handleFindMatch]);
 
   return (
-    <main className="min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top,#2c5c3f_0%,#173126_48%,#08120e_100%)] text-white">
-      <ScaledStage className="desktop-stage-war">
-      <div className="desktop-stage-fill relative h-full w-full overflow-hidden">
+    <main className="app-screen-height relative overflow-hidden bg-[radial-gradient(circle_at_top,#2c5c3f_0%,#173126_48%,#08120e_100%)] text-white">
       <div ref={gameRootRef} className="absolute inset-0 h-full w-full overflow-hidden" />
       <MobileLandscapePrompt />
 
@@ -825,6 +830,20 @@ export default function WarPage() {
               className="mobile-landscape-war-button rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-semibold text-white transition hover:bg-white/10 min-[901px]:rounded-xl min-[901px]:px-3 min-[901px]:py-2 min-[901px]:text-sm"
             >
               Exit Raid
+            </button>
+            <button
+              type="button"
+              onClick={handleZoomOut}
+              className="mobile-landscape-war-button rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-semibold text-cyan-100 transition hover:bg-white/10 min-[901px]:rounded-xl min-[901px]:px-3 min-[901px]:py-2 min-[901px]:text-sm"
+            >
+              Zoom -
+            </button>
+            <button
+              type="button"
+              onClick={handleZoomIn}
+              className="mobile-landscape-war-button rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-semibold text-cyan-100 transition hover:bg-white/10 min-[901px]:rounded-xl min-[901px]:px-3 min-[901px]:py-2 min-[901px]:text-sm"
+            >
+              Zoom +
             </button>
             <div className="relative">
               <button
@@ -998,8 +1017,6 @@ export default function WarPage() {
           </div>
         </div>
       ) : null}
-      </div>
-      </ScaledStage>
     </main>
   );
 }

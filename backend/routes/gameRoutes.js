@@ -9,6 +9,7 @@ import {
   getGameState,
   getWarTarget,
   syncGameSnapshot,
+  addGoldToSelectedPlayer,
   updateBuilding,
   updateGameState,
 } from "../controller/gameController.js";
@@ -18,6 +19,7 @@ const router = express.Router();
 
 router.get("/state", protect, getGameState);
 router.put("/state", protect, updateGameState);
+router.patch("/state/add-gold", protect, addGoldToSelectedPlayer);
 router.get("/snapshot", protect, getGameSnapshot);
 router.put("/snapshot", protect, syncGameSnapshot);
 router.post("/build", protect, addBuilding);

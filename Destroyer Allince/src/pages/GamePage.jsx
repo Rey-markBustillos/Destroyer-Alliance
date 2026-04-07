@@ -4,7 +4,6 @@ import { useLocation, useNavigate } from "react-router-dom";
 
 import BuildingShop from "../components/BuildingShop";
 import MobileLandscapePrompt from "../components/MobileLandscapePrompt";
-import ScaledStage from "../components/ScaledStage";
 import SpriteAnimator from "../components/SpriteAnimator";
 import { createGame, destroyGame } from "../game/main";
 import { RANGER_FRONT_PREVIEW } from "../game/utils/rangerSprites";
@@ -83,9 +82,9 @@ function HudMetric({ label, value, tone = "emerald" }) {
   }[tone];
 
   return (
-    <div className={`game-stage-hud-metric min-w-0 rounded-[0.64rem] border px-1 py-0.5 backdrop-blur-md min-[901px]:rounded-[0.8rem] min-[901px]:px-1.5 min-[901px]:py-1.5 ${toneClass}`}>
-      <p className="game-stage-hud-label text-[0.32rem] uppercase tracking-[0.12em] text-white/70 min-[901px]:text-[0.42rem] min-[901px]:tracking-[0.2em]">{label}</p>
-      <p className="game-stage-hud-value mt-0.5 text-[0.62rem] font-black leading-none tracking-tight min-[901px]:text-[0.8rem]">{value}</p>
+    <div className={`min-w-0 rounded-[0.64rem] border px-1 py-0.5 backdrop-blur-md min-[901px]:rounded-[0.8rem] min-[901px]:px-1.5 min-[901px]:py-1.5 ${toneClass}`}>
+      <p className="text-[0.32rem] uppercase tracking-[0.12em] text-white/70 min-[901px]:text-[0.42rem] min-[901px]:tracking-[0.2em]">{label}</p>
+      <p className="mt-0.5 text-[0.62rem] font-black leading-none tracking-tight min-[901px]:text-[0.8rem]">{value}</p>
     </div>
   );
 }
@@ -151,7 +150,7 @@ function CommandButton({ children, className = "", ...props }) {
   return (
     <button
       {...props}
-      className={`game-stage-command-button rounded-lg px-1.5 py-1 text-[8px] leading-tight font-bold uppercase tracking-[0.06em] transition duration-200 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50 min-[901px]:rounded-2xl min-[901px]:px-4 min-[901px]:py-3 min-[901px]:text-sm min-[901px]:tracking-[0.16em] ${className}`}
+      className={`rounded-lg px-1.5 py-1 text-[8px] leading-tight font-bold uppercase tracking-[0.06em] transition duration-200 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50 min-[901px]:rounded-2xl min-[901px]:px-4 min-[901px]:py-3 min-[901px]:text-sm min-[901px]:tracking-[0.16em] ${className}`}
     >
       {children}
     </button>
@@ -1181,6 +1180,16 @@ export default function GamePage() {
     gameScene?.rechargeChopperAtSelectedBuilding();
   };
 
+  const handleZoomIn = () => {
+    const gameScene = gameRef.current?.scene?.getScene("GameScene");
+    gameScene?.zoomCameraIn?.();
+  };
+
+  const handleZoomOut = () => {
+    const gameScene = gameRef.current?.scene?.getScene("GameScene");
+    gameScene?.zoomCameraOut?.();
+  };
+
   const handleStartWar = () => {
     const gameScene = gameRef.current?.scene?.getScene("GameScene");
 
@@ -1263,22 +1272,21 @@ export default function GamePage() {
 
   return (
     <main className="font-black-ops min-h-screen bg-[#243322] text-slate-950">
-      <ScaledStage className="desktop-stage-game">
-      <section className="desktop-stage-fill app-screen-height relative w-full overflow-hidden bg-[#243322]">
+      <section className="app-screen-height relative w-full overflow-hidden bg-[#243322]">
 
         <Motion.div
           initial={{ opacity: 0, y: -18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="game-stage-top-bar pointer-events-none absolute inset-x-0 top-0 z-10 p-2 min-[901px]:p-4"
+          className="pointer-events-none absolute inset-x-0 top-0 z-10 p-2 min-[901px]:p-4"
         >
-          <div className="game-stage-top-row flex items-start justify-between gap-1.5 min-[901px]:gap-3">
-            <div className="game-stage-side-stack pointer-events-none flex w-16 flex-col gap-0.5 min-[901px]:w-[6.7rem]">
-              <div className="game-stage-base-card rounded-[0.64rem] border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.56)_0%,rgba(15,23,42,0.38)_100%)] px-1 py-0.75 text-white backdrop-blur-sm min-[901px]:rounded-[0.8rem] min-[901px]:px-1.5 min-[901px]:py-1.5">
-                <p className="game-stage-base-kicker text-[0.32rem] uppercase tracking-[0.14em] text-emerald-300/75 min-[901px]:text-[0.42rem] min-[901px]:tracking-[0.26em]">Base</p>
-                <p className="game-stage-base-name mt-0.5 text-[0.56rem] font-black leading-tight text-white min-[901px]:mt-1 min-[901px]:text-[0.7rem]">{profileName}</p>
-                <p className="game-stage-base-meta mt-0.5 text-[0.3rem] uppercase tracking-[0.05em] text-slate-100/90 min-[901px]:text-[0.4rem] min-[901px]:tracking-widest">{profileId}</p>
-                <p className="game-stage-base-rank mt-0.5 text-[0.3rem] uppercase tracking-widest text-amber-200/90 min-[901px]:text-[0.4rem] min-[901px]:tracking-[0.2em]">{profileRank}</p>
+          <div className="flex items-start justify-between gap-1.5 min-[901px]:gap-3">
+            <div className="pointer-events-none flex w-16 flex-col gap-0.5 min-[901px]:w-[6.7rem]">
+              <div className="rounded-[0.64rem] border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.56)_0%,rgba(15,23,42,0.38)_100%)] px-1 py-0.75 text-white backdrop-blur-sm min-[901px]:rounded-[0.8rem] min-[901px]:px-1.5 min-[901px]:py-1.5">
+                <p className="text-[0.32rem] uppercase tracking-[0.14em] text-emerald-300/75 min-[901px]:text-[0.42rem] min-[901px]:tracking-[0.26em]">Base</p>
+                <p className="mt-0.5 text-[0.56rem] font-black leading-tight text-white min-[901px]:mt-1 min-[901px]:text-[0.7rem]">{profileName}</p>
+                <p className="mt-0.5 text-[0.3rem] uppercase tracking-[0.05em] text-slate-100/90 min-[901px]:text-[0.4rem] min-[901px]:tracking-widest">{profileId}</p>
+                <p className="mt-0.5 text-[0.3rem] uppercase tracking-widest text-amber-200/90 min-[901px]:text-[0.4rem] min-[901px]:tracking-[0.2em]">{profileRank}</p>
               </div>
 
               <HudMetric label="Gold" value={formatCompactNumber(gameState.gold)} tone="emerald" />
@@ -1300,7 +1308,7 @@ export default function GamePage() {
               ) : null}
             </div>
 
-            <div className="game-stage-controls pointer-events-auto grid w-[min(12.5rem,calc(100vw-4.9rem))] grid-cols-3 gap-1 min-[901px]:flex min-[901px]:w-auto min-[901px]:max-w-none min-[901px]:gap-1.5 min-[901px]:flex-nowrap">
+            <div className="pointer-events-auto grid w-[min(12.5rem,calc(100vw-4.9rem))] grid-cols-3 gap-1 min-[901px]:flex min-[901px]:w-auto min-[901px]:max-w-none min-[901px]:gap-1.5 min-[901px]:flex-nowrap">
               <CommandButton
                 onClick={() => setChatOpen((open) => !open)}
                 className="min-h-7 border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-1 py-0.75 text-[7px] tracking-[0.04em] text-emerald-50 backdrop-blur-sm hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)] min-[901px]:min-h-0 min-[901px]:px-2.5 min-[901px]:py-3 min-[901px]:text-[10px] min-[901px]:tracking-[0.16em]"
@@ -1318,6 +1326,18 @@ export default function GamePage() {
                 className="min-h-7 border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-1 py-0.75 text-[7px] tracking-[0.04em] text-sky-50 backdrop-blur-sm hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)] min-[901px]:min-h-0 min-[901px]:px-2.5 min-[901px]:py-3 min-[901px]:text-[10px] min-[901px]:tracking-[0.16em]"
               >
                 Profile
+              </CommandButton>
+              <CommandButton
+                onClick={handleZoomOut}
+                className="min-h-7 border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-1 py-0.75 text-[7px] tracking-[0.04em] text-cyan-50 backdrop-blur-sm hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)] min-[901px]:min-h-0 min-[901px]:px-2.5 min-[901px]:py-3 min-[901px]:text-[10px] min-[901px]:tracking-[0.16em]"
+              >
+                Zoom -
+              </CommandButton>
+              <CommandButton
+                onClick={handleZoomIn}
+                className="min-h-7 border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.52)_0%,rgba(15,23,42,0.3)_100%)] px-1 py-0.75 text-[7px] tracking-[0.04em] text-cyan-50 backdrop-blur-sm hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.68)_0%,rgba(15,23,42,0.42)_100%)] min-[901px]:min-h-0 min-[901px]:px-2.5 min-[901px]:py-3 min-[901px]:text-[10px] min-[901px]:tracking-[0.16em]"
+              >
+                Zoom +
               </CommandButton>
               <CommandButton
                 onClick={() => setShopOpen((open) => !open)}
@@ -1384,7 +1404,7 @@ export default function GamePage() {
             transition={{ duration: 0.22 }}
             className="pointer-events-none absolute inset-x-0 bottom-20 z-10 flex justify-center px-3 sm:bottom-2.5"
           >
-            <div className="game-stage-selected-card pointer-events-auto w-full max-w-sm rounded-[0.8rem] border border-white/10 bg-[rgba(20,30,40,0.85)] p-1.5 text-white shadow-[0_8px_20px_rgba(0,0,0,0.5)] backdrop-blur-[10px] sm:max-w-59">
+            <div className="pointer-events-auto w-full max-w-sm rounded-[0.8rem] border border-white/10 bg-[rgba(20,30,40,0.85)] p-1.5 text-white shadow-[0_8px_20px_rgba(0,0,0,0.5)] backdrop-blur-[10px] sm:max-w-59">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="text-[10px] uppercase tracking-[0.16em] text-slate-400">Selected</p>
@@ -2091,7 +2111,6 @@ export default function GamePage() {
           ) : null}
         </AnimatePresence>
       </section>
-      </ScaledStage>
     </main>
   );
 }

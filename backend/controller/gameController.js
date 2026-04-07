@@ -189,6 +189,89 @@ export const updateGameState = async (req, res) => {
   res.json(user);
 };
 
+export const addGoldToSelectedPlayer = async (req, res) => {
+  try {
+    const configuredAdminKey = String(process.env.ADMIN_API_KEY || "").trim();
+    const providedAdminKey = String(req.headers["x-admin-key"] || "").trim();
+
+    if (!configuredAdminKey) {
+      return res.status(503).json({ message: "ADMIN_API_KEY is not configured" });
+    }
+
+    if (!providedAdminKey || providedAdminKey !== configuredAdminKey) {
+      return res.status(403).json({ message: "Invalid admin key" });
+    }
+
+    const amount = Number(req.body?.amount);
+    const playerIdRaw = typeof req.body?.playerId === "string" ? req.body.playerId.trim() : "";
+    const emailRaw = typeof req.body?.email === "string" ? req.body.email.trim() : "";
+    const userIdRaw = req.body?.userId;
+    const numericUserId = Number.isInteger(Number(userIdRaw)) ? Number(userIdRaw) : null;
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ message: "Amount must be a positive number" });
+    }
+
+    if (!playerIdRaw && !emailRaw && numericUserId === null) {
+      return res.status(400).json({ message: "Provide playerId, email, or userId" });
+    }
+
+    const selectors = [];
+
+    if (playerIdRaw) {
+      selectors.push({ playerId: playerIdRaw.toUpperCase() });
+    }
+
+    if (emailRaw) {
+      selectors.push({ email: emailRaw });
+    }
+
+    if (numericUserId !== null) {
+      selectors.push({ id: numericUserId });
+    }
+
+    const target = await prisma.user.findFirst({
+      where: {
+        OR: selectors,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!target) {
+      return res.status(404).json({ message: "Player not found" });
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: {
+        id: target.id,
+      },
+      data: {
+        gold: {
+          increment: Math.floor(amount),
+        },
+      },
+      select: {
+        id: true,
+        name: true,
+        playerId: true,
+        email: true,
+        gold: true,
+      },
+    });
+
+    return res.json({
+      message: "Gold added successfully",
+      addedGold: Math.floor(amount),
+      player: updatedUser,
+    });
+  } catch (error) {
+    console.error("addGoldToSelectedPlayer error:", error);
+    return res.status(500).json({ message: "Unable to add gold to selected player" });
+  }
+};
+
 // ADD BUILDING
 export const addBuilding = async (req, res) => {
   const supportsRangerTalaColumn = await hasRangerTalaColumn();

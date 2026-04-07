@@ -280,6 +280,7 @@ export default class GameScene extends Phaser.Scene {
     this.drawForestRing();
     this.createHoverIndicator();
     this.createPlacementIndicator();
+    this.createSelectedBuildingIndicator();
     this.createCamera();
     this.scale.on("resize", this.handleResize, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -789,6 +790,12 @@ export default class GameScene extends Phaser.Scene {
     this.overlayLayer.add(this.placementIndicator);
   }
 
+  createSelectedBuildingIndicator() {
+    this.selectedBuildingIndicator = this.add.graphics();
+    this.selectedBuildingIndicator.setDepth(1001);
+    this.overlayLayer.add(this.selectedBuildingIndicator);
+  }
+
   createCamera() {
     const camera = this.cameras.main;
     camera.setBackgroundColor("#020617");
@@ -811,6 +818,8 @@ export default class GameScene extends Phaser.Scene {
         this.syncCommandCenterSoldiers(building);
       }
     });
+
+    this.drawSelectedBuildingIndicator(this.selectedPlacedBuilding);
   }
 
   repositionWarDeployments() {
@@ -1111,6 +1120,21 @@ export default class GameScene extends Phaser.Scene {
       return this.getCameraCenterWorld();
     }
 
+    const visualBounds = this.getBuildingVisualBounds(building);
+
+    if (visualBounds) {
+      const footprint = this.getFootprint(building.buildingType);
+      const footprintCenter = this.gridToWorld(
+        building.col + (footprint.cols - 1) / 2,
+        building.row + (footprint.rows - 1) / 2
+      );
+
+      return {
+        x: visualBounds.centerX,
+        y: footprintCenter.y,
+      };
+    }
+
     const footprint = this.getFootprint(building.buildingType);
     return this.gridToWorld(
       building.col + (footprint.cols - 1) / 2,
@@ -1157,6 +1181,28 @@ export default class GameScene extends Phaser.Scene {
       this.cameraController.velocityX = 0;
       this.cameraController.velocityY = 0;
     }
+  }
+
+  zoomCameraBy(stepDelta = 0, options = {}) {
+    const nextZoom = Phaser.Math.Clamp(
+      this.cameraController.targetZoom + stepDelta,
+      this.getMinCameraZoom(),
+      this.cameraController.maxZoom
+    );
+
+    this.cameraController.focusTarget = null;
+    this.setCameraZoomTarget(nextZoom, null, null, {
+      snap: true,
+      ...options,
+    });
+  }
+
+  zoomCameraIn(options = {}) {
+    this.zoomCameraBy(ZOOM_STEP, options);
+  }
+
+  zoomCameraOut(options = {}) {
+    this.zoomCameraBy(-ZOOM_STEP, options);
   }
 
   getEdgeScrollVelocity() {
@@ -1448,6 +1494,101 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
+  getBuildingVisualBounds(building) {
+    if (!building) {
+      return null;
+    }
+
+    const resolvedBounds = building.visualContainer?.getBounds?.() ?? building.getBounds?.();
+
+    if (
+      !resolvedBounds
+      || !Number.isFinite(resolvedBounds.x)
+      || !Number.isFinite(resolvedBounds.y)
+      || !Number.isFinite(resolvedBounds.width)
+      || !Number.isFinite(resolvedBounds.height)
+      || resolvedBounds.width <= 0
+      || resolvedBounds.height <= 0
+    ) {
+      return null;
+    }
+
+    return {
+      left: resolvedBounds.x,
+      top: resolvedBounds.y,
+      width: resolvedBounds.width,
+      height: resolvedBounds.height,
+      right: resolvedBounds.x + resolvedBounds.width,
+      bottom: resolvedBounds.y + resolvedBounds.height,
+      centerX: resolvedBounds.x + (resolvedBounds.width / 2),
+      centerY: resolvedBounds.y + (resolvedBounds.height / 2),
+    };
+  }
+
+  getSelectedBuildingIndicatorMetrics(building) {
+    if (!building) {
+      return null;
+    }
+
+    const bounds = this.getBuildingVisualBounds(building);
+
+    const width = Math.max(
+      this.iso.tileWidth,
+      Number(bounds?.width ?? 0) || this.iso.tileWidth
+    );
+    const height = Math.max(
+      this.iso.tileHeight,
+      Number(bounds?.height ?? 0) || this.iso.tileHeight
+    );
+    const centerX = Number(bounds?.x ?? building.x - (width / 2)) + (width / 2);
+    const topY = Number(bounds?.y ?? building.y - height) || (building.y - height);
+    const centerY = topY + (height * 0.52);
+
+    return {
+      centerX,
+      centerY,
+      radiusX: Phaser.Math.Clamp(width * 0.16, this.iso.tileWidth * 0.24, this.iso.tileWidth * 0.52),
+      radiusY: Phaser.Math.Clamp(height * 0.09, this.iso.tileHeight * 0.22, this.iso.tileHeight * 0.5),
+    };
+  }
+
+  drawSelectedBuildingIndicator(building) {
+    this.selectedBuildingIndicator?.clear();
+
+    if (!building || !this.selectedBuildingIndicator) {
+      return;
+    }
+
+    const metrics = this.getSelectedBuildingIndicatorMetrics(building);
+
+    if (!metrics) {
+      return;
+    }
+
+    const {
+      centerX,
+      centerY,
+      radiusX,
+      radiusY,
+    } = metrics;
+    const glowWidth = radiusX * 2.5;
+    const glowHeight = radiusY * 2.5;
+
+    this.selectedBuildingIndicator.fillStyle(0xf59e0b, 0.14);
+    this.selectedBuildingIndicator.fillEllipse(centerX, centerY, glowWidth, glowHeight);
+    this.selectedBuildingIndicator.lineStyle(2.5, 0xfde68a, 0.95);
+    this.selectedBuildingIndicator.strokeEllipse(centerX, centerY, radiusX * 2, radiusY * 2);
+    this.selectedBuildingIndicator.lineStyle(1.5, 0xf59e0b, 0.8);
+    this.selectedBuildingIndicator.strokeEllipse(centerX, centerY, radiusX * 2.9, radiusY * 2.9);
+    this.selectedBuildingIndicator.lineStyle(2, 0xfef3c7, 0.92);
+    this.selectedBuildingIndicator.beginPath();
+    this.selectedBuildingIndicator.moveTo(centerX - (radiusX * 0.48), centerY);
+    this.selectedBuildingIndicator.lineTo(centerX + (radiusX * 0.48), centerY);
+    this.selectedBuildingIndicator.moveTo(centerX, centerY - (radiusY * 0.68));
+    this.selectedBuildingIndicator.lineTo(centerX, centerY + (radiusY * 0.68));
+    this.selectedBuildingIndicator.strokePath();
+  }
+
   getNearestTile(worldX, worldY) {
     const baseTile = this.worldToGrid(worldX, worldY);
     const candidates = [];
@@ -1527,7 +1668,60 @@ export default class GameScene extends Phaser.Scene {
     return worldX >= minX && worldX <= maxX && worldY >= minY && worldY <= maxY;
   }
 
+  isPointInsideBuildingVisualSelectionBounds(building, worldX, worldY) {
+    const bounds = this.getBuildingVisualBounds(building);
+
+    if (!bounds) {
+      return false;
+    }
+
+    const horizontalPadding = Math.max(this.iso.tileWidth * 0.14, 10);
+    const topPadding = Math.max(this.iso.tileHeight * 0.2, 8);
+    const bottomPadding = Math.max(this.iso.tileHeight * 0.42, 14);
+
+    return (
+      worldX >= bounds.left - horizontalPadding
+      && worldX <= bounds.right + horizontalPadding
+      && worldY >= bounds.top - topPadding
+      && worldY <= bounds.bottom + bottomPadding
+    );
+  }
+
   getTopBuildingAtWorldPoint(worldX, worldY) {
+    const directCandidates = this.placedBuildings
+      .filter((building) => building?.active && building.visible !== false)
+      .filter((building) =>
+        this.isPointInsideBuildingVisualSelectionBounds(building, worldX, worldY)
+        || this.isPointInsideBuildingSelectionBounds(building, worldX, worldY)
+      )
+      .sort((left, right) => {
+        const depthDelta = (right.depth ?? (right.col + right.row)) - (left.depth ?? (left.col + left.row));
+
+        if (depthDelta !== 0) {
+          return depthDelta;
+        }
+
+        const rightFocus = this.getBuildingFocusWorldPoint(right);
+        const leftFocus = this.getBuildingFocusWorldPoint(left);
+
+        return Phaser.Math.Distance.Between(worldX, worldY, leftFocus.x, leftFocus.y)
+          - Phaser.Math.Distance.Between(worldX, worldY, rightFocus.x, rightFocus.y);
+      });
+
+    if (directCandidates.length > 0) {
+      const selectedBuilding = directCandidates[0];
+
+      if (BUILDING_SELECTION_DEBUG) {
+        console.debug("Building selection", {
+          mode: "direct-hit",
+          selectedBuildingId: selectedBuilding?.persistedId ?? null,
+          selectedBuildingType: selectedBuilding?.buildingType?.id ?? null,
+        });
+      }
+
+      return selectedBuilding;
+    }
+
     const tile = this.getNearestTile(worldX, worldY);
 
     if (!tile) {
@@ -3039,18 +3233,11 @@ export default class GameScene extends Phaser.Scene {
     this.selectedPlacedBuilding = building;
     this.selectedBuildingType = null;
     this.movingBuilding = null;
+    this.cameraController.focusTarget = null;
     this.events.emit("structure-selection-cleared");
     this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
-    // Keep selection focus smooth (no hard snap) so zoom/pan eases into the building.
-    this.focusCameraOnBuilding(building);
-    this.drawTileOverlay(
-      this.placementIndicator,
-      { row: building.row, col: building.col, buildingType: building.buildingType },
-      0xf59e0b,
-      0.28,
-      0xfde68a,
-      2
-    );
+    this.placementIndicator.clear();
+    this.drawSelectedBuildingIndicator(building);
   }
 
   clearPlacedBuildingSelection() {
@@ -3062,6 +3249,7 @@ export default class GameScene extends Phaser.Scene {
     this.movingBuilding = null;
     this.cameraController.focusTarget = null;
     this.events.emit("placed-building-selected", null);
+    this.selectedBuildingIndicator.clear();
 
     if (!this.selectedBuildingType) {
       this.placementIndicator.clear();
@@ -3078,6 +3266,7 @@ export default class GameScene extends Phaser.Scene {
     this.selectedPlacedBuilding = null;
     this.cameraController.focusTarget = null;
     this.events.emit("placed-building-selected", null);
+    this.selectedBuildingIndicator.clear();
     this.events.emit("structure-selection-cleared");
     this.events.emit("placed-building-moving", {
       id: this.movingBuilding.persistedId,
@@ -3125,6 +3314,7 @@ export default class GameScene extends Phaser.Scene {
     });
     this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
     this.focusCameraOnBuilding(building);
+    this.drawSelectedBuildingIndicator(building);
 
   }
 
@@ -3170,6 +3360,7 @@ export default class GameScene extends Phaser.Scene {
     this.movingBuilding = null;
     this.selectedBuildingType = null;
     this.placementIndicator.clear();
+    this.selectedBuildingIndicator.clear();
     this.events.emit("placed-building-selected", null);
     this.events.emit("structure-sold", {
       structure: building,

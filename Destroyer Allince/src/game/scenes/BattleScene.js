@@ -764,6 +764,27 @@ export default class BattleScene extends Phaser.Scene {
     }
   }
 
+  zoomCameraBy(stepDelta = 0, options = {}) {
+    const nextZoom = clamp(
+      this.cameraController.targetZoom + stepDelta,
+      this.cameraController.minZoom,
+      this.cameraController.maxZoom
+    );
+
+    this.setCameraZoomTarget(nextZoom, null, null, {
+      snap: true,
+      ...options,
+    });
+  }
+
+  zoomCameraIn(options = {}) {
+    this.zoomCameraBy(CAMERA_ZOOM_STEP, options);
+  }
+
+  zoomCameraOut(options = {}) {
+    this.zoomCameraBy(-CAMERA_ZOOM_STEP, options);
+  }
+
   handleCameraDrag(pointer) {
     if (!this.pointerDrag.active) {
       return;
