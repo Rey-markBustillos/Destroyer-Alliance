@@ -887,6 +887,7 @@ export default class GameScene extends Phaser.Scene {
 
   bindInput() {
     this.input.setTopOnly(true);
+    this.pointerReleasedOnInteractiveBuilding = false;
 
     this.input.on("pointermove", (pointer) => {
       this.cameraController.lastPointerX = pointer.x;
@@ -900,6 +901,7 @@ export default class GameScene extends Phaser.Scene {
     });
 
     this.input.on("pointerdown", (pointer) => {
+      this.pointerReleasedOnInteractiveBuilding = false;
       this.pointerDrag.active = true;
       this.pointerDrag.moved = false;
       this.pointerDrag.startX = pointer.x;
@@ -914,11 +916,34 @@ export default class GameScene extends Phaser.Scene {
       this.updateHoverAtWorldPoint(pointer.worldX, pointer.worldY);
     });
 
+    this.input.on("gameobjectup", (_pointer, gameObject) => {
+      if (
+        this.pointerDrag.moved
+        || this.isWarMode
+        || this.selectedBuildingType
+        || this.movingBuilding
+      ) {
+        return;
+      }
+
+      if (!gameObject?.isStructure) {
+        return;
+      }
+
+      this.pointerReleasedOnInteractiveBuilding = true;
+      this.selectPlacedBuilding(gameObject);
+    });
+
     this.input.on("pointerup", (pointer) => {
       const wasDrag = this.pointerDrag.moved;
       this.pointerDrag.active = false;
 
       if (!wasDrag) {
+        if (this.pointerReleasedOnInteractiveBuilding) {
+          this.pointerReleasedOnInteractiveBuilding = false;
+          return;
+        }
+
         if (this.isWarMode) {
           this.handleWarTileClick(pointer.worldX, pointer.worldY);
           return;
