@@ -130,9 +130,7 @@ export default function Login() {
       const session = await login({ email, password });
       saveSession(session);
       markWelcomeBackPending();
-      setTimeout(() => {
-        navigate("/game");
-      }, 1900);
+      navigate("/game", { replace: true });
     } catch (requestError) {
       setError(requestError.response?.data?.message || "Login failed.");
       setLoading(false);
