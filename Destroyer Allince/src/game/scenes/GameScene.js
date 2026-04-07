@@ -76,6 +76,8 @@ const SKYPORT_CHOPPER_COST = 5000;
 const SKYPORT_CHOPPER_LEVEL_TWO_COST = 3500;
 const SKYPORT_CHOPPER_SELL_VALUE = 4000;
 const BATTLE_TANK_PURCHASE_COST = 5000;
+const GLOBAL_MARKET_TANK_SELL_VALUE = 4000;
+const GLOBAL_MARKET_ENERGY_SELL_VALUE = 200;
 const TANK_RECHARGE_ENERGY_COST = 2;
 const HELICOPTER_RECHARGE_ENERGY_COST = 3;
 const TANK_MAX_SHOTS = 10;
@@ -2959,6 +2961,14 @@ export default class GameScene extends Phaser.Scene {
     this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
   }
 
+  getGlobalMarketTankSellValue() {
+    return GLOBAL_MARKET_TANK_SELL_VALUE;
+  }
+
+  getGlobalMarketEnergySellValue() {
+    return GLOBAL_MARKET_ENERGY_SELL_VALUE;
+  }
+
   isSkyport(buildingOrType) {
     const typeId = typeof buildingOrType === "string"
       ? buildingOrType
@@ -3030,6 +3040,115 @@ export default class GameScene extends Phaser.Scene {
       ...this.getBuildingPersistenceState(building),
     });
     this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
+  }
+
+  sellTanksFromMarket(quantity = 1) {
+    const targetQuantity = Math.max(1, Math.floor(Number(quantity) || 1));
+    const activeTankBuildings = this.placedBuildings.filter((building) =>
+      this.isBattleTank(building) && building.hasTank
+    );
+
+    if (!activeTankBuildings.length) {
+      return { soldCount: 0, goldEarned: 0 };
+    }
+
+    const soldBuildings = activeTankBuildings.slice(0, targetQuantity);
+    soldBuildings.forEach((building) => {
+      building.hasTank = false;
+      building.tankShotsRemaining = 0;
+      building.setBattleTankState?.(false);
+      this.events.emit("structure-resource-updated", {
+        structure: building,
+        id: building.persistedId,
+        type: building.buildingType.id,
+        row: building.row,
+        col: building.col,
+        ...this.getBuildingPersistenceState(building),
+      });
+    });
+
+    const soldCount = soldBuildings.length;
+
+    if (!soldCount) {
+      return { soldCount: 0, goldEarned: 0 };
+    }
+
+    if (this.selectedPlacedBuilding) {
+      const updatedSelection = soldBuildings.find((building) => building === this.selectedPlacedBuilding);
+
+      if (updatedSelection) {
+        this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(updatedSelection));
+      }
+    }
+
+    const goldEarned = soldCount * GLOBAL_MARKET_TANK_SELL_VALUE;
+    this.setGoldState(this.gold + goldEarned);
+
+    return { soldCount, goldEarned };
+  }
+
+  sellChoppersFromMarket(quantity = 1) {
+    const targetQuantity = Math.max(1, Math.floor(Number(quantity) || 1));
+    const activeSkyports = this.placedBuildings.filter((building) =>
+      this.isSkyport(building) && building.hasChopper
+    );
+
+    if (!activeSkyports.length) {
+      return { soldCount: 0, goldEarned: 0 };
+    }
+
+    const soldBuildings = activeSkyports.slice(0, targetQuantity);
+    soldBuildings.forEach((building) => {
+      building.hasChopper = false;
+      building.chopperShotsRemaining = 0;
+      building.setSkyportState?.(false);
+      this.events.emit("structure-resource-updated", {
+        structure: building,
+        id: building.persistedId,
+        type: building.buildingType.id,
+        row: building.row,
+        col: building.col,
+        ...this.getBuildingPersistenceState(building),
+      });
+    });
+
+    const soldCount = soldBuildings.length;
+
+    if (!soldCount) {
+      return { soldCount: 0, goldEarned: 0 };
+    }
+
+    if (this.selectedPlacedBuilding) {
+      const updatedSelection = soldBuildings.find((building) => building === this.selectedPlacedBuilding);
+
+      if (updatedSelection) {
+        this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(updatedSelection));
+      }
+    }
+
+    const goldEarned = soldCount * SKYPORT_CHOPPER_SELL_VALUE;
+    this.setGoldState(this.gold + goldEarned);
+
+    return { soldCount, goldEarned };
+  }
+
+  sellEnergyFromMarket(quantity = 1) {
+    const targetQuantity = Math.max(1, Math.floor(Number(quantity) || 1));
+    const soldCount = Math.min(targetQuantity, Math.max(0, Math.floor(this.energy)));
+
+    if (!soldCount) {
+      return { soldCount: 0, goldEarned: 0 };
+    }
+
+    this.setEnergyState(this.energy - soldCount, { emitChangeEvent: false });
+    this.events.emit("energy-changed", {
+      energy: this.energy,
+    });
+
+    const goldEarned = soldCount * GLOBAL_MARKET_ENERGY_SELL_VALUE;
+    this.setGoldState(this.gold + goldEarned);
+
+    return { soldCount, goldEarned };
   }
 
   hireSoldierAtSelectedBuilding(targetBuilding = null) {

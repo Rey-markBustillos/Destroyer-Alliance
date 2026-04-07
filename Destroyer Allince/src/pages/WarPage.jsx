@@ -7,7 +7,7 @@ import MobileLandscapePrompt from "../components/MobileLandscapePrompt";
 import { RANGER_FRONT_PREVIEW } from "../game/utils/rangerSprites";
 import { applyWarResolution, fetchWarTarget, syncGameSnapshot } from "../services/game";
 import { getGameSnapshot, saveGameSnapshot } from "../services/gameStorage";
-import { clearSession, getSession, saveSession } from "../services/session";
+import { getSession, saveSession } from "../services/session";
 import soundManager from "../services/soundManager";
 import { primeGameRoute } from "../utils/routePreload";
 
@@ -318,8 +318,6 @@ export default function WarPage() {
   const appliedLossSignatureRef = useRef("");
   const appliedWarResolutionRef = useRef("");
   const autoSearchTriggeredRef = useRef(false);
-  const reloginTriggeredRef = useRef(false);
-
   const session = useMemo(() => getSession(), []);
   const [snapshot, setSnapshot] = useState(() => getGameSnapshot(session));
   const army = useMemo(() => deriveArmyFromSnapshot(snapshot), [snapshot]);
@@ -347,29 +345,6 @@ export default function WarPage() {
     selectedDeploymentType: "soldier",
     summary: null,
   });
-
-  useEffect(() => {
-    const clearAuth = () => {
-      if (reloginTriggeredRef.current) {
-        return;
-      }
-
-      reloginTriggeredRef.current = true;
-      clearSession();
-    };
-
-    const handlePageHide = () => {
-      clearAuth();
-    };
-
-    window.addEventListener("pagehide", handlePageHide);
-    window.addEventListener("beforeunload", handlePageHide);
-
-    return () => {
-      window.removeEventListener("pagehide", handlePageHide);
-      window.removeEventListener("beforeunload", handlePageHide);
-    };
-  }, []);
 
   useEffect(() => {
     targetRef.current = target;

@@ -19,7 +19,6 @@ import {
   saveGameSnapshot,
 } from "../services/gameStorage";
 import {
-  clearSession,
   clearWelcomeBackPending,
   getSession,
   isWelcomeBackPending,
@@ -52,6 +51,44 @@ const SOLDIER_RECRUIT_COST = 2;
 const RANGER_TALA_RECRUIT_COST = 4;
 const TANK_ENERGY_COST = 2;
 const HELICOPTER_ENERGY_COST = 3;
+const GLOBAL_MARKET_TANK_SELL_VALUE = 4000;
+const GLOBAL_MARKET_HELICOPTER_SELL_VALUE = 4000;
+const GLOBAL_MARKET_ENERGY_SELL_VALUE = 200;
+const GLOBAL_MARKET_PRICING = {
+  tank: GLOBAL_MARKET_TANK_SELL_VALUE,
+  helicopter: GLOBAL_MARKET_HELICOPTER_SELL_VALUE,
+  energy: GLOBAL_MARKET_ENERGY_SELL_VALUE,
+};
+const GLOBAL_MARKET_ITEM_META = {
+  energy: {
+    label: "Energy",
+    icon: "/assets/energymachine.png",
+    alt: "Energy",
+    toneCardClass: "border-cyan-400/20 bg-cyan-400/10",
+    toneTextClass: "text-cyan-200/80",
+  },
+  tank: {
+    label: "Tank",
+    icon: "/assets/tank/tank1.png",
+    alt: "Tank",
+    toneCardClass: "border-amber-400/20 bg-amber-400/10",
+    toneTextClass: "text-amber-200/80",
+  },
+  helicopter: {
+    label: "Helicopter",
+    icon: "/assets/parkingchopper-Photoroom.png",
+    alt: "Helicopter",
+    toneCardClass: "border-sky-400/20 bg-sky-400/10",
+    toneTextClass: "text-sky-200/80",
+  },
+  army: {
+    label: "Army",
+    icon: "/assets/army/front/firing.png",
+    alt: "Army",
+    toneCardClass: "border-violet-400/20 bg-violet-400/10",
+    toneTextClass: "text-violet-200/80",
+  },
+};
 
 const getBuildingTroopCount = (building) =>
   Math.max(0, Number(building?.soldierCount ?? 0) || 0)
@@ -236,7 +273,6 @@ export default function GamePage() {
   const musicPanelRef = useRef(null);
   const backendRetryAfterRef = useRef(0);
   const backendWarningShownRef = useRef(false);
-  const reloginTriggeredRef = useRef(false);
   const activeSession = getSession();
   const [gameState, setGameState] = useState({
     gold: 1200,
@@ -283,33 +319,15 @@ export default function GamePage() {
   });
   const [hireModalOpen, setHireModalOpen] = useState(false);
   const [inventoryModalOpen, setInventoryModalOpen] = useState(false);
+  const [marketOpen, setMarketOpen] = useState(false);
+  const [marketNotice, setMarketNotice] = useState("");
+  const [marketListings, setMarketListings] = useState([]);
+  const [marketSocketReady, setMarketSocketReady] = useState(false);
+  const [inventoryMarketDraft, setInventoryMarketDraft] = useState(null);
   const [removeSoldierCount, setRemoveSoldierCount] = useState("1");
   const [showWelcomeBack, setShowWelcomeBack] = useState(() => isWelcomeBackPending());
   const [musicStatus, setMusicStatus] = useState(() => soundManager.getStatus());
   const [musicPanelOpen, setMusicPanelOpen] = useState(false);
-
-  useEffect(() => {
-    const clearAuth = () => {
-      if (reloginTriggeredRef.current) {
-        return;
-      }
-
-      reloginTriggeredRef.current = true;
-      clearSession();
-    };
-
-    const handlePageHide = () => {
-      clearAuth();
-    };
-
-    window.addEventListener("pagehide", handlePageHide);
-    window.addEventListener("beforeunload", handlePageHide);
-
-    return () => {
-      window.removeEventListener("pagehide", handlePageHide);
-      window.removeEventListener("beforeunload", handlePageHide);
-    };
-  }, []);
 
   useEffect(() => {
     if (!musicPanelOpen) {
@@ -356,6 +374,15 @@ export default function GamePage() {
     const socket = createBattleSocket(token);
     chatSocketRef.current = socket;
 
+    socket.on("connect", () => {
+      setMarketSocketReady(true);
+      socket.emit("market:listings:request");
+    });
+
+    socket.on("disconnect", () => {
+      setMarketSocketReady(false);
+    });
+
     socket.on("presence:update", (payload = {}) => {
       setOnlineCount(Math.max(0, Number(payload?.onlineCount ?? 0) || 0));
     });
@@ -368,7 +395,34 @@ export default function GamePage() {
       setChatMessages((current) => [...current, message].slice(-60));
     });
 
+    socket.on("market:listings", (payload = {}) => {
+      setMarketListings(Array.isArray(payload?.listings) ? payload.listings : []);
+    });
+
+    socket.on("market:error", (payload = {}) => {
+      const message = typeof payload?.message === "string" ? payload.message : "Unable to post market listing.";
+      setMarketNotice(message);
+    });
+
+    socket.on("market:listing:created", (listing) => {
+      const itemLabel = listing?.itemLabel ?? "item";
+      setMarketNotice(
+        listing?.listingType === "trade"
+          ? `Trade listing posted for ${itemLabel}.`
+          : `Sell listing posted for ${itemLabel}.`
+      );
+      socket.emit("market:listings:request");
+    });
+
+    socket.on("market:listing:cancelled", () => {
+      setMarketNotice("Listing cancelled from Global Market.");
+      socket.emit("market:listings:request");
+    });
+
+    socket.emit("market:listings:request");
+
     return () => {
+      setMarketSocketReady(false);
       chatSocketRef.current = null;
       socket.disconnect();
     };
@@ -554,6 +608,7 @@ export default function GamePage() {
         setSelectedBuilding(null);
         setHireModalOpen(false);
         setInventoryModalOpen(false);
+        setInventoryMarketDraft(null);
         setRemoveSoldierCount("1");
       };
 
@@ -566,6 +621,7 @@ export default function GamePage() {
         }
         if (building?.type !== "command-center") {
           setInventoryModalOpen(false);
+          setInventoryMarketDraft(null);
         }
       };
 
@@ -698,6 +754,7 @@ export default function GamePage() {
         setIsMoveMode(false);
         setHireModalOpen(false);
         setInventoryModalOpen(false);
+        setInventoryMarketDraft(null);
       };
 
       const handleStructureUpgradeStarted = ({
@@ -1080,6 +1137,8 @@ export default function GamePage() {
     setSelectedBuilding(building);
     setSelectedPlacedBuilding(null);
     setIsMoveMode(false);
+    setInventoryMarketDraft(null);
+    setMarketOpen(false);
     setShopOpen(false);
     const gameScene = gameRef.current?.scene?.getScene("GameScene");
     gameScene?.setSelectedBuilding(building);
@@ -1096,6 +1155,8 @@ export default function GamePage() {
     setIsMoveMode(true);
     setHireModalOpen(false);
     setInventoryModalOpen(false);
+    setInventoryMarketDraft(null);
+    setMarketOpen(false);
     gameScene.startMovingSelectedBuilding();
   };
 
@@ -1103,6 +1164,7 @@ export default function GamePage() {
     const gameScene = gameRef.current?.scene?.getScene("GameScene");
     setHireModalOpen(false);
     setInventoryModalOpen(false);
+    setInventoryMarketDraft(null);
     gameScene?.clearPlacedBuildingSelection?.();
   };
 
@@ -1138,17 +1200,241 @@ export default function GamePage() {
 
   const handleHireSoldier = () => {
     setInventoryModalOpen(false);
+    setInventoryMarketDraft(null);
     setHireModalOpen(true);
   };
 
   const handleToggleInventoryModal = () => {
     setHireModalOpen(false);
+    setInventoryMarketDraft(null);
     setInventoryModalOpen((open) => !open);
+  };
+
+  const handleToggleMarket = () => {
+    setShopOpen(false);
+    setLeaderboardOpen(false);
+    setHireModalOpen(false);
+    setInventoryModalOpen(false);
+    setInventoryMarketDraft(null);
+    setMusicPanelOpen(false);
+    setMarketNotice("");
+    setMarketOpen((open) => {
+      const nextOpen = !open;
+
+      if (nextOpen) {
+        chatSocketRef.current?.emit("market:listings:request");
+      }
+
+      return nextOpen;
+    });
+  };
+
+  const handleCloseMarket = () => {
+    setMarketNotice("");
+    setMarketOpen(false);
+  };
+
+  const getMarketItemCount = (itemType) => {
+    if (itemType === "tank") {
+      return Math.max(0, Number(gameState.totalTanks ?? 0) || 0);
+    }
+
+    if (itemType === "helicopter") {
+      return Math.max(0, Number(gameState.totalHelicopters ?? 0) || 0);
+    }
+
+    if (itemType === "energy") {
+      return Math.max(0, Number(gameState.energy ?? 0) || 0);
+    }
+
+    return 0;
+  };
+
+  const handleOpenInventoryMarketDraft = (itemType) => {
+    const meta = GLOBAL_MARKET_ITEM_META[itemType];
+    const available = getMarketItemCount(itemType);
+
+    if (!meta || available <= 0) {
+      setMarketNotice(`No ${meta?.label?.toLowerCase() ?? "items"} available for market listing.`);
+      return;
+    }
+
+    setInventoryMarketDraft({
+      itemType,
+      listingType: "sell",
+      quantity: "1",
+      desiredItemType: itemType === "tank" ? "helicopter" : "tank",
+      desiredQuantity: "1",
+    });
+  };
+
+  const handleCloseInventoryMarketDraft = () => {
+    setInventoryMarketDraft(null);
+  };
+
+  const clampInventoryDraftQuantity = (rawValue, maxValue = Number.POSITIVE_INFINITY) => {
+    const digitsOnly = String(rawValue ?? "").replace(/[^\d]/g, "");
+
+    if (!digitsOnly) {
+      return "";
+    }
+
+    const parsedValue = Math.max(1, Math.floor(Number(digitsOnly) || 1));
+
+    if (Number.isFinite(maxValue)) {
+      return String(Math.min(Math.max(1, Math.floor(maxValue || 1)), parsedValue));
+    }
+
+    return String(parsedValue);
+  };
+
+  const handleInventoryDraftQuantityChange = (field, rawValue) => {
+    const maxValue = field === "quantity"
+      ? Math.max(1, inventoryDraftAvailableCount)
+      : Number.POSITIVE_INFINITY;
+
+    setInventoryMarketDraft((current) => {
+      if (!current) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [field]: clampInventoryDraftQuantity(rawValue, maxValue),
+      };
+    });
+  };
+
+  const stepInventoryDraftQuantity = (field, delta) => {
+    const maxValue = field === "quantity"
+      ? Math.max(1, inventoryDraftAvailableCount)
+      : Number.POSITIVE_INFINITY;
+
+    setInventoryMarketDraft((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const currentValue = Math.max(1, Math.floor(Number(current[field] ?? 1) || 1));
+      const nextValue = currentValue + delta;
+      const clampedValue = Number.isFinite(maxValue)
+        ? Math.max(1, Math.min(maxValue, nextValue))
+        : Math.max(1, nextValue);
+
+      return {
+        ...current,
+        [field]: String(clampedValue),
+      };
+    });
   };
 
   const swallowModalBackdropPointer = (event) => {
     event.preventDefault();
     event.stopPropagation();
+  };
+
+  const handleSubmitInventoryMarketDraft = () => {
+    const itemType = inventoryMarketDraft?.itemType;
+    const listingType = inventoryMarketDraft?.listingType === "trade" ? "trade" : "sell";
+    const availableCount = getMarketItemCount(itemType);
+    const quantity = Math.max(
+      1,
+      Math.min(availableCount, Math.floor(Number(inventoryMarketDraft?.quantity ?? 1) || 1))
+    );
+    const desiredItemType = typeof inventoryMarketDraft?.desiredItemType === "string"
+      ? inventoryMarketDraft.desiredItemType
+      : "tank";
+    const desiredQuantity = Math.max(1, Math.floor(Number(inventoryMarketDraft?.desiredQuantity ?? 1) || 1));
+
+    if (!itemType || !availableCount) {
+      setMarketNotice("No inventory available for market listing.");
+      return;
+    }
+
+    if (listingType === "trade" && !GLOBAL_MARKET_ITEM_META[desiredItemType]) {
+      setMarketNotice("Choose what item you want in exchange.");
+      return;
+    }
+
+    const socket = chatSocketRef.current;
+
+    if (!socket) {
+      setMarketNotice("Market connection is not ready yet.");
+      return;
+    }
+
+    if (!socket.connected) {
+      socket.connect();
+      setMarketNotice("Reconnecting to Global Market. Try again in a moment.");
+      return;
+    }
+
+    const listingPayload = {
+      listingType,
+      itemType,
+      quantity,
+      priceGold: listingType === "sell"
+        ? quantity * (GLOBAL_MARKET_PRICING[itemType] ?? 0)
+        : 0,
+      desiredItemType: listingType === "trade" ? desiredItemType : null,
+      desiredQuantity: listingType === "trade" ? desiredQuantity : null,
+    };
+
+    socket.emit("market:listing:create", listingPayload, (response = {}) => {
+      if (!response?.ok) {
+        setMarketNotice(response?.message || "Unable to post market listing.");
+        return;
+      }
+
+      const listing = response?.listing ?? null;
+      const itemLabel = listing?.itemLabel ?? GLOBAL_MARKET_ITEM_META[itemType]?.label ?? "Item";
+      const desiredItemLabel = listing?.desiredItemLabel ?? GLOBAL_MARKET_ITEM_META[desiredItemType]?.label ?? "item";
+
+      if (listing) {
+        setMarketListings((current) => {
+          const next = [listing, ...current.filter((entry) => entry.id !== listing.id)];
+          return next.slice(0, 80);
+        });
+      }
+
+      setMarketNotice(
+        listingType === "sell"
+          ? `Listed ${formatCompactNumber(quantity)} ${itemLabel.toLowerCase()} for sale in Global Market.`
+          : `Listed ${formatCompactNumber(quantity)} ${itemLabel.toLowerCase()} for trade. Wants ${formatCompactNumber(desiredQuantity)} ${desiredItemLabel.toLowerCase()}.`
+      );
+      setInventoryMarketDraft(null);
+      setInventoryModalOpen(false);
+      setMarketOpen(true);
+      socket.emit("market:listings:request");
+    });
+  };
+
+  const handleCancelMarketListing = (listingId) => {
+    const socket = chatSocketRef.current;
+
+    if (!listingId || !socket) {
+      setMarketNotice("Market connection is not ready yet.");
+      return;
+    }
+
+    if (!socket.connected) {
+      socket.connect();
+      setMarketNotice("Reconnecting to Global Market. Try again in a moment.");
+      return;
+    }
+
+    socket.emit("market:listing:cancel", {
+      listingId,
+    }, (response = {}) => {
+      if (!response?.ok) {
+        setMarketNotice(response?.message || "Unable to cancel listing.");
+        return;
+      }
+
+      setMarketListings((current) => current.filter((listing) => listing.id !== listingId));
+      setMarketNotice("Listing cancelled from Global Market.");
+      socket.emit("market:listings:request");
+    });
   };
 
   const handleConfirmHireSoldier = () => {
@@ -1299,6 +1585,14 @@ export default function GamePage() {
     && selectedPlacedBuilding.hasChopper
     && (selectedPlacedBuilding.chopperShotsRemaining ?? 0) < (selectedPlacedBuilding.chopperMaxShots ?? 15)
     && gameState.energy >= (selectedPlacedBuilding.chopperRechargeCost ?? HELICOPTER_ENERGY_COST);
+  const inventoryDraftAvailableCount = getMarketItemCount(inventoryMarketDraft?.itemType);
+  const inventoryDraftPriceGold = inventoryMarketDraft?.itemType
+    ? (GLOBAL_MARKET_PRICING[inventoryMarketDraft.itemType] ?? 0) * Math.max(
+      1,
+      Math.min(inventoryDraftAvailableCount, Math.floor(Number(inventoryMarketDraft?.quantity ?? 1) || 1))
+    )
+    : 0;
+  const inventoryDraftDesiredMeta = GLOBAL_MARKET_ITEM_META[inventoryMarketDraft?.desiredItemType] ?? null;
   const canSellBuilding = selectedPlacedBuilding?.type !== "command-center";
   const tankEnergyPercent = getChargePercent(
     selectedPlacedBuilding?.tankShotsRemaining,
@@ -1440,6 +1734,17 @@ export default function GamePage() {
           </div>
         </Motion.div>
 
+        <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex items-center pl-2 min-[901px]:pl-4">
+          <button
+            type="button"
+            onClick={handleToggleMarket}
+            className="pointer-events-auto flex min-h-30 w-10 flex-col items-center justify-center gap-2 rounded-2xl border border-amber-300/18 bg-[linear-gradient(180deg,rgba(15,23,42,0.94)_0%,rgba(15,23,42,0.84)_100%)] px-2 py-3 text-[10px] font-black uppercase tracking-[0.16em] text-amber-100 shadow-[0_16px_36px_rgba(2,6,23,0.3)] transition hover:bg-[linear-gradient(180deg,rgba(15,23,42,0.98)_0%,rgba(15,23,42,0.9)_100%)] min-[901px]:min-h-36 min-[901px]:w-12 min-[901px]:text-[11px]"
+          >
+            <span className="text-sm min-[901px]:text-base">$</span>
+            <span className="[writing-mode:vertical-rl] [text-orientation:mixed]">{marketOpen ? "Close" : "Market"}</span>
+          </button>
+        </div>
+
         <div ref={gameRootRef} className="h-full w-full overflow-hidden" />
         <MobileLandscapePrompt />
 
@@ -1515,7 +1820,7 @@ export default function GamePage() {
                 ) : null}
                 {selectedPlacedBuilding.type === "tent" || selectedPlacedBuilding.type === "command-center" ? (
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-slate-400">Basic Soldiers</span>
+                    <span className="text-slate-400">Riflemen</span>
                     <span className="font-bold text-white">{selectedBasicSoldierCount}</span>
                   </div>
                 ) : null}
@@ -1900,12 +2205,12 @@ export default function GamePage() {
                   <div className="flex h-12 items-center justify-center rounded-xl bg-slate-900/70 p-1.5 min-[901px]:h-14">
                     <img
                       src="/assets/army/front/firing.png"
-                      alt="Basic Soldier"
+                      alt="Riflemen"
                       className="h-full w-full object-contain"
                       draggable="false"
                     />
                   </div>
-                  <p className="mt-2 text-sm font-bold text-white">Basic Soldier</p>
+                  <p className="mt-2 text-sm font-bold text-white">Riflemen</p>
                   <p className="mt-1 text-[11px] leading-tight text-slate-300 min-[901px]:text-xs">
                     {selectedPlacedBuilding?.type === "command-center"
                       ? "Starter unit na mapupunta sa unang tent na may space."
@@ -1964,7 +2269,7 @@ export default function GamePage() {
                     ? selectedPlacedBuilding?.type === "command-center"
                       ? "Max troops reached na sa lahat ng available Soldier Tents."
                       : "Max troops reached na para sa Soldier Tent na ito."
-                    : `Kulang gold. Kailangan ${SOLDIER_RECRUIT_COST} gold para sa Basic Soldier o ${RANGER_TALA_RECRUIT_COST} gold para sa Ranger Tala.`}
+                    : `Kulang gold. Kailangan ${SOLDIER_RECRUIT_COST} gold para sa Riflemen o ${RANGER_TALA_RECRUIT_COST} gold para sa Ranger Tala.`}
                 </p>
               )}
             </div>
@@ -1973,18 +2278,19 @@ export default function GamePage() {
 
         {inventoryModalOpen && selectedPlacedBuilding?.type === "command-center" ? (
           <div
-            className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/70 px-2 py-2 min-[901px]:px-4 min-[901px]:py-4 min-[901px]:bg-slate-950/55 min-[901px]:backdrop-blur-[3px]"
+            className="absolute inset-0 z-20 flex items-end justify-center overflow-y-auto bg-slate-950/70 px-2 py-2 min-[540px]:items-center min-[901px]:px-4 min-[901px]:py-4 min-[901px]:bg-slate-950/55 min-[901px]:backdrop-blur-[3px]"
             onPointerDown={swallowModalBackdropPointer}
             onClick={(event) => {
               swallowModalBackdropPointer(event);
               setInventoryModalOpen(false);
+              setInventoryMarketDraft(null);
             }}
           >
             <div
-              className="mobile-landscape-overlay-card mobile-safe-solid-panel w-full max-w-80 rounded-[1.15rem] border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(15,23,42,0.92)_100%)] p-3 text-white shadow-[0_20px_60px_rgba(2,6,23,0.28)] min-[901px]:max-w-96 min-[901px]:rounded-[1.4rem] min-[901px]:p-4 min-[901px]:bg-[linear-gradient(180deg,rgba(15,23,42,0.82)_0%,rgba(15,23,42,0.68)_100%)] min-[901px]:backdrop-blur-xl"
+              className="mobile-landscape-overlay-card mobile-landscape-inventory-modal mobile-safe-solid-panel relative flex w-full max-w-[min(96vw,32rem)] flex-col rounded-[1.15rem] border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(15,23,42,0.92)_100%)] p-3 text-white shadow-[0_20px_60px_rgba(2,6,23,0.28)] min-[901px]:rounded-[1.4rem] min-[901px]:p-4 min-[901px]:bg-[linear-gradient(180deg,rgba(15,23,42,0.82)_0%,rgba(15,23,42,0.68)_100%)] min-[901px]:backdrop-blur-xl"
               onClick={(event) => event.stopPropagation()}
             >
-              <div className="flex items-start justify-between gap-2 min-[901px]:gap-4">
+              <div className="flex shrink-0 items-start justify-between gap-2 min-[901px]:gap-4">
                 <div>
                   <p className="text-[0.56rem] uppercase tracking-[0.2em] text-cyan-300/70 min-[901px]:text-[0.68rem] min-[901px]:tracking-[0.3em]">
                     Command Center
@@ -1997,77 +2303,275 @@ export default function GamePage() {
 
                 <button
                   type="button"
-                  onClick={() => setInventoryModalOpen(false)}
+                  onClick={() => {
+                    setInventoryModalOpen(false);
+                    setInventoryMarketDraft(null);
+                  }}
                   className="rounded-xl border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-slate-200 transition hover:bg-white/10 min-[901px]:rounded-2xl min-[901px]:px-3 min-[901px]:py-1.5 min-[901px]:text-xs"
                 >
                   Close
                 </button>
               </div>
 
-              <div className="mt-3 grid grid-cols-2 gap-2 min-[901px]:gap-3">
-                <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-3">
-                  <div className="flex h-12 items-center justify-center rounded-xl bg-slate-900/60 p-2">
-                    <img
-                      src="/assets/energymachine.png"
-                      alt="Energy"
-                      className="h-full w-full object-contain"
-                      draggable="false"
-                    />
+              <div className="mobile-landscape-overlay-scroll mt-3 pr-0.5">
+                <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-2 min-[901px]:gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenInventoryMarketDraft("energy")}
+                    disabled={gameState.energy <= 0}
+                    className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-3 text-left transition hover:border-cyan-300/40 hover:bg-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    <div className="flex h-12 items-center justify-center rounded-xl bg-slate-900/60 p-2">
+                      <img
+                        src="/assets/energymachine.png"
+                        alt="Energy"
+                        className="h-full w-full object-contain"
+                        draggable="false"
+                      />
+                    </div>
+                    <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-200/80">Energy</p>
+                    <p className="mt-1 text-lg font-black text-white min-[901px]:text-xl">{formatCompactNumber(gameState.energy)}</p>
+                    <p className="mt-1 text-[10px] font-semibold text-cyan-100/80">Tap to list in Global Market</p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleOpenInventoryMarketDraft("tank")}
+                    disabled={gameState.totalTanks <= 0}
+                    className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-3 text-left transition hover:border-amber-300/40 hover:bg-amber-400/15 disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    <div className="flex h-12 items-center justify-center rounded-xl bg-slate-900/60 p-2">
+                      <img
+                        src="/assets/tank/tank1.png"
+                        alt="Tanks"
+                        className="h-full w-full object-contain"
+                        draggable="false"
+                      />
+                    </div>
+                    <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-200/80">Tanks</p>
+                    <p className="mt-1 text-lg font-black text-white min-[901px]:text-xl">{formatCompactNumber(gameState.totalTanks)}</p>
+                    <p className="mt-1 text-[10px] font-semibold text-amber-100/80">Tap to sell or trade</p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleOpenInventoryMarketDraft("helicopter")}
+                    disabled={gameState.totalHelicopters <= 0}
+                    className="rounded-2xl border border-sky-400/20 bg-sky-400/10 p-3 text-left transition hover:border-sky-300/40 hover:bg-sky-400/15 disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    <div className="flex h-12 items-center justify-center rounded-xl bg-slate-900/60 p-2">
+                      <img
+                        src="/assets/parkingchopper-Photoroom.png"
+                        alt="Helicopters"
+                        className="h-full w-full object-contain"
+                        draggable="false"
+                      />
+                    </div>
+                    <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-200/80">Helicopters</p>
+                    <p className="mt-1 text-lg font-black text-white min-[901px]:text-xl">{formatCompactNumber(gameState.totalHelicopters)}</p>
+                    <p className="mt-1 text-[10px] font-semibold text-sky-100/80">Tap to sell or trade</p>
+                  </button>
+
+                  <div className="rounded-2xl border border-violet-400/20 bg-violet-400/10 p-3">
+                    <div className="flex h-12 items-center justify-center rounded-xl bg-slate-900/60 p-2">
+                      <img
+                        src="/assets/army/front/firing.png"
+                        alt="Troops"
+                        className="h-full w-full object-contain"
+                        draggable="false"
+                      />
+                    </div>
+                    <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-violet-200/80">Troops</p>
+                    <p className="mt-1 text-lg font-black text-white min-[901px]:text-xl">{formatCompactNumber(gameState.totalSoldiers)}</p>
                   </div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-200/80">Energy</p>
-                  <p className="mt-1 text-lg font-black text-white min-[901px]:text-xl">{formatCompactNumber(gameState.energy)}</p>
-                </div>
-                <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-3">
-                  <div className="flex h-12 items-center justify-center rounded-xl bg-slate-900/60 p-2">
-                    <img
-                      src="/assets/tank/tank1.png"
-                      alt="Tanks"
-                      className="h-full w-full object-contain"
-                      draggable="false"
-                    />
+
+                  <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 p-3 min-[420px]:col-span-2">
+                    <div className="flex h-12 items-center justify-center overflow-hidden rounded-xl bg-slate-900/60 p-2">
+                      <SpriteAnimator
+                        frames={RANGER_FRONT_PREVIEW.frames}
+                        displayWidth={38}
+                        displayHeight={42}
+                        chrome={false}
+                        label="Total Army"
+                        className="flex h-full w-full items-center justify-center"
+                      />
+                    </div>
+                    <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-rose-200/80">Total Army</p>
+                    <p className="mt-1 text-lg font-black text-white min-[901px]:text-xl">{formatCompactNumber(gameState.totalArmyUnits)}</p>
                   </div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-200/80">Tanks</p>
-                  <p className="mt-1 text-lg font-black text-white min-[901px]:text-xl">{formatCompactNumber(gameState.totalTanks)}</p>
                 </div>
-                <div className="rounded-2xl border border-sky-400/20 bg-sky-400/10 p-3">
-                  <div className="flex h-12 items-center justify-center rounded-xl bg-slate-900/60 p-2">
-                    <img
-                      src="/assets/parkingchopper-Photoroom.png"
-                      alt="Helicopters"
-                      className="h-full w-full object-contain"
-                      draggable="false"
-                    />
-                  </div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-200/80">Helicopters</p>
-                  <p className="mt-1 text-lg font-black text-white min-[901px]:text-xl">{formatCompactNumber(gameState.totalHelicopters)}</p>
-                </div>
-                <div className="rounded-2xl border border-violet-400/20 bg-violet-400/10 p-3">
-                  <div className="flex h-12 items-center justify-center rounded-xl bg-slate-900/60 p-2">
-                    <img
-                      src="/assets/army/front/firing.png"
-                      alt="Troops"
-                      className="h-full w-full object-contain"
-                      draggable="false"
-                    />
-                  </div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-violet-200/80">Troops</p>
-                  <p className="mt-1 text-lg font-black text-white min-[901px]:text-xl">{formatCompactNumber(gameState.totalSoldiers)}</p>
-                </div>
-                <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 p-3">
-                  <div className="flex h-12 items-center justify-center overflow-hidden rounded-xl bg-slate-900/60 p-2">
-                    <SpriteAnimator
-                      frames={RANGER_FRONT_PREVIEW.frames}
-                      displayWidth={38}
-                      displayHeight={42}
-                      chrome={false}
-                      label="Total Army"
-                      className="flex h-full w-full items-center justify-center"
-                    />
-                  </div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-rose-200/80">Total Army</p>
-                  <p className="mt-1 text-lg font-black text-white min-[901px]:text-xl">{formatCompactNumber(gameState.totalArmyUnits)}</p>
-                </div>
+
+                <p className="mt-3 text-[11px] font-semibold leading-tight text-slate-300 min-[901px]:text-xs">
+                  Tap `Energy`, `Tanks`, or `Helicopters` to create a `Sell` or `Trade` listing in Global Market.
+                </p>
               </div>
+
+              {inventoryMarketDraft ? (
+                <div className="absolute inset-0 z-10 flex items-end justify-center rounded-[1.15rem] bg-slate-950/80 p-2 min-[540px]:items-center min-[901px]:rounded-[1.4rem] min-[901px]:p-4">
+                  <div className="w-full max-w-sm rounded-[1.1rem] border border-white/12 bg-[linear-gradient(180deg,rgba(15,23,42,0.98)_0%,rgba(15,23,42,0.94)_100%)] p-3 shadow-[0_20px_60px_rgba(2,6,23,0.34)]">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-[0.56rem] uppercase tracking-[0.22em] text-amber-300/75">Item Action</p>
+                        <h4 className="mt-1 text-sm font-black text-white">
+                          {GLOBAL_MARKET_ITEM_META[inventoryMarketDraft.itemType]?.label}
+                        </h4>
+                        <p className="mt-1 text-[11px] leading-tight text-slate-400">
+                          Choose kung `Sell` o `Trade`, then ipo-post ito sa Global Market listings.
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleCloseInventoryMarketDraft}
+                        className="rounded-xl border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-slate-200 transition hover:bg-white/10"
+                      >
+                        Close
+                      </button>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setInventoryMarketDraft((current) => ({
+                          ...current,
+                          listingType: "sell",
+                        }))}
+                        className={`rounded-xl border px-3 py-2 text-[11px] font-black uppercase tracking-[0.12em] transition ${
+                          inventoryMarketDraft.listingType === "sell"
+                            ? "border-emerald-300/20 bg-emerald-400 text-slate-950"
+                            : "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
+                        }`}
+                      >
+                        Sell
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setInventoryMarketDraft((current) => ({
+                          ...current,
+                          listingType: "trade",
+                        }))}
+                        className={`rounded-xl border px-3 py-2 text-[11px] font-black uppercase tracking-[0.12em] transition ${
+                          inventoryMarketDraft.listingType === "trade"
+                            ? "border-cyan-300/20 bg-cyan-400 text-slate-950"
+                            : "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
+                        }`}
+                      >
+                        Trade
+                      </button>
+                    </div>
+
+                    <div className="mt-3 rounded-2xl border border-white/10 bg-white/5 p-3">
+                      <label className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                        Quantity
+                      </label>
+                      <div className="mt-2 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => stepInventoryDraftQuantity("quantity", -1)}
+                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-slate-950 text-lg font-black text-white transition hover:bg-white/10"
+                        >
+                          -
+                        </button>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          value={inventoryMarketDraft.quantity}
+                          onChange={(event) => handleInventoryDraftQuantityChange("quantity", event.target.value)}
+                          className="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-center text-sm text-white outline-none focus:border-cyan-400"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => stepInventoryDraftQuantity("quantity", 1)}
+                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-slate-950 text-lg font-black text-white transition hover:bg-white/10"
+                        >
+                          +
+                        </button>
+                      </div>
+                      <p className="mt-2 text-[11px] leading-tight text-slate-300">
+                        Available: {formatCompactNumber(inventoryDraftAvailableCount)}
+                      </p>
+                      <p className="mt-1 text-[11px] leading-tight text-slate-300">
+                        {inventoryMarketDraft.listingType === "sell"
+                          ? `Sale price: ${formatCompactNumber(inventoryDraftPriceGold)} gold`
+                          : "Trade listing: choose the item and quantity you want in exchange."}
+                      </p>
+                    </div>
+
+                    {inventoryMarketDraft.listingType === "trade" ? (
+                      <div className="mt-3 rounded-2xl border border-white/10 bg-white/5 p-3">
+                        <label className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                          Wants In Exchange
+                        </label>
+
+                        <div className="mt-2 grid grid-cols-2 gap-2">
+                          {["tank", "helicopter", "energy", "army"].map((itemType) => {
+                            const meta = GLOBAL_MARKET_ITEM_META[itemType];
+
+                            return (
+                              <button
+                                key={itemType}
+                                type="button"
+                                onClick={() => setInventoryMarketDraft((current) => ({
+                                  ...current,
+                                  desiredItemType: itemType,
+                                }))}
+                                className={`rounded-xl border px-2 py-2 text-[11px] font-bold uppercase tracking-[0.12em] transition ${
+                                  inventoryMarketDraft.desiredItemType === itemType
+                                    ? "border-cyan-300/20 bg-cyan-400 text-slate-950"
+                                    : "border-white/10 bg-slate-950/70 text-slate-200 hover:bg-white/10"
+                                }`}
+                              >
+                                {meta.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        <label className="mt-3 block text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                          Wanted Quantity
+                        </label>
+                        <div className="mt-2 flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => stepInventoryDraftQuantity("desiredQuantity", -1)}
+                            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-slate-950 text-lg font-black text-white transition hover:bg-white/10"
+                          >
+                            -
+                          </button>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            value={inventoryMarketDraft.desiredQuantity}
+                            onChange={(event) => handleInventoryDraftQuantityChange("desiredQuantity", event.target.value)}
+                            className="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-center text-sm text-white outline-none focus:border-cyan-400"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => stepInventoryDraftQuantity("desiredQuantity", 1)}
+                            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-slate-950 text-lg font-black text-white transition hover:bg-white/10"
+                          >
+                            +
+                          </button>
+                        </div>
+                        <p className="mt-2 text-[11px] leading-tight text-slate-300">
+                          {`This listing asks for ${formatCompactNumber(Math.max(1, Math.floor(Number(inventoryMarketDraft.desiredQuantity ?? 1) || 1)))} ${inventoryDraftDesiredMeta?.label?.toLowerCase() ?? "item"}.`}
+                        </p>
+                      </div>
+                    ) : null}
+
+                    <button
+                      type="button"
+                      onClick={handleSubmitInventoryMarketDraft}
+                      disabled={!marketSocketReady}
+                      className="mt-3 w-full rounded-2xl border border-cyan-300/20 bg-[linear-gradient(180deg,#22d3ee_0%,#0891b2_100%)] px-4 py-3 text-sm font-black uppercase tracking-[0.14em] text-slate-950 transition hover:brightness-105"
+                    >
+                      {marketSocketReady ? "Post to Global Market" : "Connecting to Market..."}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         ) : null}
@@ -2154,11 +2658,12 @@ export default function GamePage() {
 
         {chatOpen ? (
           <div
-            className="mobile-game-chat-overlay absolute inset-0 z-20 flex items-end justify-center p-2 min-[901px]:justify-end min-[901px]:p-4"
+            className="mobile-game-chat-overlay fixed inset-0 z-30 flex items-end justify-center p-2 min-[901px]:justify-end min-[901px]:p-4"
+            onPointerDown={(event) => event.stopPropagation()}
             onClick={() => setChatOpen(false)}
           >
             <div
-              className="mobile-landscape-overlay-card mobile-landscape-chat-card mobile-game-chat-card mobile-safe-solid-panel mt-auto mb-16 flex w-full flex-col rounded-2xl border border-white/12 bg-[rgba(15,23,42,0.98)] p-2.5 text-white shadow-[0_18px_50px_rgba(2,6,23,0.34)] min-[901px]:mb-4 min-[901px]:max-w-88 min-[901px]:rounded-[1.2rem] min-[901px]:bg-[linear-gradient(180deg,rgba(15,23,42,0.9)_0%,rgba(15,23,42,0.78)_100%)] min-[901px]:p-3 min-[901px]:backdrop-blur-xl"
+              className="mobile-landscape-overlay-card mobile-landscape-chat-card mobile-game-chat-card mobile-safe-solid-panel mt-auto mb-16 flex w-full flex-col rounded-2xl border border-white/12 bg-slate-950 p-2.5 text-white shadow-[0_18px_50px_rgba(2,6,23,0.34)] min-[901px]:mb-4 min-[901px]:max-w-88 min-[901px]:rounded-[1.2rem] min-[901px]:bg-[linear-gradient(180deg,rgba(15,23,42,0.9)_0%,rgba(15,23,42,0.78)_100%)] min-[901px]:p-3 min-[901px]:backdrop-blur-xl"
               onClick={(event) => event.stopPropagation()}
             >
               <div className="flex shrink-0 items-start justify-between gap-2 min-[901px]:gap-4">
@@ -2191,7 +2696,7 @@ export default function GamePage() {
                 )}
               </div>
 
-              <div className="mt-2.5 flex shrink-0 gap-1.5 min-[901px]:mt-3 min-[901px]:gap-2">
+              <div className="mobile-game-chat-input-row mt-2.5 flex shrink-0 gap-1.5 min-[901px]:mt-3 min-[901px]:gap-2">
                 <input
                   type="text"
                   value={chatInput}
@@ -2202,15 +2707,124 @@ export default function GamePage() {
                     }
                   }}
                   placeholder="Type message..."
-                  className="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-950 px-2.5 py-1.5 text-[12px] text-white outline-none transition focus:border-emerald-400 min-[901px]:rounded-xl min-[901px]:bg-slate-950/70 min-[901px]:px-3 min-[901px]:py-2 min-[901px]:text-sm"
+                  className="mobile-game-chat-input min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-950 px-2.5 py-1.5 text-[12px] text-white outline-none transition focus:border-emerald-400 min-[901px]:rounded-xl min-[901px]:bg-slate-950/70 min-[901px]:px-3 min-[901px]:py-2 min-[901px]:text-sm"
                 />
                 <button
                   type="button"
                   onClick={handleSendChat}
-                  className="rounded-lg bg-emerald-400 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.08em] text-slate-950 transition hover:bg-emerald-300 min-[901px]:rounded-xl min-[901px]:px-4 min-[901px]:py-2 min-[901px]:text-sm min-[901px]:tracking-[0.12em]"
+                  className="mobile-game-chat-send rounded-lg bg-emerald-400 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.08em] text-slate-950 transition hover:bg-emerald-300 min-[901px]:rounded-xl min-[901px]:px-4 min-[901px]:py-2 min-[901px]:text-sm min-[901px]:tracking-[0.12em]"
                 >
                   Send
                 </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {marketOpen ? (
+          <div
+            className="absolute inset-0 z-20 flex items-end justify-center bg-slate-950/68 px-2 py-2 min-[540px]:items-center min-[901px]:justify-start min-[901px]:px-4 min-[901px]:py-4"
+            onPointerDown={swallowModalBackdropPointer}
+            onClick={(event) => {
+              swallowModalBackdropPointer(event);
+              handleCloseMarket();
+            }}
+          >
+            <div
+              className="mobile-landscape-overlay-card mobile-landscape-market-modal mobile-safe-solid-panel flex w-full max-w-[min(96vw,34rem)] flex-col rounded-[1.2rem] border border-white/12 bg-[linear-gradient(180deg,rgba(15,23,42,0.97)_0%,rgba(15,23,42,0.92)_100%)] p-3 text-white shadow-[0_20px_60px_rgba(2,6,23,0.34)] min-[901px]:ml-14 min-[901px]:max-w-[min(34rem,42vw)] min-[901px]:rounded-[1.4rem] min-[901px]:p-4"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex shrink-0 items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[0.56rem] uppercase tracking-[0.22em] text-amber-300/75 min-[901px]:text-[0.68rem] min-[901px]:tracking-[0.3em]">
+                    Global Market
+                  </p>
+                  <h3 className="mt-1 text-base font-black min-[901px]:text-lg">Player Listings</h3>
+                  <p className="mt-1 text-[11px] leading-tight text-slate-400 min-[901px]:text-xs">
+                    Listings will only appear here kapag may nag-post nang `Sell` o `Trade`.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleCloseMarket}
+                  className="rounded-xl border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-slate-200 transition hover:bg-white/10 min-[901px]:rounded-2xl min-[901px]:px-3 min-[901px]:py-1.5 min-[901px]:text-xs"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="mobile-landscape-overlay-scroll mt-3 pr-0.5">
+                {marketListings.length ? (
+                  <div className="grid grid-cols-1 gap-2.5 min-[901px]:gap-3">
+                    {marketListings.map((listing) => {
+                      const meta = GLOBAL_MARKET_ITEM_META[listing.itemType] ?? GLOBAL_MARKET_ITEM_META.energy;
+                      const desiredMeta = GLOBAL_MARKET_ITEM_META[listing.desiredItemType] ?? null;
+                      const isOwnListing = String(listing.sellerUserId) === String(activeSession?.id ?? "");
+
+                      return (
+                        <div
+                          key={listing.id}
+                          className={`rounded-2xl border p-3 ${meta.toneCardClass}`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-slate-950/60 p-2">
+                              <img src={meta.icon} alt={meta.alt} className="h-full w-full object-contain" draggable="false" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="text-sm font-black text-white">
+                                    {listing.listingType === "trade" ? "Trade Listing" : "Sell Listing"}
+                                  </p>
+                                  <p className="mt-0.5 truncate text-[11px] text-slate-300 min-[901px]:text-xs">
+                                    {listing.sellerName} · {listing.sellerPlayerId}
+                                  </p>
+                                </div>
+                                <span className={`rounded-full border border-white/10 bg-white/10 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ${meta.toneTextClass}`}>
+                                  {isOwnListing ? "Yours" : listing.listingType}
+                                </span>
+                              </div>
+                              <p className="mt-2 text-sm font-bold text-white">
+                                {formatCompactNumber(listing.quantity)} {listing.itemLabel}
+                              </p>
+                              <p className="mt-1 text-[11px] leading-tight text-slate-300 min-[901px]:text-xs">
+                                {listing.listingType === "sell"
+                                  ? `Selling for ${formatCompactNumber(listing.priceGold ?? 0)} gold`
+                                  : `Wants ${formatCompactNumber(listing.desiredQuantity ?? 1)} ${desiredMeta?.label ?? listing.desiredItemLabel ?? "item"} in exchange.`}
+                              </p>
+
+                              {isOwnListing ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleCancelMarketListing(listing.id)}
+                                  className="mt-2 rounded-xl border border-rose-300/18 bg-rose-400/12 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] text-rose-50 transition hover:bg-rose-400/20"
+                                >
+                                  Cancel
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-6 text-center text-[12px] font-semibold text-slate-300 min-[901px]:text-sm">
+                    No global market listings yet.
+                    <p className="mt-2 text-[11px] font-medium text-slate-400 min-[901px]:text-xs">
+                      Open the `Inventory` in your Command Center and post an item with `Sell` or `Trade`.
+                    </p>
+                  </div>
+                )}
+
+                <div className="mt-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5 text-[11px] leading-tight text-slate-300 min-[901px]:text-xs">
+                  {marketNotice || (
+                    marketSocketReady
+                      ? "Global Market only shows listings that players have posted from their inventory."
+                      : "Connecting to Global Market..."
+                  )}
+                </div>
               </div>
             </div>
           </div>

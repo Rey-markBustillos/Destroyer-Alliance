@@ -2,6 +2,7 @@ const CACHE_NAME = "destroyer-alliance-v2";
 const APP_SHELL = [
   "/",
   "/index.html",
+  "/version.json",
   "/manifest.webmanifest",
   "/pwa/icon-32.png",
   "/pwa/icon-180.png",
@@ -29,6 +30,12 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
+
 self.addEventListener("fetch", (event) => {
   const { request } = event;
 
@@ -39,6 +46,15 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
 
   if (url.origin !== self.location.origin) {
+    return;
+  }
+
+  if (url.pathname === "/version.json") {
+    event.respondWith(
+      fetch(request, {
+        cache: "no-store",
+      })
+    );
     return;
   }
 

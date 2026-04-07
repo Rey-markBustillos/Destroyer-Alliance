@@ -3,6 +3,7 @@ import { MotionConfig } from "framer-motion";
 import { HashRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AuthLoadingScreen from "./components/AuthLoadingScreen";
+import AppUpdatePrompt from "./components/AppUpdatePrompt";
 import {
   loadDashboardPage,
   loadGamePage,
@@ -35,6 +36,7 @@ function AppRoutes() {
   const location = useLocation();
   const state = location.state;
   const backgroundLocation = state?.backgroundLocation;
+  const isGameShellRoute = location.pathname === "/game" || location.pathname === "/war";
 
   return (
     <Suspense fallback={<RouteLoadingFallback />}>
@@ -99,6 +101,8 @@ function AppRoutes() {
             />
           </Routes>
         ) : null}
+
+        <AppUpdatePrompt enabled={isGameShellRoute} />
       </>
     </Suspense>
   );

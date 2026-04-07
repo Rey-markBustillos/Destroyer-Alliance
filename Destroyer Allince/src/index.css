@@ -132,15 +132,45 @@ body {
 
 .mobile-game-chat-overlay {
   isolation: isolate;
+  contain: strict;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  transform: translate3d(0, 0, 0);
+  will-change: auto;
 }
 
 .mobile-game-chat-card {
   isolation: isolate;
+  contain: strict;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  transform: translate3d(0, 0, 0);
+}
+
+.mobile-game-chat-input-row,
+.mobile-game-chat-input,
+.mobile-game-chat-send {
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  transform: translate3d(0, 0, 0);
 }
 
 .mobile-game-recruit-modal {
   max-height: calc(var(--app-screen-height) - 1rem);
   overflow: hidden;
+}
+
+.mobile-landscape-inventory-modal {
+  max-height: calc(var(--app-screen-height) - 0.75rem);
+}
+
+.mobile-landscape-update-modal {
+  max-height: calc(var(--app-screen-height) - 0.75rem);
+  overflow: hidden;
+}
+
+.mobile-landscape-market-modal {
+  max-height: calc(var(--app-screen-height) - 0.75rem);
 }
 
 @media (max-width: 900px) and (orientation: landscape) {
@@ -196,6 +226,18 @@ body {
   .mobile-landscape-overlay-card {
     max-width: min(96vw, 40rem);
     max-height: calc(var(--app-screen-height) - 0.75rem);
+  }
+
+  .mobile-landscape-inventory-modal {
+    max-width: min(95vw, 34rem);
+  }
+
+  .mobile-landscape-update-modal {
+    max-width: min(92vw, 34rem);
+  }
+
+  .mobile-landscape-market-modal {
+    max-width: min(95vw, 32rem);
   }
 
   .mobile-landscape-story-shell {
@@ -267,20 +309,21 @@ body {
   }
 
   .mobile-game-chat-overlay {
-    background: rgba(2, 6, 23, 0.24);
+    background: rgba(2, 6, 23, 0.82);
     isolation: isolate;
-    contain: paint;
+    contain: strict;
   }
 
   .mobile-game-chat-card {
     background: rgb(15, 23, 42) !important;
     border-color: rgba(255, 255, 255, 0.08);
-    box-shadow: 0 16px 34px rgba(2, 6, 23, 0.34);
+    box-shadow: 0 12px 24px rgba(2, 6, 23, 0.2);
     -webkit-backface-visibility: hidden;
     backface-visibility: hidden;
-    transform: translateZ(0);
+    transform: translate3d(0, 0, 0);
     will-change: auto;
-    contain: layout paint;
+    contain: strict;
+    filter: none !important;
   }
 
   .mobile-game-chat-scroll {
@@ -288,8 +331,25 @@ body {
     border-color: rgba(255, 255, 255, 0.06);
     -webkit-backface-visibility: hidden;
     backface-visibility: hidden;
-    transform: translateZ(0);
+    transform: translate3d(0, 0, 0);
     contain: strict;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .mobile-game-chat-input-row {
+    background: rgb(15, 23, 42);
+    border-radius: 0.9rem;
+    padding: 0.12rem;
+  }
+
+  .mobile-game-chat-input {
+    background: rgb(2, 6, 23) !important;
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow: none !important;
+  }
+
+  .mobile-game-chat-send {
+    box-shadow: none !important;
   }
 
   .mobile-game-recruit-modal {

@@ -41,6 +41,15 @@ const onlineUsers = new Map();
 const globalChatMessages = [];
 const MAX_GLOBAL_CHAT_MESSAGES = 60;
 const GLOBAL_CHAT_ROOM = "global-chat";
+const globalMarketListings = [];
+const MAX_GLOBAL_MARKET_LISTINGS = 80;
+const GLOBAL_MARKET_ROOM = "global-market";
+const MARKET_ITEM_LABELS = {
+  energy: "Energy",
+  tank: "Tank",
+  helicopter: "Helicopter",
+  army: "Army",
+};
 
 const getDistance = (aX, aY, bX, bY) => Math.hypot(bX - aX, bY - aY);
 
@@ -446,10 +455,39 @@ const buildChatMessagePayload = (message) => ({
   createdAt: message.createdAt,
 });
 
+const buildMarketListingPayload = (listing) => ({
+  id: listing.id,
+  sellerUserId: listing.sellerUserId,
+  sellerPlayerId: listing.sellerPlayerId,
+  sellerName: listing.sellerName,
+  listingType: listing.listingType,
+  itemType: listing.itemType,
+  itemLabel: listing.itemLabel,
+  quantity: listing.quantity,
+  priceGold: listing.priceGold ?? null,
+  desiredItemType: listing.desiredItemType ?? null,
+  desiredItemLabel: listing.desiredItemLabel ?? null,
+  desiredQuantity: listing.desiredQuantity ?? null,
+  createdAt: listing.createdAt,
+});
+
 const emitPresenceUpdate = (io) => {
   io.emit("presence:update", {
     onlineCount: getOnlineCount(),
   });
+};
+
+const emitMarketListings = (io, target = null) => {
+  const payload = {
+    listings: globalMarketListings.map(buildMarketListingPayload),
+  };
+
+  if (target) {
+    target.emit("market:listings", payload);
+    return;
+  }
+
+  io.to(GLOBAL_MARKET_ROOM).emit("market:listings", payload);
 };
 
 export const createBattleSocketServer = (httpServer) => {
@@ -496,6 +534,7 @@ export const createBattleSocketServer = (httpServer) => {
 
   io.on("connection", (socket) => {
     socket.join(GLOBAL_CHAT_ROOM);
+    socket.join(GLOBAL_MARKET_ROOM);
     const existingSockets = onlineUsers.get(socket.user.id) ?? new Set();
     existingSockets.add(socket.id);
     onlineUsers.set(socket.user.id, existingSockets);
@@ -511,6 +550,7 @@ export const createBattleSocketServer = (httpServer) => {
     socket.emit("chat:history", {
       messages: globalChatMessages.map(buildChatMessagePayload),
     });
+    emitMarketListings(io, socket);
     emitPresenceUpdate(io);
 
     socket.on("queue:join", (payload = {}) => {
@@ -582,6 +622,112 @@ export const createBattleSocketServer = (httpServer) => {
       }
 
       io.to(GLOBAL_CHAT_ROOM).emit("chat:message", buildChatMessagePayload(message));
+    });
+
+    socket.on("market:listings:request", () => {
+      emitMarketListings(io, socket);
+    });
+
+    socket.on("market:listing:create", (payload = {}, reply) => {
+      const respond = (response) => {
+        if (typeof reply === "function") {
+          reply(response);
+        }
+      };
+
+      const listingType = payload?.listingType === "trade" ? "trade" : "sell";
+      const itemType = typeof payload?.itemType === "string"
+        ? payload.itemType.trim().toLowerCase()
+        : "";
+      const quantity = Math.max(1, Math.min(999, Math.floor(Number(payload?.quantity ?? 1) || 1)));
+      const normalizedPriceGold = Math.max(0, Math.floor(Number(payload?.priceGold ?? 0) || 0));
+      const desiredItemType = typeof payload?.desiredItemType === "string"
+        ? payload.desiredItemType.trim().toLowerCase()
+        : "";
+      const desiredQuantity = Math.max(1, Math.min(999, Math.floor(Number(payload?.desiredQuantity ?? 1) || 1)));
+
+      if (!MARKET_ITEM_LABELS[itemType]) {
+        const errorMessage = "Invalid market item.";
+        socket.emit("market:error", { message: errorMessage });
+        respond({ ok: false, message: errorMessage });
+        return;
+      }
+
+      if (listingType === "trade" && !MARKET_ITEM_LABELS[desiredItemType]) {
+        const errorMessage = "Choose a valid trade target item.";
+        socket.emit("market:error", { message: errorMessage });
+        respond({ ok: false, message: errorMessage });
+        return;
+      }
+
+      const listing = {
+        id: `${socket.user.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        sellerUserId: socket.user.id,
+        sellerPlayerId: socket.user.playerId || `PLYR-${String(socket.user.id).padStart(6, "0")}`,
+        sellerName: socket.user.name || socket.user.email || `Commander ${socket.user.id}`,
+        listingType,
+        itemType,
+        itemLabel: MARKET_ITEM_LABELS[itemType],
+        quantity,
+        priceGold: listingType === "sell" ? normalizedPriceGold : null,
+        desiredItemType: listingType === "trade" ? desiredItemType : null,
+        desiredItemLabel: listingType === "trade" ? MARKET_ITEM_LABELS[desiredItemType] : null,
+        desiredQuantity: listingType === "trade" ? desiredQuantity : null,
+        createdAt: Date.now(),
+      };
+
+      globalMarketListings.unshift(listing);
+      if (globalMarketListings.length > MAX_GLOBAL_MARKET_LISTINGS) {
+        globalMarketListings.splice(MAX_GLOBAL_MARKET_LISTINGS);
+      }
+
+      emitMarketListings(io);
+      const listingPayload = buildMarketListingPayload(listing);
+      socket.emit("market:listing:created", listingPayload);
+      respond({ ok: true, listing: listingPayload });
+    });
+
+    socket.on("market:listing:cancel", (payload = {}, reply) => {
+      const respond = (response) => {
+        if (typeof reply === "function") {
+          reply(response);
+        }
+      };
+
+      const listingId = typeof payload?.listingId === "string" ? payload.listingId.trim() : "";
+
+      if (!listingId) {
+        const errorMessage = "Missing listing id.";
+        socket.emit("market:error", { message: errorMessage });
+        respond({ ok: false, message: errorMessage });
+        return;
+      }
+
+      const listingIndex = globalMarketListings.findIndex((listing) => listing.id === listingId);
+
+      if (listingIndex === -1) {
+        const errorMessage = "Listing not found.";
+        socket.emit("market:error", { message: errorMessage });
+        respond({ ok: false, message: errorMessage });
+        return;
+      }
+
+      const listing = globalMarketListings[listingIndex];
+
+      if (String(listing.sellerUserId) !== String(socket.user.id)) {
+        const errorMessage = "You can only cancel your own listing.";
+        socket.emit("market:error", { message: errorMessage });
+        respond({ ok: false, message: errorMessage });
+        return;
+      }
+
+      globalMarketListings.splice(listingIndex, 1);
+      emitMarketListings(io);
+      const cancelledPayload = {
+        listingId,
+      };
+      socket.emit("market:listing:cancelled", cancelledPayload);
+      respond({ ok: true, ...cancelledPayload });
     });
 
     socket.on("disconnect", () => {
