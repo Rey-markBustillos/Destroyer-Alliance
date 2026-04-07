@@ -126,6 +126,15 @@ body {
   min-height: 20rem;
 }
 
+.mobile-game-chat-scroll {
+  contain: paint;
+}
+
+.mobile-game-recruit-modal {
+  max-height: calc(var(--app-screen-height) - 1rem);
+  overflow: hidden;
+}
+
 @media (max-width: 900px) and (orientation: landscape) {
   .mobile-landscape-panel {
     max-width: min(94vw, 980px);
@@ -246,6 +255,18 @@ body {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
     background: linear-gradient(180deg, rgba(15, 23, 42, 0.97) 0%, rgba(15, 23, 42, 0.94) 100%);
+    box-shadow: 0 18px 42px rgba(2, 6, 23, 0.34);
+  }
+
+  .mobile-game-chat-scroll {
+    background: rgba(2, 6, 23, 0.98);
+    contain: layout paint;
+  }
+
+  .mobile-game-recruit-modal {
+    max-width: min(96vw, 22rem);
+    max-height: calc(var(--app-screen-height) - 0.75rem);
+    border-radius: 1rem;
   }
 
   .mobile-landscape-war-top-card {

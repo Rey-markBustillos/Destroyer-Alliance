@@ -1791,15 +1791,15 @@ export default function GamePage() {
         </Motion.div>
 
         {hireModalOpen && selectedPlacedBuilding?.type === "tent" ? (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/55 px-4 backdrop-blur-[3px]">
-            <div className="w-full max-w-74 rounded-[1.4rem] border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.82)_0%,rgba(15,23,42,0.68)_100%)] p-3 text-white shadow-[0_20px_60px_rgba(2,6,23,0.28)] backdrop-blur-xl">
-              <div className="flex items-start justify-between gap-4">
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/70 px-2 py-2 min-[901px]:px-4 min-[901px]:py-4 min-[901px]:bg-slate-950/55 min-[901px]:backdrop-blur-[3px]">
+            <div className="mobile-landscape-overlay-card mobile-game-recruit-modal mobile-safe-solid-panel w-full max-w-74 rounded-[1.15rem] border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(15,23,42,0.92)_100%)] p-2.5 text-white shadow-[0_20px_60px_rgba(2,6,23,0.28)] min-[901px]:rounded-[1.4rem] min-[901px]:bg-[linear-gradient(180deg,rgba(15,23,42,0.82)_0%,rgba(15,23,42,0.68)_100%)] min-[901px]:p-3 min-[901px]:backdrop-blur-xl">
+              <div className="flex items-start justify-between gap-2 min-[901px]:gap-4">
                 <div>
-                  <p className="text-[0.68rem] uppercase tracking-[0.3em] text-amber-300/70">
+                  <p className="text-[0.56rem] uppercase tracking-[0.2em] text-amber-300/70 min-[901px]:text-[0.68rem] min-[901px]:tracking-[0.3em]">
                     Soldier Tent
                   </p>
-                  <h3 className="mt-1 text-lg font-black">Unit Shop</h3>
-                  <p className="mt-2 text-xs text-slate-400">
+                  <h3 className="mt-1 text-base font-black min-[901px]:text-lg">Unit Shop</h3>
+                  <p className="mt-1 text-[11px] leading-tight text-slate-400 min-[901px]:mt-2 min-[901px]:text-xs">
                     Dito ka bibili ng units para sa selected Soldier Tent.
                   </p>
                 </div>
@@ -1807,20 +1807,20 @@ export default function GamePage() {
                 <button
                   type="button"
                   onClick={() => setHireModalOpen(false)}
-                  className="rounded-2xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10"
+                  className="rounded-xl border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-slate-200 transition hover:bg-white/10 min-[901px]:rounded-2xl min-[901px]:px-3 min-[901px]:py-1.5 min-[901px]:text-xs"
                 >
                   Close
                 </button>
               </div>
 
-              <div className="mt-2.5 grid gap-2">
+              <div className="mobile-landscape-overlay-scroll mt-2.5 min-h-0 max-h-[calc(var(--app-screen-height)-7rem)] space-y-2 pr-0.5 min-[901px]:max-h-none min-[901px]:space-y-0 min-[901px]:overflow-visible">
                 <button
                   type="button"
                   onClick={handleConfirmHireSoldier}
                   disabled={!canRecruitSoldier}
-                  className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-2 text-left transition hover:border-emerald-300 hover:bg-emerald-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="block w-full rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-2 text-left transition hover:border-emerald-300 hover:bg-emerald-400/15 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <div className="flex h-14 items-center justify-center rounded-xl bg-slate-900/70 p-1.5">
+                  <div className="flex h-12 items-center justify-center rounded-xl bg-slate-900/70 p-1.5 min-[901px]:h-14">
                     <img
                       src="/assets/army/front/firing.png"
                       alt="Basic Soldier"
@@ -1829,14 +1829,14 @@ export default function GamePage() {
                     />
                   </div>
                   <p className="mt-2 text-sm font-bold text-white">Basic Soldier</p>
-                  <p className="mt-1 text-xs text-slate-300">Starter unit para sa Soldier Tent.</p>
-                  <p className="mt-2 text-xs font-semibold text-amber-300">
+                  <p className="mt-1 text-[11px] leading-tight text-slate-300 min-[901px]:text-xs">Starter unit para sa Soldier Tent.</p>
+                  <p className="mt-2 text-[11px] font-semibold text-amber-300 min-[901px]:text-xs">
                     Recruit: {SOLDIER_RECRUIT_COST} gold / unit
                   </p>
-                  <p className="mt-1 text-xs font-semibold text-amber-300">
+                  <p className="mt-1 text-[11px] font-semibold text-amber-300 min-[901px]:text-xs">
                     Wage: 1 gold / 24 hrs
                   </p>
-                  <p className="mt-1 text-xs font-semibold text-sky-300">
+                  <p className="mt-1 text-[11px] font-semibold text-sky-300 min-[901px]:text-xs">
                     {selectedBasicSoldierCount} hired
                   </p>
                 </button>
@@ -1844,9 +1844,9 @@ export default function GamePage() {
                   type="button"
                   onClick={handleConfirmHireRangerTala}
                   disabled={!canRecruitRangerTala}
-                  className="rounded-2xl border border-cyan-400/30 bg-cyan-400/10 p-2 text-left transition hover:border-cyan-300 hover:bg-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="block w-full rounded-2xl border border-cyan-400/30 bg-cyan-400/10 p-2 text-left transition hover:border-cyan-300 hover:bg-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <div className="flex h-14 items-center justify-center overflow-hidden rounded-xl bg-slate-900/70 p-1.5">
+                  <div className="flex h-12 items-center justify-center overflow-hidden rounded-xl bg-slate-900/70 p-1.5 min-[901px]:h-14">
                     <SpriteAnimator
                       frames={RANGER_FRONT_PREVIEW.frames}
                       displayWidth={50}
@@ -1857,24 +1857,24 @@ export default function GamePage() {
                     />
                   </div>
                   <p className="mt-2 text-sm font-bold text-white">Ranger Tala</p>
-                  <p className="mt-1 text-xs text-slate-300">Longer-range infantry for Warpage assaults.</p>
-                  <p className="mt-2 text-xs font-semibold text-amber-300">
+                  <p className="mt-1 text-[11px] leading-tight text-slate-300 min-[901px]:text-xs">Longer-range infantry for Warpage assaults.</p>
+                  <p className="mt-2 text-[11px] font-semibold text-amber-300 min-[901px]:text-xs">
                     Recruit: {RANGER_TALA_RECRUIT_COST} gold / unit
                   </p>
-                  <p className="mt-1 text-xs font-semibold text-amber-300">
+                  <p className="mt-1 text-[11px] font-semibold text-amber-300 min-[901px]:text-xs">
                     Wage: 1 gold / 24 hrs
                   </p>
-                  <p className="mt-1 text-xs font-semibold text-cyan-300">
+                  <p className="mt-1 text-[11px] font-semibold text-cyan-300 min-[901px]:text-xs">
                     {selectedRangerTalaCount} hired
                   </p>
                 </button>
-                <p className="text-xs font-semibold text-sky-300">
+                <p className="text-[11px] font-semibold text-sky-300 min-[901px]:text-xs">
                   Total garrison: {selectedTroopCount}/{selectedPlacedBuilding.maxSoldiers ?? 15}
                 </p>
               </div>
 
               {!(canRecruitSoldier || canRecruitRangerTala) && (
-                <p className="mt-4 text-sm font-semibold text-rose-300">
+                <p className="mt-3 text-[11px] font-semibold leading-tight text-rose-300 min-[901px]:mt-4 min-[901px]:text-sm">
                   {soldierCapacityReached
                     ? "Max troops reached na para sa Soldier Tent na ito."
                     : `Kulang gold. Kailangan ${SOLDIER_RECRUIT_COST} gold para sa Basic Soldier o ${RANGER_TALA_RECRUIT_COST} gold para sa Ranger Tala.`}
@@ -1966,7 +1966,7 @@ export default function GamePage() {
             onClick={() => setChatOpen(false)}
           >
             <div
-              className="mobile-landscape-overlay-card mobile-landscape-chat-card mobile-safe-solid-panel mobile-safe-backdrop mt-auto mb-16 flex w-full flex-col rounded-2xl border border-white/12 bg-[linear-gradient(180deg,rgba(15,23,42,0.9)_0%,rgba(15,23,42,0.78)_100%)] p-2.5 text-white shadow-[0_18px_50px_rgba(2,6,23,0.34)] backdrop-blur-xl min-[901px]:mb-4 min-[901px]:max-w-88 min-[901px]:rounded-[1.2rem] min-[901px]:p-3"
+              className="mobile-landscape-overlay-card mobile-landscape-chat-card mobile-safe-solid-panel mt-auto mb-16 flex w-full flex-col rounded-2xl border border-white/12 bg-[rgba(15,23,42,0.98)] p-2.5 text-white shadow-[0_18px_50px_rgba(2,6,23,0.34)] min-[901px]:mb-4 min-[901px]:max-w-88 min-[901px]:rounded-[1.2rem] min-[901px]:bg-[linear-gradient(180deg,rgba(15,23,42,0.9)_0%,rgba(15,23,42,0.78)_100%)] min-[901px]:p-3 min-[901px]:backdrop-blur-xl"
               onClick={(event) => event.stopPropagation()}
             >
               <div className="flex shrink-0 items-start justify-between gap-2 min-[901px]:gap-4">
@@ -1984,7 +1984,7 @@ export default function GamePage() {
                 </button>
               </div>
 
-              <div className="mobile-landscape-overlay-scroll mt-2.5 min-h-0 flex-1 rounded-xl border border-white/8 bg-slate-950/45 px-2.5 py-2 min-[901px]:mt-3 min-[901px]:rounded-2xl min-[901px]:px-3">
+              <div className="mobile-landscape-overlay-scroll mobile-game-chat-scroll mt-2.5 min-h-0 flex-1 rounded-xl border border-white/8 bg-slate-950 px-2.5 py-2 min-[901px]:mt-3 min-[901px]:rounded-2xl min-[901px]:bg-slate-950/45 min-[901px]:px-3">
                 {chatMessages.length ? (
                   chatMessages.map((message) => (
                     <div key={message.id} className="mb-2 last:mb-0">
@@ -2010,7 +2010,7 @@ export default function GamePage() {
                     }
                   }}
                   placeholder="Type message..."
-                  className="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-950/70 px-2.5 py-1.5 text-[12px] text-white outline-none transition focus:border-emerald-400 min-[901px]:rounded-xl min-[901px]:px-3 min-[901px]:py-2 min-[901px]:text-sm"
+                  className="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-950 px-2.5 py-1.5 text-[12px] text-white outline-none transition focus:border-emerald-400 min-[901px]:rounded-xl min-[901px]:bg-slate-950/70 min-[901px]:px-3 min-[901px]:py-2 min-[901px]:text-sm"
                 />
                 <button
                   type="button"
