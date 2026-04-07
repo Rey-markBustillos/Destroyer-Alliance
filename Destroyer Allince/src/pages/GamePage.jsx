@@ -1734,7 +1734,7 @@ export default function GamePage() {
           </div>
         </Motion.div>
 
-        <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex items-center pl-2 min-[901px]:pl-4">
+        <div className="pointer-events-none absolute inset-y-0 right-0 z-10 flex items-center pr-2 min-[901px]:left-0 min-[901px]:right-auto min-[901px]:pr-0 min-[901px]:pl-4">
           <button
             type="button"
             onClick={handleToggleMarket}
