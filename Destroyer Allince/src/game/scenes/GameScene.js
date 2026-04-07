@@ -92,7 +92,6 @@ const BUILDABLE_GRASS_MASK = Array.from({ length: MAP_ROWS }, (_, row) => (
       ? [1, MAP_COLS - 2]
       : [0, MAP_COLS - 1]
 ));
-
 const WAR_SOLDIER_TEXTURES = {
   front: ["soldier-front-walk-1", "soldier-front-walk-2"],
   back: ["soldier-back-walk-1", "soldier-back-walk-2"],
@@ -1180,6 +1179,10 @@ export default class GameScene extends Phaser.Scene {
   }
 
   setCameraZoomTarget(nextZoom, screenX = null, screenY = null, options = {}) {
+    if (!this.cameraController || !this.cameras?.main) {
+      return;
+    }
+
     const camera = this.cameras.main;
     const { snap = false } = options;
     const zoom = Phaser.Math.Clamp(nextZoom, this.getMinCameraZoom(), this.cameraController.maxZoom);
@@ -1214,6 +1217,10 @@ export default class GameScene extends Phaser.Scene {
   }
 
   zoomCameraBy(stepDelta = 0, options = {}) {
+    if (!this.cameraController || !this.cameras?.main) {
+      return;
+    }
+
     const nextZoom = Phaser.Math.Clamp(
       this.cameraController.targetZoom + stepDelta,
       this.getMinCameraZoom(),

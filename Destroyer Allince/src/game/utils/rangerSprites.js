@@ -4,6 +4,15 @@ const createTextureRef = (key, frame = null) => (
     : { key, frame }
 );
 
+const createFrameTexture = (key, path) => ({ key, path });
+
+const createWalkFrames = (direction, fileNames) => (
+  fileNames.map((fileName, index) => createFrameTexture(
+    `ranger-${direction}-walk-${index + 1}`,
+    `/assets/Ranger Tala/${direction}/${fileName}`
+  ))
+);
+
 export const getTextureRefKey = (textureRef) => (
   typeof textureRef === "string"
     ? textureRef
@@ -16,90 +25,57 @@ export const getTextureRefFrame = (textureRef) => (
     : textureRef?.frame ?? null
 );
 
-export const RANGER_SPRITE_SHEETS = {
-  front: {
-    key: "ranger-front-sheet",
-    path: "/assets/Ranger Tala/front/rangerfront.png",
-    frameWidth: 256,
-    frameHeight: 283,
-    frameCount: 4,
-  },
-  back: {
-    key: "ranger-back-sheet",
-    path: "/assets/Ranger Tala/back/rangerback.png",
-    frameWidth: 258,
-    frameHeight: 249,
-    frameCount: 2,
-  },
-  left: {
-    key: "ranger-left-sheet",
-    path: "/assets/Ranger Tala/left/rangerleft.png",
-    frameWidth: 211,
-    frameHeight: 276,
-    frameCount: 3,
-  },
-  right: {
-    key: "ranger-right-sheet",
-    path: "/assets/Ranger Tala/right/rangerright.png",
-    frameWidth: 232,
-    frameHeight: 241,
-    frameCount: 3,
-  },
+export const RANGER_WALK_FRAME_TEXTURES = {
+  front: createWalkFrames("front", [
+    "rangerfront1.png",
+    "rangerfront2.png",
+    "rangerfront3.png",
+    "rangerfront4.png",
+  ]),
+  back: createWalkFrames("back", [
+    "rangerback1.png",
+    "rangerback2.png",
+    "rangerback3.png",
+  ]),
+  left: createWalkFrames("right", [
+    "rangerright1.png",
+    "rangerright2.png",
+  ]),
+  right: createWalkFrames("left", [
+    "rangerleft1.png",
+    "rangerleft2.png",
+  ]),
 };
 
 export const RANGER_FIRE_TEXTURES = {
-  back: {
-    key: "ranger-back-firing",
-    path: "/assets/Ranger Tala/back/backfire.png",
-  },
-  left: {
-    key: "ranger-left-firing",
-    path: "/assets/Ranger Tala/left/leftfire.png",
-  },
-  right: {
-    key: "ranger-right-firing",
-    path: "/assets/Ranger Tala/right/rightfire.png",
-  },
+  back: createFrameTexture("ranger-back-firing", "/assets/Ranger Tala/back/backfire.png"),
+  left: createFrameTexture("ranger-left-firing", "/assets/Ranger Tala/right/rightfire.png"),
+  right: createFrameTexture("ranger-right-firing", "/assets/Ranger Tala/left/leftfire.png"),
 };
 
-export const RANGER_WALK_TEXTURES = {
-  front: Array.from({ length: RANGER_SPRITE_SHEETS.front.frameCount }, (_, frame) =>
-    createTextureRef(RANGER_SPRITE_SHEETS.front.key, frame)
-  ),
-  back: Array.from({ length: RANGER_SPRITE_SHEETS.back.frameCount }, (_, frame) =>
-    createTextureRef(RANGER_SPRITE_SHEETS.back.key, frame)
-  ),
-  left: Array.from({ length: RANGER_SPRITE_SHEETS.left.frameCount }, (_, frame) =>
-    createTextureRef(RANGER_SPRITE_SHEETS.left.key, frame)
-  ),
-  right: Array.from({ length: RANGER_SPRITE_SHEETS.right.frameCount }, (_, frame) =>
-    createTextureRef(RANGER_SPRITE_SHEETS.right.key, frame)
-  ),
-};
+export const RANGER_WALK_TEXTURES = Object.fromEntries(
+  Object.entries(RANGER_WALK_FRAME_TEXTURES).map(([direction, textures]) => [
+    direction,
+    textures.map((texture) => createTextureRef(texture.key)),
+  ])
+);
 
 export const RANGER_FIRING_TEXTURES = {
   front: createTextureRef(
-    RANGER_SPRITE_SHEETS.front.key,
-    RANGER_SPRITE_SHEETS.front.frameCount - 1
+    RANGER_WALK_FRAME_TEXTURES.front[RANGER_WALK_FRAME_TEXTURES.front.length - 1]?.key
+      ?? RANGER_WALK_FRAME_TEXTURES.front[0]?.key
+      ?? "soldier-front-firing"
   ),
-  back: RANGER_FIRE_TEXTURES.back.key,
-  left: RANGER_FIRE_TEXTURES.left.key,
-  right: RANGER_FIRE_TEXTURES.right.key,
+  back: createTextureRef(RANGER_FIRE_TEXTURES.back.key),
+  left: createTextureRef(RANGER_FIRE_TEXTURES.left.key),
+  right: createTextureRef(RANGER_FIRE_TEXTURES.right.key),
 };
 
 export const RANGER_RENDER_TEXTURE_KEYS = [
-  RANGER_SPRITE_SHEETS.front.key,
-  RANGER_SPRITE_SHEETS.back.key,
-  RANGER_SPRITE_SHEETS.left.key,
-  RANGER_SPRITE_SHEETS.right.key,
-  RANGER_FIRE_TEXTURES.back.key,
-  RANGER_FIRE_TEXTURES.left.key,
-  RANGER_FIRE_TEXTURES.right.key,
+  ...Object.values(RANGER_WALK_FRAME_TEXTURES).flat().map((texture) => texture.key),
+  ...Object.values(RANGER_FIRE_TEXTURES).map((texture) => texture.key),
 ];
 
 export const RANGER_FRONT_PREVIEW = {
-  sprite: RANGER_SPRITE_SHEETS.front.path,
-  frameWidth: RANGER_SPRITE_SHEETS.front.frameWidth,
-  frameHeight: RANGER_SPRITE_SHEETS.front.frameHeight,
-  totalFrames: RANGER_SPRITE_SHEETS.front.frameCount,
+  frames: RANGER_WALK_FRAME_TEXTURES.front.map((texture) => texture.path),
 };

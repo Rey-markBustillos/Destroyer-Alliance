@@ -29,6 +29,9 @@ const phaserConfig = {
 			debug: false,
 		},
 	},
+	audio: {
+		noAudio: true,
+	},
 	scale: {
 		mode: Phaser.Scale.RESIZE,
 		autoCenter: Phaser.Scale.NO_CENTER,

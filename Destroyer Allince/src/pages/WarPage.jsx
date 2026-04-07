@@ -166,10 +166,7 @@ function DeploymentOptionCard({
       } min-[901px]:h-10 min-[901px]:w-10`}>
         {spritePreview ? (
           <SpriteAnimator
-            sprite={spritePreview.sprite}
-            frameWidth={spritePreview.frameWidth}
-            frameHeight={spritePreview.frameHeight}
-            totalFrames={spritePreview.totalFrames}
+            frames={spritePreview.frames}
             displayWidth={24}
             displayHeight={26}
             chrome={false}
@@ -731,7 +728,7 @@ export default function WarPage() {
     {
       type: "ranger",
       label: "Ranger Tala",
-      imageSrc: "/assets/Ranger Tala/front/rangerfront.png",
+      imageSrc: "/assets/Ranger Tala/front/rangerfront1.png",
       imageAlt: "Ranger Tala",
       spritePreview: RANGER_FRONT_PREVIEW,
       count: deploymentCounts.ranger,

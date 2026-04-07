@@ -41,6 +41,7 @@ const SOLDIER_DIRECTION_SWITCH_RATIO = 1.18;
 const RANGER_HIT_REACTION_MS = 180;
 const AIR_DEFENSE_TARGET_PRIORITY = ["rocket", "jet", "helicopter"];
 const DEPLOYABLE_MIN_ROW = MAP_ROWS - 3;
+const DEPLOY_HINT_COOLDOWN_MS = 450;
 const SOLDIER_WALK_TEXTURES = {
   front: ["soldier-front-walk-1", "soldier-front-walk-2"],
   back: ["soldier-back-walk-1", "soldier-back-walk-2"],
@@ -507,7 +508,12 @@ export default class BattleScene extends Phaser.Scene {
       lastPointerY: this.scale.height / 2,
     };
     this.lastDeployAt = 0;
+    this.lastDeployHintAt = 0;
     this.worldBounds = null;
+    this.deployZoneGuide = null;
+    this.deployZoneLabel = null;
+    this.enemyZoneGuide = null;
+    this.enemyZoneLabel = null;
 
     this.groundLayer = this.add.layer();
     this.ambientLayer = this.add.layer();
@@ -775,6 +781,10 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   setCameraZoomTarget(nextZoom, screenX = null, screenY = null, options = {}) {
+    if (!this.cameraController || !this.cameras?.main) {
+      return;
+    }
+
     const camera = this.cameras.main;
     const { snap = false } = options;
     const zoom = clamp(nextZoom, this.cameraController.minZoom, this.cameraController.maxZoom);
@@ -809,6 +819,10 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   zoomCameraBy(stepDelta = 0, options = {}) {
+    if (!this.cameraController || !this.cameras?.main) {
+      return;
+    }
+
     const nextZoom = clamp(
       this.cameraController.targetZoom + stepDelta,
       this.cameraController.minZoom,
@@ -988,6 +1002,14 @@ export default class BattleScene extends Phaser.Scene {
     this.raid?.defenders?.forEach(destroyDisplay);
     this.raid?.projectiles?.forEach((entry) => entry.display?.destroy?.());
     this.raid?.effects?.forEach((entry) => entry.display?.destroy?.());
+    this.deployZoneGuide?.destroy?.();
+    this.deployZoneGuide = null;
+    this.deployZoneLabel?.destroy?.();
+    this.deployZoneLabel = null;
+    this.enemyZoneGuide?.destroy?.();
+    this.enemyZoneGuide = null;
+    this.enemyZoneLabel?.destroy?.();
+    this.enemyZoneLabel = null;
     this.tweens.killAll();
     this.resetRaidState();
   }
@@ -1114,8 +1136,139 @@ export default class BattleScene extends Phaser.Scene {
 
     this.raid.structures.sort((left, right) => structureSortValue(left) - structureSortValue(right));
     this.raid.totalStructureHealth = this.raid.structures.reduce((sum, entry) => sum + entry.maxHealth, 0);
+    this.drawDeploymentGuides();
     this.centerCameraOnVillage();
     this.updateStructureHealthBars();
+  }
+
+  getStructureFootprint(structure) {
+    const buildingType = BUILDING_LIST.find((entry) => entry.id === structure?.type);
+
+    return {
+      rows: Math.max(1, Number(buildingType?.footprintRows ?? 1) || 1),
+      cols: Math.max(1, Number(buildingType?.footprintCols ?? 1) || 1),
+    };
+  }
+
+  isTileBlockedByEnemyStructure(row, col) {
+    return this.raid.structures.some((structure) => {
+      if (!structure || structure.destroyed) {
+        return false;
+      }
+
+      const footprint = this.getStructureFootprint(structure);
+
+      return (
+        row >= structure.row
+        && row < structure.row + footprint.rows
+        && col >= structure.col
+        && col < structure.col + footprint.cols
+      );
+    });
+  }
+
+  drawTileOverlay(graphics, row, col, fillColor, fillAlpha = 0.18, strokeColor = 0xffffff, strokeAlpha = 0.24) {
+    const world = this.gridToWorld(col, row);
+    const diamond = this.createDiamondPoints(world.x, world.y);
+    graphics.fillStyle(fillColor, fillAlpha);
+    graphics.fillPoints(diamond, true);
+    graphics.lineStyle(2, strokeColor, strokeAlpha);
+    graphics.strokePoints([...diamond, diamond[0]], false, false);
+  }
+
+  drawDeploymentGuides() {
+    this.deployZoneGuide?.destroy?.();
+    this.deployZoneGuide = null;
+    this.deployZoneLabel?.destroy?.();
+    this.deployZoneLabel = null;
+    this.enemyZoneGuide?.destroy?.();
+    this.enemyZoneGuide = null;
+    this.enemyZoneLabel?.destroy?.();
+    this.enemyZoneLabel = null;
+
+    if (!this.raid.target) {
+      return;
+    }
+
+    const enemyGuide = this.add.graphics();
+    const deployGuide = this.add.graphics();
+    enemyGuide.setDepth(120);
+    deployGuide.setDepth(121);
+    this.overlayLayer.add(enemyGuide);
+    this.overlayLayer.add(deployGuide);
+
+    const blockedTiles = [];
+    this.raid.structures.forEach((structure) => {
+      if (!structure || structure.destroyed) {
+        return;
+      }
+
+      const footprint = this.getStructureFootprint(structure);
+
+      for (let rowOffset = 0; rowOffset < footprint.rows; rowOffset += 1) {
+        for (let colOffset = 0; colOffset < footprint.cols; colOffset += 1) {
+          const tileRow = structure.row + rowOffset;
+          const tileCol = structure.col + colOffset;
+          blockedTiles.push({ row: tileRow, col: tileCol });
+          this.drawTileOverlay(enemyGuide, tileRow, tileCol, 0xef4444, 0.22, 0xfca5a5, 0.3);
+        }
+      }
+    });
+
+    for (let row = DEPLOYABLE_MIN_ROW; row < this.iso.rows; row += 1) {
+      for (let col = 0; col < this.iso.cols; col += 1) {
+        if (this.isTileBlockedByEnemyStructure(row, col)) {
+          continue;
+        }
+
+        this.drawTileOverlay(deployGuide, row, col, 0x22d3ee, 0.14, 0x67e8f9, 0.24);
+      }
+    }
+
+    const deployLabelPoint = this.gridToWorld((this.iso.cols - 1) / 2, DEPLOYABLE_MIN_ROW + 1);
+    const deployLabel = this.add.text(deployLabelPoint.x, deployLabelPoint.y + 22, "Deploy Zone", {
+      fontFamily: "Verdana",
+      fontSize: "14px",
+      fontStyle: "bold",
+      color: "#cffafe",
+      stroke: "#083344",
+      strokeThickness: 4,
+      align: "center",
+    });
+    deployLabel.setOrigin(0.5, 0.5);
+    deployLabel.setDepth(122);
+    this.overlayLayer.add(deployLabel);
+
+    const enemyLabelSource = blockedTiles.length
+      ? blockedTiles.reduce(
+        (sum, tile) => ({
+          row: sum.row + tile.row,
+          col: sum.col + tile.col,
+        }),
+        { row: 0, col: 0 }
+      )
+      : { row: DEPLOYABLE_MIN_ROW - 3, col: (this.iso.cols - 1) / 2 };
+    const enemyLabelPoint = this.gridToWorld(
+      blockedTiles.length ? enemyLabelSource.col / blockedTiles.length : enemyLabelSource.col,
+      blockedTiles.length ? enemyLabelSource.row / blockedTiles.length : enemyLabelSource.row
+    );
+    const enemyLabel = this.add.text(enemyLabelPoint.x, enemyLabelPoint.y - 38, "Enemy Base", {
+      fontFamily: "Verdana",
+      fontSize: "14px",
+      fontStyle: "bold",
+      color: "#fecaca",
+      stroke: "#450a0a",
+      strokeThickness: 4,
+      align: "center",
+    });
+    enemyLabel.setOrigin(0.5, 0.5);
+    enemyLabel.setDepth(122);
+    this.overlayLayer.add(enemyLabel);
+
+    this.enemyZoneGuide = enemyGuide;
+    this.enemyZoneLabel = enemyLabel;
+    this.deployZoneGuide = deployGuide;
+    this.deployZoneLabel = deployLabel;
   }
 
   spawnBaseDefenders() {
@@ -2038,9 +2191,11 @@ export default class BattleScene extends Phaser.Scene {
       return;
     }
 
-    const tile = this.getNearestDeployTile(worldX, worldY);
+    const deployTarget = this.getNearestDeployTile(worldX, worldY);
+    const tile = deployTarget?.tile ?? null;
 
     if (!tile) {
+      this.showDeployHint(deployTarget?.reason ?? "zone", worldX, worldY);
       return;
     }
 
@@ -2115,11 +2270,31 @@ export default class BattleScene extends Phaser.Scene {
     const rawTile = this.worldToGrid(worldX, worldY);
 
     if (!rawTile) {
-      return null;
+      return { tile: null, reason: "zone" };
     }
 
-    const baseRow = clamp(Number(rawTile.row ?? DEPLOYABLE_MIN_ROW), DEPLOYABLE_MIN_ROW, this.iso.rows - 1);
-    const baseCol = clamp(Number(rawTile.col ?? 0), 0, this.iso.cols - 1);
+    const rawRow = Math.round(Number(rawTile.row ?? -1));
+    const rawCol = Math.round(Number(rawTile.col ?? -1));
+
+    if (
+      rawRow < 0
+      || rawRow >= this.iso.rows
+      || rawCol < 0
+      || rawCol >= this.iso.cols
+    ) {
+      return { tile: null, reason: "zone" };
+    }
+
+    if (this.isTileBlockedByEnemyStructure(rawRow, rawCol)) {
+      return { tile: null, reason: "building" };
+    }
+
+    if (rawRow < DEPLOYABLE_MIN_ROW) {
+      return { tile: null, reason: "zone" };
+    }
+
+    const baseRow = clamp(rawRow, DEPLOYABLE_MIN_ROW, this.iso.rows - 1);
+    const baseCol = clamp(rawCol, 0, this.iso.cols - 1);
     const candidateOffsets = [
       { row: 0, col: 0 },
       { row: 0, col: -1 },
@@ -2135,17 +2310,38 @@ export default class BattleScene extends Phaser.Scene {
     for (const offset of candidateOffsets) {
       const row = clamp(baseRow + offset.row, DEPLOYABLE_MIN_ROW, this.iso.rows - 1);
       const col = clamp(baseCol + offset.col, 0, this.iso.cols - 1);
+
+      if (this.isTileBlockedByEnemyStructure(row, col)) {
+        continue;
+      }
+
       const world = this.gridToWorld(col + 0.2, row + 0.1);
       const occupied = this.raid.attackers.some(
         (entry) => !entry.destroyed && distanceBetween(entry.x, entry.y, world.x, world.y) < 22
       );
 
       if (!occupied) {
-        return { row, col };
+        return { tile: { row, col }, reason: null };
       }
     }
 
-    return null;
+    return { tile: null, reason: "occupied" };
+  }
+
+  showDeployHint(reason, worldX, worldY) {
+    if (this.time.now - this.lastDeployHintAt < DEPLOY_HINT_COOLDOWN_MS) {
+      return;
+    }
+
+    const message = reason === "building"
+      ? "Can't deploy on enemy buildings"
+      : reason === "occupied"
+        ? "That tile is occupied"
+        : "Deploy inside the blue zone";
+    const color = reason === "building" ? "#fecaca" : "#bae6fd";
+
+    this.lastDeployHintAt = this.time.now;
+    this.createFloatingText(message, worldX, worldY - 18, color);
   }
 
   deployAttackerUnit(type, col, row, unitOptions = null) {
@@ -2234,7 +2430,16 @@ export default class BattleScene extends Phaser.Scene {
     unit.isMoving = step > 0.01;
     unit.x += (dx / distance) * step;
     unit.y += (dy / distance) * step;
-    unit.direction = resolveStableDirection(unit.direction, dx, dy);
+    const nextDirection = unit.type === "ranger"
+      ? normalizeDirection(dx, dy)
+      : resolveStableDirection(unit.direction, dx, dy);
+
+    if (nextDirection !== unit.direction) {
+      unit.direction = nextDirection;
+      unit.walkFrameElapsed = 0;
+      unit.walkFrameIndex = 0;
+    }
+
     this.positionUnit(unit);
   }
 

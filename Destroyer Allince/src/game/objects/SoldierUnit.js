@@ -218,6 +218,21 @@ export default class SoldierUnit extends Phaser.GameObjects.Container {
       duration,
       ease: "Sine.easeInOut",
       onUpdate: () => {
+        const liveDirection = getDirectionFromDelta(point.x - this.x, point.y - this.y);
+
+        if (liveDirection !== this.currentDirection) {
+          this.currentDirection = liveDirection;
+          this.walkFrameIndex = 0;
+          const liveWalkTextures = this.getWalkTexturesForCurrentType()[liveDirection]
+            ?? this.getWalkTexturesForCurrentType().front;
+          applyTextureRef(this.sprite, liveWalkTextures[0]);
+          configureHdSprite(this.sprite, {
+            scene: this.scene,
+            maxWidth: 20,
+            maxHeight: 30,
+          });
+        }
+
         const { row, col } = this.scene.worldToGrid(this.x, this.y);
         this.setDepth(320 + row + col + 2);
       },

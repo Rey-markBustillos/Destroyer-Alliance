@@ -4,6 +4,7 @@ const FRAME_SPEED_MS = 120;
 
 export default function SpriteAnimator({
   sprite,
+  frames = [],
   frameWidth,
   frameHeight,
   totalFrames,
@@ -14,7 +15,11 @@ export default function SpriteAnimator({
   chrome = true,
   label = "sprite-animation",
 }) {
-  const safeFrames = Math.max(1, Number(totalFrames) || 1);
+  const resolvedFrames = Array.isArray(frames)
+    ? frames.filter((frame) => typeof frame === "string" && frame.trim().length > 0)
+    : [];
+  const usesFrameList = resolvedFrames.length > 0;
+  const safeFrames = Math.max(1, usesFrameList ? resolvedFrames.length : (Number(totalFrames) || 1));
   const safeFrameWidth = Math.max(1, Number(frameWidth) || 1);
   const safeFrameHeight = Math.max(1, Number(frameHeight) || 1);
   const safeDisplayWidth = Math.max(1, Number(displayWidth) || safeFrameWidth);
@@ -39,21 +44,32 @@ export default function SpriteAnimator({
 
   useEffect(() => {
     setFrameIndex(0);
-  }, [sprite, safeFrameWidth, safeFrameHeight, safeFrames]);
+  }, [sprite, safeFrameWidth, safeFrameHeight, safeFrames, usesFrameList ? resolvedFrames.join("|") : ""]);
 
-  const spriteStyle = {
-    width: `${safeDisplayWidth}px`,
-    height: `${safeDisplayHeight}px`,
-    backgroundImage: `url(${sprite})`,
-    backgroundRepeat: "no-repeat",
-    backgroundPosition: `-${frameIndex * safeFrameWidth * scaleX}px 0px`,
-    backgroundSize: `${safeFrameWidth * safeFrames * scaleX}px ${safeFrameHeight * scaleY}px`,
-    imageRendering: "pixelated",
-  };
-
-  const frameElement = (
+  const frameElement = usesFrameList ? (
+    <img
+      src={resolvedFrames[frameIndex] ?? resolvedFrames[0]}
+      alt={label}
+      draggable="false"
+      className={frameClassName}
+      style={{
+        width: `${safeDisplayWidth}px`,
+        height: `${safeDisplayHeight}px`,
+        objectFit: "contain",
+        imageRendering: "pixelated",
+      }}
+    />
+  ) : (
     <div
-      style={spriteStyle}
+      style={{
+        width: `${safeDisplayWidth}px`,
+        height: `${safeDisplayHeight}px`,
+        backgroundImage: `url(${sprite})`,
+        backgroundRepeat: "no-repeat",
+        backgroundPosition: `-${frameIndex * safeFrameWidth * scaleX}px 0px`,
+        backgroundSize: `${safeFrameWidth * safeFrames * scaleX}px ${safeFrameHeight * scaleY}px`,
+        imageRendering: "pixelated",
+      }}
       aria-label={label}
       className={frameClassName}
     />

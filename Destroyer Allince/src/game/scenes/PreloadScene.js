@@ -3,7 +3,7 @@ import soundManager from "../../services/soundManager";
 import {
   RANGER_FIRE_TEXTURES,
   RANGER_RENDER_TEXTURE_KEYS,
-  RANGER_SPRITE_SHEETS,
+  RANGER_WALK_FRAME_TEXTURES,
 } from "../utils/rangerSprites";
 
 const HD_TEXTURE_KEYS = [
@@ -69,13 +69,27 @@ const TEXTURE_FALLBACKS = {
   "machine-wood": ["command-center", "town"],
   "command-center": ["town", "machine-wood"],
   "command-center-level3": ["command-center", "town", "machine-wood"],
-  [RANGER_SPRITE_SHEETS.front.key]: ["soldier-front-walk-1"],
-  [RANGER_SPRITE_SHEETS.back.key]: ["soldier-back-walk-1"],
-  [RANGER_SPRITE_SHEETS.left.key]: ["soldier-left-walk-1"],
-  [RANGER_SPRITE_SHEETS.right.key]: ["soldier-right-walk-1"],
-  [RANGER_FIRE_TEXTURES.back.key]: [RANGER_SPRITE_SHEETS.back.key, "soldier-back-firing"],
-  [RANGER_FIRE_TEXTURES.left.key]: [RANGER_SPRITE_SHEETS.left.key, "soldier-left-firing"],
-  [RANGER_FIRE_TEXTURES.right.key]: [RANGER_SPRITE_SHEETS.right.key, "soldier-right-firing"],
+  ...Object.fromEntries(
+    Object.entries(RANGER_WALK_FRAME_TEXTURES).flatMap(([direction, textures]) =>
+      textures.map((texture, index) => {
+        const walkFallbackKey = ({
+          front: "soldier-front-walk-1",
+          back: "soldier-back-walk-1",
+          left: "soldier-left-walk-1",
+          right: "soldier-right-walk-1",
+        })[direction];
+        const previousFrameKey = index > 0 ? textures[index - 1]?.key : null;
+
+        return [
+          texture.key,
+          [previousFrameKey, textures[0]?.key, walkFallbackKey].filter(Boolean),
+        ];
+      })
+    )
+  ),
+  [RANGER_FIRE_TEXTURES.back.key]: [RANGER_WALK_FRAME_TEXTURES.back[0]?.key, "soldier-back-firing"].filter(Boolean),
+  [RANGER_FIRE_TEXTURES.left.key]: [RANGER_WALK_FRAME_TEXTURES.left[0]?.key, "soldier-left-firing"].filter(Boolean),
+  [RANGER_FIRE_TEXTURES.right.key]: [RANGER_WALK_FRAME_TEXTURES.right[0]?.key, "soldier-right-firing"].filter(Boolean),
 };
 
 export default class PreloadScene extends Phaser.Scene {
@@ -177,11 +191,8 @@ export default class PreloadScene extends Phaser.Scene {
     this.load.image("soldier-right-walk-1", "/assets/army/right/walk1.png");
     this.load.image("soldier-right-walk-2", "/assets/army/right/walk2.png");
     this.load.image("soldier-right-firing", "/assets/army/right/firing.png");
-    Object.values(RANGER_SPRITE_SHEETS).forEach((sheet) => {
-      this.load.spritesheet(sheet.key, sheet.path, {
-        frameWidth: sheet.frameWidth,
-        frameHeight: sheet.frameHeight,
-      });
+    Object.values(RANGER_WALK_FRAME_TEXTURES).flat().forEach((texture) => {
+      this.load.image(texture.key, texture.path);
     });
     Object.values(RANGER_FIRE_TEXTURES).forEach((texture) => {
       this.load.image(texture.key, texture.path);

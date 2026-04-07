@@ -1848,10 +1848,7 @@ export default function GamePage() {
                 >
                   <div className="flex h-14 items-center justify-center overflow-hidden rounded-xl bg-slate-900/70 p-1.5">
                     <SpriteAnimator
-                      sprite={RANGER_FRONT_PREVIEW.sprite}
-                      frameWidth={RANGER_FRONT_PREVIEW.frameWidth}
-                      frameHeight={RANGER_FRONT_PREVIEW.frameHeight}
-                      totalFrames={RANGER_FRONT_PREVIEW.totalFrames}
+                      frames={RANGER_FRONT_PREVIEW.frames}
                       displayWidth={50}
                       displayHeight={55}
                       chrome={false}
