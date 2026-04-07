@@ -282,29 +282,20 @@ export default function GamePage() {
     currentPlayerRank: null,
   });
   const [hireModalOpen, setHireModalOpen] = useState(false);
+  const [inventoryModalOpen, setInventoryModalOpen] = useState(false);
   const [removeSoldierCount, setRemoveSoldierCount] = useState("1");
   const [showWelcomeBack, setShowWelcomeBack] = useState(() => isWelcomeBackPending());
   const [musicStatus, setMusicStatus] = useState(() => soundManager.getStatus());
   const [musicPanelOpen, setMusicPanelOpen] = useState(false);
 
   useEffect(() => {
-    const clearAuth = ({ redirect = false } = {}) => {
+    const clearAuth = () => {
       if (reloginTriggeredRef.current) {
         return;
       }
 
       reloginTriggeredRef.current = true;
       clearSession();
-
-      if (redirect) {
-        navigate("/login", { replace: true });
-      }
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "hidden") {
-        clearAuth({ redirect: true });
-      }
     };
 
     const handlePageHide = () => {
@@ -313,14 +304,12 @@ export default function GamePage() {
 
     window.addEventListener("pagehide", handlePageHide);
     window.addEventListener("beforeunload", handlePageHide);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       window.removeEventListener("pagehide", handlePageHide);
       window.removeEventListener("beforeunload", handlePageHide);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [navigate]);
+  }, []);
 
   useEffect(() => {
     if (!musicPanelOpen) {
@@ -564,6 +553,7 @@ export default function GamePage() {
       const handleStructureSelectionCleared = () => {
         setSelectedBuilding(null);
         setHireModalOpen(false);
+        setInventoryModalOpen(false);
         setRemoveSoldierCount("1");
       };
 
@@ -573,6 +563,9 @@ export default function GamePage() {
         setRemoveSoldierCount("1");
         if (building?.type !== "tent" && building?.type !== "command-center") {
           setHireModalOpen(false);
+        }
+        if (building?.type !== "command-center") {
+          setInventoryModalOpen(false);
         }
       };
 
@@ -704,6 +697,7 @@ export default function GamePage() {
         setSelectedPlacedBuilding(null);
         setIsMoveMode(false);
         setHireModalOpen(false);
+        setInventoryModalOpen(false);
       };
 
       const handleStructureUpgradeStarted = ({
@@ -1101,12 +1095,14 @@ export default function GamePage() {
     setSelectedBuilding(null);
     setIsMoveMode(true);
     setHireModalOpen(false);
+    setInventoryModalOpen(false);
     gameScene.startMovingSelectedBuilding();
   };
 
   const handleCloseSelectedBuilding = () => {
     const gameScene = gameRef.current?.scene?.getScene("GameScene");
     setHireModalOpen(false);
+    setInventoryModalOpen(false);
     gameScene?.clearPlacedBuildingSelection?.();
   };
 
@@ -1141,7 +1137,18 @@ export default function GamePage() {
   };
 
   const handleHireSoldier = () => {
+    setInventoryModalOpen(false);
     setHireModalOpen(true);
+  };
+
+  const handleToggleInventoryModal = () => {
+    setHireModalOpen(false);
+    setInventoryModalOpen((open) => !open);
+  };
+
+  const swallowModalBackdropPointer = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
   };
 
   const handleConfirmHireSoldier = () => {
@@ -1447,12 +1454,12 @@ export default function GamePage() {
           >
             <div
               className="absolute inset-0 pointer-events-auto"
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-              }}
+              onClick={handleCloseSelectedBuilding}
             />
-            <div className="relative z-10 w-full max-w-sm rounded-[0.8rem] border border-white/10 bg-[rgba(20,30,40,0.85)] p-1.5 text-white shadow-[0_8px_20px_rgba(0,0,0,0.5)] backdrop-blur-[10px] sm:max-w-59">
+            <div
+              className="relative z-10 w-full max-w-sm rounded-[0.8rem] border border-white/10 bg-[rgba(20,30,40,0.85)] p-1.5 text-white shadow-[0_8px_20px_rgba(0,0,0,0.5)] backdrop-blur-[10px] sm:max-w-59"
+              onClick={(event) => event.stopPropagation()}
+            >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="text-[10px] uppercase tracking-[0.16em] text-slate-400">Selected</p>
@@ -1741,6 +1748,13 @@ export default function GamePage() {
                     </button>
                     <button
                       type="button"
+                      onClick={handleToggleInventoryModal}
+                      className="rounded-[9px] bg-cyan-500 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-white transition hover:-translate-y-0.5 hover:bg-cyan-400"
+                    >
+                      Inventory
+                    </button>
+                    <button
+                      type="button"
                       onClick={handleToggleSoldierSleep}
                       disabled={!canToggleSoldierSleep}
                       className="rounded-[9px] bg-sky-500 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-white transition hover:-translate-y-0.5 hover:bg-sky-400 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50"
@@ -1848,7 +1862,11 @@ export default function GamePage() {
         </Motion.div>
 
         {hireModalOpen && (selectedPlacedBuilding?.type === "tent" || selectedPlacedBuilding?.type === "command-center") ? (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/70 px-2 py-2 min-[901px]:px-4 min-[901px]:py-4 min-[901px]:bg-slate-950/55 min-[901px]:backdrop-blur-[3px]">
+          <div
+            className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/70 px-2 py-2 min-[901px]:px-4 min-[901px]:py-4 min-[901px]:bg-slate-950/55 min-[901px]:backdrop-blur-[3px]"
+            onPointerDown={swallowModalBackdropPointer}
+            onClick={swallowModalBackdropPointer}
+          >
             <div className="mobile-landscape-overlay-card mobile-game-recruit-modal mobile-safe-solid-panel w-full max-w-74 rounded-[1.15rem] border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(15,23,42,0.92)_100%)] p-2.5 text-white shadow-[0_20px_60px_rgba(2,6,23,0.28)] min-[901px]:rounded-[1.4rem] min-[901px]:bg-[linear-gradient(180deg,rgba(15,23,42,0.82)_0%,rgba(15,23,42,0.68)_100%)] min-[901px]:p-3 min-[901px]:backdrop-blur-xl">
               <div className="flex items-start justify-between gap-2 min-[901px]:gap-4">
                 <div>
@@ -1953,10 +1971,115 @@ export default function GamePage() {
           </div>
         ) : null}
 
+        {inventoryModalOpen && selectedPlacedBuilding?.type === "command-center" ? (
+          <div
+            className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/70 px-2 py-2 min-[901px]:px-4 min-[901px]:py-4 min-[901px]:bg-slate-950/55 min-[901px]:backdrop-blur-[3px]"
+            onPointerDown={swallowModalBackdropPointer}
+            onClick={(event) => {
+              swallowModalBackdropPointer(event);
+              setInventoryModalOpen(false);
+            }}
+          >
+            <div
+              className="mobile-landscape-overlay-card mobile-safe-solid-panel w-full max-w-80 rounded-[1.15rem] border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(15,23,42,0.92)_100%)] p-3 text-white shadow-[0_20px_60px_rgba(2,6,23,0.28)] min-[901px]:max-w-96 min-[901px]:rounded-[1.4rem] min-[901px]:p-4 min-[901px]:bg-[linear-gradient(180deg,rgba(15,23,42,0.82)_0%,rgba(15,23,42,0.68)_100%)] min-[901px]:backdrop-blur-xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-2 min-[901px]:gap-4">
+                <div>
+                  <p className="text-[0.56rem] uppercase tracking-[0.2em] text-cyan-300/70 min-[901px]:text-[0.68rem] min-[901px]:tracking-[0.3em]">
+                    Command Center
+                  </p>
+                  <h3 className="mt-1 text-base font-black min-[901px]:text-lg">Inventory</h3>
+                  <p className="mt-1 text-[11px] leading-tight text-slate-400 min-[901px]:text-xs">
+                    Current stored units and resources available in your base.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setInventoryModalOpen(false)}
+                  className="rounded-xl border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-slate-200 transition hover:bg-white/10 min-[901px]:rounded-2xl min-[901px]:px-3 min-[901px]:py-1.5 min-[901px]:text-xs"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="mt-3 grid grid-cols-2 gap-2 min-[901px]:gap-3">
+                <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-3">
+                  <div className="flex h-12 items-center justify-center rounded-xl bg-slate-900/60 p-2">
+                    <img
+                      src="/assets/energymachine.png"
+                      alt="Energy"
+                      className="h-full w-full object-contain"
+                      draggable="false"
+                    />
+                  </div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-200/80">Energy</p>
+                  <p className="mt-1 text-lg font-black text-white min-[901px]:text-xl">{formatCompactNumber(gameState.energy)}</p>
+                </div>
+                <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-3">
+                  <div className="flex h-12 items-center justify-center rounded-xl bg-slate-900/60 p-2">
+                    <img
+                      src="/assets/tank/tank1.png"
+                      alt="Tanks"
+                      className="h-full w-full object-contain"
+                      draggable="false"
+                    />
+                  </div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-200/80">Tanks</p>
+                  <p className="mt-1 text-lg font-black text-white min-[901px]:text-xl">{formatCompactNumber(gameState.totalTanks)}</p>
+                </div>
+                <div className="rounded-2xl border border-sky-400/20 bg-sky-400/10 p-3">
+                  <div className="flex h-12 items-center justify-center rounded-xl bg-slate-900/60 p-2">
+                    <img
+                      src="/assets/parkingchopper-Photoroom.png"
+                      alt="Helicopters"
+                      className="h-full w-full object-contain"
+                      draggable="false"
+                    />
+                  </div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-200/80">Helicopters</p>
+                  <p className="mt-1 text-lg font-black text-white min-[901px]:text-xl">{formatCompactNumber(gameState.totalHelicopters)}</p>
+                </div>
+                <div className="rounded-2xl border border-violet-400/20 bg-violet-400/10 p-3">
+                  <div className="flex h-12 items-center justify-center rounded-xl bg-slate-900/60 p-2">
+                    <img
+                      src="/assets/army/front/firing.png"
+                      alt="Troops"
+                      className="h-full w-full object-contain"
+                      draggable="false"
+                    />
+                  </div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-violet-200/80">Troops</p>
+                  <p className="mt-1 text-lg font-black text-white min-[901px]:text-xl">{formatCompactNumber(gameState.totalSoldiers)}</p>
+                </div>
+                <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 p-3">
+                  <div className="flex h-12 items-center justify-center overflow-hidden rounded-xl bg-slate-900/60 p-2">
+                    <SpriteAnimator
+                      frames={RANGER_FRONT_PREVIEW.frames}
+                      displayWidth={38}
+                      displayHeight={42}
+                      chrome={false}
+                      label="Total Army"
+                      className="flex h-full w-full items-center justify-center"
+                    />
+                  </div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-rose-200/80">Total Army</p>
+                  <p className="mt-1 text-lg font-black text-white min-[901px]:text-xl">{formatCompactNumber(gameState.totalArmyUnits)}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         {leaderboardOpen ? (
           <div
             className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/60 p-2 backdrop-blur-xs min-[901px]:p-4"
-            onClick={() => setLeaderboardOpen(false)}
+            onPointerDown={swallowModalBackdropPointer}
+            onClick={(event) => {
+              swallowModalBackdropPointer(event);
+              setLeaderboardOpen(false);
+            }}
           >
             <div
               className="mobile-landscape-overlay-card flex w-full flex-col rounded-2xl border border-white/15 bg-[linear-gradient(180deg,rgba(15,23,42,0.88)_0%,rgba(15,23,42,0.74)_100%)] p-3 text-white shadow-[0_20px_60px_rgba(2,6,23,0.34)] min-[901px]:max-w-120 min-[901px]:rounded-[1.4rem] min-[901px]:p-4"
@@ -2099,7 +2222,11 @@ export default function GamePage() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 18 }}
             className="absolute inset-0 z-10 flex items-end justify-center p-2 min-[901px]:p-4"
-            onClick={() => setShopOpen(false)}
+            onPointerDown={swallowModalBackdropPointer}
+            onClick={(event) => {
+              swallowModalBackdropPointer(event);
+              setShopOpen(false);
+            }}
           >
             <div className="w-full" onClick={(event) => event.stopPropagation()}>
               <BuildingShop

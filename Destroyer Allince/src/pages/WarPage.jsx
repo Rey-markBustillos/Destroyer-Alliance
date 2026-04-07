@@ -349,23 +349,13 @@ export default function WarPage() {
   });
 
   useEffect(() => {
-    const clearAuth = ({ redirect = false } = {}) => {
+    const clearAuth = () => {
       if (reloginTriggeredRef.current) {
         return;
       }
 
       reloginTriggeredRef.current = true;
       clearSession();
-
-      if (redirect) {
-        navigate("/login", { replace: true });
-      }
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "hidden") {
-        clearAuth({ redirect: true });
-      }
     };
 
     const handlePageHide = () => {
@@ -374,14 +364,12 @@ export default function WarPage() {
 
     window.addEventListener("pagehide", handlePageHide);
     window.addEventListener("beforeunload", handlePageHide);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       window.removeEventListener("pagehide", handlePageHide);
       window.removeEventListener("beforeunload", handlePageHide);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [navigate]);
+  }, []);
 
   useEffect(() => {
     targetRef.current = target;
