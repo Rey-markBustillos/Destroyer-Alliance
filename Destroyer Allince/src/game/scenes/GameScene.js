@@ -33,15 +33,16 @@ const CAMERA_FOCUS_SCROLL_LERP = 6;
 const CAMERA_FOCUS_ZOOM_LERP = 5;
 const CAMERA_FOCUS_TRANSITION_MS = 420;
 const CAMERA_FOCUS_OFFSET_Y = TILE_HEIGHT * 0.18;
-const CAMERA_FIT_PADDING = 24;
+const CAMERA_FIT_PADDING = 0;
 const CAMERA_SCROLL_SAFE_INSET_LEFT = 0;
 const CAMERA_SCROLL_SAFE_INSET_RIGHT = 72;
 const CAMERA_EXTRA_LEFT_SCROLL = 84;
 const CAMERA_SCROLL_SAFE_INSET_TOP = 40;
 const CAMERA_SCROLL_SAFE_INSET_BOTTOM = 120;
-const MOBILE_CAMERA_FIT_ZOOM_BIAS = 0.94;
-const TABLET_CAMERA_FIT_ZOOM_BIAS = 0.98;
+const MOBILE_CAMERA_FIT_ZOOM_BIAS = 1;
+const TABLET_CAMERA_FIT_ZOOM_BIAS = 1;
 const DESKTOP_CAMERA_FIT_ZOOM_BIAS = 1;
+const MAP_BACKGROUND_COLOR = "#8c8169";
 const WOOD_MACHINE_TICK_MS = 180000;
 const ENERGY_MACHINE_TICK_MS = 180000;
 const WOOD_MACHINE_GOLD_PER_TICK = 10;
@@ -227,7 +228,7 @@ const getSixteenBySixteenViewZoom = (scene) => {
   const fitBoundsHeight = Math.max(1, Number(fitBounds.height ?? (16 * TILE_HEIGHT)) || (16 * TILE_HEIGHT));
   const safeViewportWidth = Math.max(1, viewportWidth - (CAMERA_FIT_PADDING * 2));
   const safeViewportHeight = Math.max(1, viewportHeight - (CAMERA_FIT_PADDING * 2));
-  const fitZoom = Math.min(
+  const fitZoom = Math.max(
     safeViewportWidth / fitBoundsWidth,
     safeViewportHeight / fitBoundsHeight
   );
@@ -815,7 +816,7 @@ export default class GameScene extends Phaser.Scene {
 
   createCamera() {
     const camera = this.cameras.main;
-    camera.setBackgroundColor("#020617");
+    camera.setBackgroundColor(MAP_BACKGROUND_COLOR);
     camera.roundPixels = false;
     this.refreshCameraMetrics({ centerCamera: true, snapZoom: true });
   }

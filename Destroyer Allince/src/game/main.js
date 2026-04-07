@@ -16,7 +16,7 @@ const phaserConfig = {
 	height: GAME_HEIGHT,
 	parent: undefined,
 	transparent: false,
-	backgroundColor: "#020617",
+	backgroundColor: "#8c8169",
 	antialias: true,
 	antialiasGL: true,
 	pixelArt: GAME_RENDER_CONFIG.pixelArt,

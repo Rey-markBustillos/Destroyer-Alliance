@@ -20,10 +20,11 @@ const TILE_HEIGHT = 32;
 const MAP_ROWS = 12;
 const MAP_COLS = 12;
 const INITIAL_ZOOM = 0.9;
-const CAMERA_FIT_PADDING = 24;
-const MOBILE_CAMERA_FIT_ZOOM_BIAS = 0.94;
-const TABLET_CAMERA_FIT_ZOOM_BIAS = 0.98;
+const CAMERA_FIT_PADDING = 0;
+const MOBILE_CAMERA_FIT_ZOOM_BIAS = 1;
+const TABLET_CAMERA_FIT_ZOOM_BIAS = 1;
 const DESKTOP_CAMERA_FIT_ZOOM_BIAS = 1;
+const MAP_BACKGROUND_COLOR = "#8c8169";
 const BATTLE_CAMERA_PADDING_X = 220;
 const BATTLE_CAMERA_PADDING_Y = 220;
 const RAID_PREVIEW_READY_DELAY_MS = 1800;
@@ -108,7 +109,7 @@ const getBattleCameraFitZoom = (scene, bounds) => {
   const safeViewportHeight = Math.max(1, viewportHeight - (CAMERA_FIT_PADDING * 2));
   const fitWidth = Math.max(1, Number(bounds?.width ?? 1) || 1);
   const fitHeight = Math.max(1, Number(bounds?.height ?? 1) || 1);
-  const fitZoom = Math.min(
+  const fitZoom = Math.max(
     safeViewportWidth / fitWidth,
     safeViewportHeight / fitHeight
   );
@@ -776,7 +777,7 @@ export default class BattleScene extends Phaser.Scene {
 
   createCamera() {
     const camera = this.cameras.main;
-    camera.setBackgroundColor("#020617");
+    camera.setBackgroundColor(MAP_BACKGROUND_COLOR);
     camera.setBounds(
       this.worldBounds.minX,
       this.worldBounds.minY,
