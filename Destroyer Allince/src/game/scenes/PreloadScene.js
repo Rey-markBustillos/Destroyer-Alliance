@@ -13,6 +13,7 @@ const HD_TEXTURE_KEYS = [
   "energy-machine",
   "energy-machine-animated",
   "command-center",
+  "command-center-level3",
   "skyport-shop",
   "skyport-empty",
   "skyport-bought",
@@ -67,6 +68,7 @@ const TEXTURE_FALLBACKS = {
   "energy-machine": ["machine-wood", "command-center", "town"],
   "machine-wood": ["command-center", "town"],
   "command-center": ["town", "machine-wood"],
+  "command-center-level3": ["command-center", "town", "machine-wood"],
   [RANGER_SPRITE_SHEETS.front.key]: ["soldier-front-walk-1"],
   [RANGER_SPRITE_SHEETS.back.key]: ["soldier-back-walk-1"],
   [RANGER_SPRITE_SHEETS.left.key]: ["soldier-left-walk-1"],
@@ -140,7 +142,8 @@ export default class PreloadScene extends Phaser.Scene {
       frameWidth: 512,
       frameHeight: 516,
     });
-    this.load.image("command-center", "/assets/command center.png");
+    this.load.image("command-center", "/assets/Buildings/command center.png");
+    this.load.image("command-center-level3", "/assets/Buildings/command center-level3.png");
     this.load.image("skyport-shop", "/assets/chopper/skychop.png");
     this.load.image("skyport-empty", "/assets/chopper/skychop.png");
     this.load.image("skyport-bought", "/assets/chopper/skychop2.png");

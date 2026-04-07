@@ -257,6 +257,9 @@ const resolveStableDirection = (currentDirection, dx, dy) => {
 
   return currentDirection ?? normalizeDirection(dx, dy);
 };
+const LEVEL_THREE_STRUCTURE_HP_MULTIPLIER = 1.2;
+const LEVEL_THREE_AIR_DEFENSE_HP_BONUS = 20;
+const LEVEL_THREE_AIR_DEFENSE_DAMAGE_BONUS = 5;
 
 const resolveCombatDirection = (currentDirection, dx, dy) => {
   const absX = Math.abs(dx);
@@ -374,18 +377,46 @@ const getAirDefenseTargetPriority = (target) => {
 
 const getAirDefenseProfile = (level = 1) => {
   const resolvedLevel = Math.max(1, Number(level ?? 1) || 1);
+  const missileDamage = 56 + ((resolvedLevel - 1) * 18);
+  const gunDamage = 9 + ((resolvedLevel - 1) * 4);
 
   return {
     detectionRadius: 340 + ((resolvedLevel - 1) * 60),
     missileRange: 250 + ((resolvedLevel - 1) * 40),
     gunRange: 150 + ((resolvedLevel - 1) * 24),
-    missileDamage: 56 + ((resolvedLevel - 1) * 18),
-    gunDamage: 9 + ((resolvedLevel - 1) * 4),
+    missileDamage: resolvedLevel >= 3
+      ? missileDamage + LEVEL_THREE_AIR_DEFENSE_DAMAGE_BONUS
+      : missileDamage,
+    gunDamage: resolvedLevel >= 3
+      ? gunDamage + LEVEL_THREE_AIR_DEFENSE_DAMAGE_BONUS
+      : gunDamage,
     missileCooldownMs: 10000,
     gunCooldownMs: Math.max(140, 220 - ((resolvedLevel - 1) * 40)),
     gunHeatLimit: 7 + ((resolvedLevel - 1) * 2),
     missileLaunchers: 1 + (resolvedLevel >= 2 ? 1 : 0),
   };
+};
+
+const getLeveledStructureHealth = (baseHealth, level, type = "") => {
+  const resolvedLevel = Math.max(1, Number(level ?? 1) || 1);
+
+  if (resolvedLevel <= 1) {
+    return baseHealth;
+  }
+
+  const levelTwoHealth = baseHealth + 80;
+
+  if (resolvedLevel === 2) {
+    return levelTwoHealth;
+  }
+
+  let levelThreeHealth = Math.round(levelTwoHealth * LEVEL_THREE_STRUCTURE_HP_MULTIPLIER);
+
+  if (type === "air-defense") {
+    levelThreeHealth += LEVEL_THREE_AIR_DEFENSE_HP_BONUS;
+  }
+
+  return levelThreeHealth;
 };
 
 const getVehicleStatsForLevel = (type, level = 1) => {
@@ -2732,6 +2763,6 @@ export default class BattleScene extends Phaser.Scene {
       tent: 290,
     }[type] ?? 160;
 
-    return base + Math.max(0, Number(level ?? 1) - 1) * 80;
+    return getLeveledStructureHealth(base, level, type);
   }
 }

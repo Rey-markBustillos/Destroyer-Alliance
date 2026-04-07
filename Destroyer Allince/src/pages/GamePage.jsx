@@ -1207,8 +1207,8 @@ export default function GamePage() {
     : 0;
   const upgradeCostLabel = `${formatCompactNumber(upgradeCost)} gold`;
   const upgradeCap = selectedPlacedBuilding?.type === "command-center"
-    ? 2
-    : Math.min(2, gameState.townHallLevel ?? 1);
+    ? 3
+    : Math.min(3, gameState.townHallLevel ?? 1);
   const blockedByTownHall = selectedPlacedBuilding
     && selectedPlacedBuilding.type !== "command-center"
     && (selectedPlacedBuilding.level ?? 1) >= upgradeCap;

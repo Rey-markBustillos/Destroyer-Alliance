@@ -20,6 +20,8 @@ const lighten = (hex, amount = 18) => {
 const BUILDING_TEXTURE_FALLBACKS = ["command-center", "machine-wood", "town"];
 const ENERGY_MACHINE_TEXTURE_KEY = "energy-machine-animated";
 const ENERGY_MACHINE_ANIM_KEY = "energy-machine-spin";
+const COMMAND_CENTER_BASE_TEXTURE_KEY = "command-center";
+const COMMAND_CENTER_LEVEL3_TEXTURE_KEY = "command-center-level3";
 
 const getBestTextureKey = (scene, preferredKey, fallbackKeys = BUILDING_TEXTURE_FALLBACKS) => {
   if (preferredKey && scene.textures.exists(preferredKey)) {
@@ -105,6 +107,7 @@ export default class Building extends Phaser.GameObjects.Container {
     this.resourceLabel = null;
     this.resourceIcon = null;
     this.levelLabel = null;
+    this.commandCenterSprite = null;
     this.skyportSprite = null;
     this.battleTankSprite = null;
     this.battleHealthLabel = null;
@@ -228,8 +231,8 @@ export default class Building extends Phaser.GameObjects.Container {
         this.visualContainer.add(this.resourceIcon);
       }
     } else if (buildingType.id === "command-center") {
-      addQualitySprite({
-        textureKey: "command-center",
+      this.commandCenterSprite = addQualitySprite({
+        textureKey: COMMAND_CENTER_BASE_TEXTURE_KEY,
         y: footprintHeight / 2 + 18,
         maxWidth: footprintWidth * 1.24,
         maxHeight: footprintWidth * 1.28,
@@ -539,6 +542,8 @@ export default class Building extends Phaser.GameObjects.Container {
     if (this.levelLabel) {
       this.levelLabel.setText(`Lv.${this.level}`);
     }
+
+    this.updateCommandCenterTexture();
   }
 
   setUpgradeState(isUpgrading = false, upgradeCompleteAt = null) {
@@ -620,6 +625,25 @@ export default class Building extends Phaser.GameObjects.Container {
     }
 
     this.stopSleepEffect();
+  }
+
+  updateCommandCenterTexture() {
+    if (this.buildingType?.id !== "command-center" || !this.commandCenterSprite) {
+      return;
+    }
+
+    const preferredTextureKey = this.level >= 3
+      ? COMMAND_CENTER_LEVEL3_TEXTURE_KEY
+      : COMMAND_CENTER_BASE_TEXTURE_KEY;
+    const nextTextureKey = getBestTextureKey(
+      this.scene,
+      preferredTextureKey,
+      [COMMAND_CENTER_BASE_TEXTURE_KEY, ...BUILDING_TEXTURE_FALLBACKS]
+    );
+
+    if (nextTextureKey) {
+      this.commandCenterSprite.setTexture(nextTextureKey);
+    }
   }
 
   setSkyportState(hasChopper = false) {

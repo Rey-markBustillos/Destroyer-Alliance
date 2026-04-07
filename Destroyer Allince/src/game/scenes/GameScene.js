@@ -52,7 +52,12 @@ const TOWN_HALL_GOLD_PER_TICK = 100;
 const TOWN_HALL_MAX_GOLD = 500;
 const WOOD_MACHINE_LEVEL_TWO_GOLD_PER_TICK = 20;
 const BUILDING_UPGRADE_DURATION_MS = 1800000;
-const BUILDING_MAX_LEVEL = 2;
+const BUILDING_MAX_LEVEL = 3;
+const LEVEL_THREE_STRUCTURE_HP_MULTIPLIER = 1.2;
+const LEVEL_THREE_RESOURCE_STORAGE_MULTIPLIER = 1.2;
+const LEVEL_THREE_GOLD_PER_TICK_BONUS = 20;
+const LEVEL_THREE_AIR_DEFENSE_HP_BONUS = 20;
+const LEVEL_THREE_AIR_DEFENSE_DAMAGE_BONUS = 5;
 const WOOD_MACHINE_BASE_LIMIT = 4;
 const WOOD_MACHINE_LIMIT_PER_TOWN_HALL_LEVEL = 2;
 const ENERGY_MACHINE_BASE_LIMIT = 1;
@@ -2850,6 +2855,28 @@ export default class GameScene extends Phaser.Scene {
     };
   }
 
+  getLeveledStructureHealth(baseHealth, level, type = "") {
+    const resolvedLevel = Math.max(1, Number(level ?? 1) || 1);
+
+    if (resolvedLevel <= 1) {
+      return baseHealth;
+    }
+
+    const levelTwoHealth = baseHealth + 80;
+
+    if (resolvedLevel === 2) {
+      return levelTwoHealth;
+    }
+
+    let levelThreeHealth = Math.round(levelTwoHealth * LEVEL_THREE_STRUCTURE_HP_MULTIPLIER);
+
+    if (type === "air-defense") {
+      levelThreeHealth += LEVEL_THREE_AIR_DEFENSE_HP_BONUS;
+    }
+
+    return levelThreeHealth;
+  }
+
   getStructureMaxHealth(building) {
     const type = building?.buildingType?.id ?? building?.type;
     const level = Math.max(1, Number(building?.level ?? 1) || 1);
@@ -2863,7 +2890,7 @@ export default class GameScene extends Phaser.Scene {
       tent: 290,
     }[type] ?? 160;
 
-    return base + ((level - 1) * 80);
+    return this.getLeveledStructureHealth(base, level, type);
   }
 
   findPlacedBuilding(target = null) {
@@ -3338,7 +3365,6 @@ export default class GameScene extends Phaser.Scene {
       ...this.getBuildingPersistenceState(building),
     });
     this.events.emit("placed-building-selected", this.getPlacedBuildingSelectionPayload(building));
-    this.focusCameraOnBuilding(building);
     this.drawSelectedBuildingIndicator(building);
 
   }
@@ -3674,15 +3700,27 @@ export default class GameScene extends Phaser.Scene {
   }
 
   getBuildingGoldPerTick(building) {
+    const level = Math.max(1, Number(building?.level ?? 1) || 1);
+
     if (this.isWoodMachine(building)) {
-      return (building?.level ?? 1) >= 2
-        ? WOOD_MACHINE_GOLD_PER_TICK * 2
+      if (level >= 3) {
+        return WOOD_MACHINE_LEVEL_TWO_GOLD_PER_TICK + LEVEL_THREE_GOLD_PER_TICK_BONUS;
+      }
+
+      return level >= 2
+        ? WOOD_MACHINE_LEVEL_TWO_GOLD_PER_TICK
         : WOOD_MACHINE_GOLD_PER_TICK;
     }
 
     if (this.isTownHall(building)) {
-      return (building?.level ?? 1) >= 2
-        ? TOWN_HALL_GOLD_PER_TICK * 2
+      const levelTwoGoldPerTick = TOWN_HALL_GOLD_PER_TICK * 2;
+
+      if (level >= 3) {
+        return levelTwoGoldPerTick + LEVEL_THREE_GOLD_PER_TICK_BONUS;
+      }
+
+      return level >= 2
+        ? levelTwoGoldPerTick
         : TOWN_HALL_GOLD_PER_TICK;
     }
 
@@ -3690,9 +3728,17 @@ export default class GameScene extends Phaser.Scene {
   }
 
   getBuildingMaxGold(building) {
+    const level = Math.max(1, Number(building?.level ?? 1) || 1);
+
     if (this.isWoodMachine(building)) {
-      return (building?.level ?? 1) >= 2
-        ? WOOD_MACHINE_MAX_GOLD * 2
+      const levelTwoMaxGold = WOOD_MACHINE_MAX_GOLD * 2;
+
+      if (level >= 3) {
+        return Math.round(levelTwoMaxGold * LEVEL_THREE_RESOURCE_STORAGE_MULTIPLIER);
+      }
+
+      return level >= 2
+        ? levelTwoMaxGold
         : WOOD_MACHINE_MAX_GOLD;
     }
 
@@ -3701,8 +3747,14 @@ export default class GameScene extends Phaser.Scene {
     }
 
     if (this.isTownHall(building)) {
-      return (building?.level ?? 1) >= 2
-        ? TOWN_HALL_MAX_GOLD * 2
+      const levelTwoMaxGold = TOWN_HALL_MAX_GOLD * 2;
+
+      if (level >= 3) {
+        return Math.round(levelTwoMaxGold * LEVEL_THREE_RESOURCE_STORAGE_MULTIPLIER);
+      }
+
+      return level >= 2
+        ? levelTwoMaxGold
         : TOWN_HALL_MAX_GOLD;
     }
 
