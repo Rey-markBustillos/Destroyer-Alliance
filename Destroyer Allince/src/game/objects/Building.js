@@ -22,6 +22,20 @@ const ENERGY_MACHINE_TEXTURE_KEY = "energy-machine-animated";
 const ENERGY_MACHINE_ANIM_KEY = "energy-machine-spin";
 const COMMAND_CENTER_BASE_TEXTURE_KEY = "command-center";
 const COMMAND_CENTER_LEVEL3_TEXTURE_KEY = "command-center-level3";
+const BUILDING_TEXTURE_CROPS = {
+  [COMMAND_CENTER_BASE_TEXTURE_KEY]: { x: 11, y: 4, width: 124, height: 129 },
+  [COMMAND_CENTER_LEVEL3_TEXTURE_KEY]: { x: 82, y: 0, width: 896, height: 969 },
+  town: { x: 48, y: 22, width: 412, height: 380 },
+  "skyport-shop": { x: 0, y: 2, width: 197, height: 143 },
+  "skyport-empty": { x: 0, y: 2, width: 197, height: 143 },
+  "skyport-bought": { x: 4, y: 1, width: 196, height: 145 },
+  "tank-shop": { x: 7, y: 77, width: 485, height: 373 },
+  "tank-owned": { x: 7, y: 77, width: 485, height: 373 },
+  "air-defense": { x: 53, y: 38, width: 394, height: 432 },
+  tent: { x: 18, y: 165, width: 989, height: 762 },
+  "machine-wood": { x: 64, y: 0, width: 513, height: 364 },
+  "energy-machine": { x: 0, y: 50, width: 512, height: 430 },
+};
 
 const getBestTextureKey = (scene, preferredKey, fallbackKeys = BUILDING_TEXTURE_FALLBACKS) => {
   if (preferredKey && scene.textures.exists(preferredKey)) {
@@ -96,6 +110,32 @@ const getLevelLabelOffsetY = (buildingTypeId, roofY) => {
   }
 };
 
+const applyTextureLayout = (scene, sprite, textureKey, { crop = null, maxWidth, maxHeight }) => {
+  sprite.setTexture(textureKey);
+
+  if (crop) {
+    sprite.setCrop(crop.x, crop.y, crop.width, crop.height);
+    configureHdSprite(sprite, {
+      scene,
+      maxWidth,
+      maxHeight,
+      sourceWidth: crop.width,
+      sourceHeight: crop.height,
+    });
+    return;
+  }
+
+  sprite.setCrop();
+  const sourceSize = getTextureSourceSize(scene, textureKey);
+  configureHdSprite(sprite, {
+    scene,
+    maxWidth,
+    maxHeight,
+    sourceWidth: sourceSize.width,
+    sourceHeight: sourceSize.height,
+  });
+};
+
 export default class Building extends Phaser.GameObjects.Container {
   constructor(scene, x, y, buildingType, options = {}) {
     super(scene, x, y);
@@ -132,6 +172,7 @@ export default class Building extends Phaser.GameObjects.Container {
     const footprintHeight = scene.iso.tileHeight * this.footprintRows;
     const tileHalfW = scene.iso.tileWidth / 2;
     const tileHalfH = scene.iso.tileHeight / 2;
+    const groundY = footprintHeight / 2 + 4;
 
     const baseWidth = scene.iso.tileWidth * (1.02 + (this.footprintCols - 1) * 0.78);
     const baseHeight = scene.iso.tileHeight * (0.78 + (this.footprintRows - 1) * 0.42);
@@ -144,7 +185,7 @@ export default class Building extends Phaser.GameObjects.Container {
     const addSpriteShadow = (
       width = footprintWidth * 0.8,
       height = footprintHeight * 0.48,
-      yOffset = footprintHeight / 2 + 5
+      yOffset = groundY
     ) => {
       const shadow = createSoftShadow(scene, {
         x: 0,
@@ -178,26 +219,11 @@ export default class Building extends Phaser.GameObjects.Container {
       const sprite = scene.add.image(spriteX, spriteY, resolvedTextureKey);
       sprite.setOrigin(0.5, 1);
       sprite.setAlpha(0.995);
-
-      if (crop) {
-        sprite.setCrop(crop.x, crop.y, crop.width, crop.height);
-        configureHdSprite(sprite, {
-          scene,
-          maxWidth,
-          maxHeight,
-          sourceWidth: crop.width,
-          sourceHeight: crop.height,
-        });
-      } else {
-        const sourceSize = getTextureSourceSize(scene, resolvedTextureKey);
-        configureHdSprite(sprite, {
-          scene,
-          maxWidth,
-          maxHeight,
-          sourceWidth: sourceSize.width,
-          sourceHeight: sourceSize.height,
-        });
-      }
+      applyTextureLayout(scene, sprite, resolvedTextureKey, {
+        crop: crop ?? BUILDING_TEXTURE_CROPS[resolvedTextureKey] ?? null,
+        maxWidth,
+        maxHeight,
+      });
 
       this.visualContainer.add(sprite);
       return sprite;
@@ -205,13 +231,12 @@ export default class Building extends Phaser.GameObjects.Container {
     if (buildingType.id === "town-hall") {
       addQualitySprite({
         textureKey: "town",
-        y: 34,
+        y: groundY,
         maxWidth: footprintWidth * 1.2,
         maxHeight: footprintWidth * 1.55,
-        crop: { x: 48, y: 22, width: 412, height: 380 },
         shadowWidth: footprintWidth * 0.9,
         shadowHeight: footprintHeight * 0.66,
-        shadowY: footprintHeight / 2 + 7,
+        shadowY: groundY + 2,
       });
 
       if (scene.textures.exists("goldcoin")) {
@@ -231,12 +256,15 @@ export default class Building extends Phaser.GameObjects.Container {
         this.visualContainer.add(this.resourceIcon);
       }
     } else if (buildingType.id === "command-center") {
-      this.commandCenterSprite = addQualitySprite({
-        textureKey: COMMAND_CENTER_BASE_TEXTURE_KEY,
-        y: footprintHeight / 2 + 18,
+      this.commandCenterSpriteLayout = {
         maxWidth: footprintWidth * 1.24,
         maxHeight: footprintWidth * 1.28,
-        crop: { x: 11, y: 4, width: 124, height: 129 },
+      };
+      this.commandCenterSprite = addQualitySprite({
+        textureKey: COMMAND_CENTER_BASE_TEXTURE_KEY,
+        y: groundY,
+        maxWidth: this.commandCenterSpriteLayout.maxWidth,
+        maxHeight: this.commandCenterSpriteLayout.maxHeight,
         shadowWidth: footprintWidth * 0.76,
         shadowHeight: footprintHeight * 0.5,
       });
@@ -261,7 +289,7 @@ export default class Building extends Phaser.GameObjects.Container {
       const skyportSprite = addQualitySprite({
         textureKey: "skyport-empty",
         fallbackKeys: ["skyport-shop", ...BUILDING_TEXTURE_FALLBACKS],
-        y: footprintHeight / 2 + 20,
+        y: groundY + 2,
         maxWidth: footprintWidth * 0.88,
         maxHeight: footprintWidth * 0.88,
         shadowWidth: footprintWidth * 0.84,
@@ -272,41 +300,40 @@ export default class Building extends Phaser.GameObjects.Container {
       const tankSprite = addQualitySprite({
         textureKey: "tank-owned",
         fallbackKeys: ["tank-shop", ...BUILDING_TEXTURE_FALLBACKS],
-        y: footprintHeight / 2 + 28,
+        y: groundY + 4,
         maxWidth: footprintWidth * 1.56,
         maxHeight: footprintWidth * 1.24,
         shadowWidth: footprintWidth * 1.14,
         shadowHeight: footprintHeight * 0.68,
-        shadowY: footprintHeight / 2 + 7,
+        shadowY: groundY + 1,
       });
       this.battleTankSprite = tankSprite;
     } else if (buildingType.id === "air-defense") {
       addQualitySprite({
         textureKey: "air-defense",
-        y: footprintHeight / 2 + 24,
+        y: groundY + 2,
         maxWidth: footprintWidth * 1.42,
         maxHeight: footprintWidth * 1.38,
         shadowWidth: footprintWidth * 1.02,
         shadowHeight: footprintHeight * 0.62,
-        shadowY: footprintHeight / 2 + 7,
+        shadowY: groundY + 1,
       });
     } else if (buildingType.id === "tent") {
       addQualitySprite({
         textureKey: "tent",
-        y: footprintHeight / 2 + 18,
+        y: groundY,
         maxWidth: footprintWidth * 1.08,
         maxHeight: footprintWidth * 0.84,
         shadowWidth: footprintWidth * 0.82,
         shadowHeight: footprintHeight * 0.46,
-        shadowY: footprintHeight / 2 + 6,
+        shadowY: groundY,
       });
     } else if (buildingType.id === "wood-machine") {
       const machineSprite = addQualitySprite({
         textureKey: "machine-wood",
-        y: footprintHeight / 2 + 16,
+        y: groundY,
         maxWidth: footprintWidth * 0.94,
         maxHeight: footprintWidth * 0.68,
-        crop: { x: 64, y: 0, width: 513, height: 364 },
       });
       const machineHeight = machineSprite?.displayHeight ?? Math.max(34, footprintWidth * 0.84);
 
@@ -322,7 +349,7 @@ export default class Building extends Phaser.GameObjects.Container {
       this.resourceLabel.setOrigin(0.5, 0.5);
       this.visualContainer.add(this.resourceLabel);
     } else if (buildingType.id === "energy-machine") {
-      addSpriteShadow(footprintWidth * 0.9, footprintHeight * 0.54, footprintHeight / 2 + 6);
+      addSpriteShadow(footprintWidth * 0.9, footprintHeight * 0.54, groundY);
 
       if (scene.textures.exists(ENERGY_MACHINE_TEXTURE_KEY)) {
         if (!scene.anims.exists(ENERGY_MACHINE_ANIM_KEY)) {
@@ -335,27 +362,28 @@ export default class Building extends Phaser.GameObjects.Container {
           });
         }
 
-        const energySprite = scene.add.sprite(0, footprintHeight / 2 + 22, ENERGY_MACHINE_TEXTURE_KEY, 0);
+        const energySprite = scene.add.sprite(0, groundY + 2, ENERGY_MACHINE_TEXTURE_KEY, 0);
         energySprite.setOrigin(0.5, 1);
         energySprite.setAlpha(0.995);
+        energySprite.setCrop(0, 32, 512, 450);
         configureHdSprite(energySprite, {
           scene,
           maxWidth: footprintWidth * 0.94,
           maxHeight: footprintWidth * 0.9,
           sourceWidth: 512,
-          sourceHeight: 516,
+          sourceHeight: 450,
         });
         energySprite.play(ENERGY_MACHINE_ANIM_KEY);
         this.visualContainer.add(energySprite);
       } else {
         addQualitySprite({
           textureKey: "energy-machine",
-          y: footprintHeight / 2 + 22,
+          y: groundY + 2,
           maxWidth: footprintWidth * 0.94,
           maxHeight: footprintWidth * 0.9,
           shadowWidth: footprintWidth * 0.9,
           shadowHeight: footprintHeight * 0.54,
-          shadowY: footprintHeight / 2 + 6,
+          shadowY: groundY,
         });
       }
 
@@ -449,7 +477,7 @@ export default class Building extends Phaser.GameObjects.Container {
     this.add(this.visualContainer);
 
     if (scene.textures.exists("working")) {
-      this.workingSprite = scene.add.image(0, footprintHeight / 2 + 8, "working");
+      this.workingSprite = scene.add.image(0, groundY + 4, "working");
       this.workingSprite.setOrigin(0.5, 1);
       this.workingSprite.setDisplaySize(
         Math.max(40, footprintWidth * 0.72),
@@ -461,7 +489,7 @@ export default class Building extends Phaser.GameObjects.Container {
 
     if (scene.textures.exists("builder-frame-1")) {
       this.builderBaseX = -Math.max(16, footprintWidth * 0.24);
-      this.builderBaseY = footprintHeight / 2 + 6;
+      this.builderBaseY = groundY + 2;
       this.builderSprite = scene.add.image(
         this.builderBaseX,
         this.builderBaseY,
@@ -642,7 +670,11 @@ export default class Building extends Phaser.GameObjects.Container {
     );
 
     if (nextTextureKey) {
-      this.commandCenterSprite.setTexture(nextTextureKey);
+      applyTextureLayout(this.scene, this.commandCenterSprite, nextTextureKey, {
+        crop: BUILDING_TEXTURE_CROPS[nextTextureKey] ?? null,
+        maxWidth: this.commandCenterSpriteLayout?.maxWidth ?? this.commandCenterSprite.displayWidth,
+        maxHeight: this.commandCenterSpriteLayout?.maxHeight ?? this.commandCenterSprite.displayHeight,
+      });
     }
   }
 
